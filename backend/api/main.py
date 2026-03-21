@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Literal
 
 import sentry_sdk
 import structlog
@@ -70,7 +71,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.2.0",
+    version="0.6.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -149,6 +150,8 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
     valid sets. Returns the new board arrangement and remaining rack tiles.
     Solve time is typically <100 ms.
     """
+    logger.info("solve_request", rack_size=len(request.rack), board_sets=len(request.board))
+
     # Convert API models → domain models.
     try:
         rack = [_tile_input_to_domain(t) for t in request.rack]
@@ -192,15 +195,21 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
             )
         )
 
-    status = "solved" if solution.tiles_placed > 0 else "no_solution"
+    _status: Literal["solved", "no_solution"] = (
+        "solved" if solution.tiles_placed > 0 else "no_solution"
+    )
 
     return SolveResponse(
-        status=status,  # type: ignore[arg-type]
+        status=_status,
         tiles_placed=solution.tiles_placed,
         tiles_remaining=solution.tiles_remaining,
         solve_time_ms=round(solution.solve_time_ms, 2),
         is_optimal=solution.is_optimal,
+        is_first_turn=request.rules.is_first_turn,
         new_board=new_board,
         remaining_rack=[_tile_to_output(t) for t in solution.remaining_rack],
-        moves=[MoveOutput(action=m.action, description=m.description) for m in solution.moves],
+        moves=[
+            MoveOutput(action=m.action, description=m.description, set_index=m.set_index)
+            for m in solution.moves
+        ],
     )

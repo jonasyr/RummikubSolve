@@ -5,6 +5,56 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.7.0] — 2026-03-21 — Phase 5: Cleanup, Polish & API Tests
+
+### Bug fixes
+
+- `api/main.py`: `MoveOutput.set_index` was dropped during serialisation — fixed
+  by passing `set_index=m.set_index` in the list comprehension.
+- `api/main.py` + `pyproject.toml`: version was `"0.2.0"` / `"0.1.0"` (Phase 2
+  artefacts never updated); both now read `"0.6.0"`.
+- `BoardSection.tsx`: `TileGridPicker` inside the set builder had no `tileCount`
+  prop — users could add more than 2 copies of a tile to a board set, violating
+  game rules. Now tracks tiles in the pending set + existing board sets.
+
+### New features
+
+- Board set editing: each set now has an ✎ edit button that repopulates the
+  inline builder. `updateBoardSet` (already in the store) is wired up.
+- `SolveResponse.is_first_turn` field echoed back to frontend; `SolutionView`
+  uses it to show "Below threshold" vs "No valid move" in the `no_solution` case.
+
+### Validation
+
+- `models.py`: Pydantic `Field` constraints added —
+  board set `tiles` requires 3–13 entries; `rack` capped at 104;
+  `board` capped at 50 sets. Invalid inputs now return 422 with clear messages.
+- `solution_verifier.py`: added first-turn meld-threshold check as defense-in-depth.
+
+### Tests
+
+- `tests/api/test_solve_endpoint.py` (new): 9 integration tests covering `/health`,
+  `/api/solve` happy paths, 422 error paths, first-turn rules, and `set_index`
+  serialisation. Uses `httpx.AsyncClient` + ASGI transport (no real network).
+- `test_rule_checker.py`: one Hypothesis property test — `is_valid_set` must return
+  a `bool` for any tile combination (200 random examples, never raises).
+
+### Code quality
+
+- Deleted dead-code stubs: `solver/output/solution_formatter.py`,
+  `diff_calculator.py`, `explanation.py` — logic already inlined in `main.py`.
+- Fixed `type: ignore[arg-type]` in `main.py` with an explicit `Literal` annotation.
+- Added per-request `structlog` line in `/api/solve` handler.
+- Added `role="alert"` on the frontend error banner.
+
+### Docs
+
+- `README.md`: added environment-variable table, E2E test instructions, expanded
+  Docker Compose section, and dev-status link.
+- `CHANGELOG.md`: this entry.
+
+---
+
 ## [0.6.0] — 2026-03-21 — Phase 4: Observability, Containerisation & E2E Tests
 
 ### What was implemented

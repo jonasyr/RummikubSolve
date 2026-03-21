@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Request models
@@ -39,7 +39,7 @@ class TileInput(BaseModel):
 
 class BoardSetInput(BaseModel):
     type: Literal["run", "group"]
-    tiles: list[TileInput]
+    tiles: list[TileInput] = Field(min_length=3, max_length=13)
 
 
 class RulesInput(BaseModel):
@@ -49,8 +49,8 @@ class RulesInput(BaseModel):
 
 
 class SolveRequest(BaseModel):
-    board: list[BoardSetInput] = []
-    rack: list[TileInput]
+    board: list[BoardSetInput] = Field(default=[], max_length=50)
+    rack: list[TileInput] = Field(max_length=104)
     rules: RulesInput = RulesInput()
 
 
@@ -84,6 +84,7 @@ class SolveResponse(BaseModel):
     tiles_remaining: int
     solve_time_ms: float
     is_optimal: bool
+    is_first_turn: bool = False
     new_board: list[BoardSetOutput]
     remaining_rack: list[TileOutput]
     moves: list[MoveOutput]

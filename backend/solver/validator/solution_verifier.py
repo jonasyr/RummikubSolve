@@ -66,7 +66,15 @@ def verify_solution(
     if placed_keys + remaining_keys != original_rack_keys:
         return False
 
-    # 3. The tiles appearing in new_sets must be exactly board_tiles + placed_tiles.
+    # 3a. First-turn: verify the meld threshold was met if any tiles were placed.
+    if rules.is_first_turn and solution.placed_tiles:
+        placed_value = sum(
+            t.number for t in solution.placed_tiles if not t.is_joker and t.number is not None
+        )
+        if placed_value < rules.initial_meld_threshold:
+            return False
+
+    # 3b. The tiles appearing in new_sets must be exactly board_tiles + placed_tiles.
     new_set_keys: Counter[tuple[Color | None, int | None, int, bool]] = Counter(
         _tile_key(t) for ts in solution.new_sets for t in ts.tiles
     )

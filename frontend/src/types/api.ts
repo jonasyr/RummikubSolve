@@ -70,6 +70,7 @@ export interface SolveResponse {
   tiles_remaining: number;
   solve_time_ms: number;
   is_optimal: boolean;
+  is_first_turn: boolean;
   new_board: BoardSetOutput[];
   remaining_rack: TileOutput[];
   moves: MoveOutput[];
