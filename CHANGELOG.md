@@ -5,6 +5,58 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.11.0] — 2026-03-21 — Phase 9: Multi-language i18n (EN + DE)
+
+### New features
+
+- **`next-intl ^3`** installed; URL-based locale routing (`/en/`, `/de/`) via
+  `next-intl/middleware` and `defineRouting`.
+- **`src/middleware.ts`** (new): routes every request through next-intl middleware so
+  the browser is redirected to `/en` or `/de` based on `Accept-Language` headers and
+  cookie preference.
+- **`src/i18n/config.ts`** (new): single source of truth — `locales = ["en", "de"]`,
+  `defaultLocale = "en"`, exported `Locale` type.
+- **`src/i18n/routing.ts`** (new): `defineRouting({ locales, defaultLocale })` consumed
+  by middleware and `createNavigation`.
+- **`src/i18n/request.ts`** (new): `getRequestConfig` dynamically imports the matching
+  `messages/{locale}.json` file per request.
+- **`src/i18n/navigation.ts`** (new): typed `Link`, `useRouter`, `usePathname` via
+  `createNavigation(routing)`.
+- **`src/i18n/messages/en.json`** (new): ~100 English strings across namespaces:
+  `common`, `meta`, `page`, `rulesPanel`, `rack`, `board` (with `errors`), `tilePicker`,
+  `tile`, `solution`, `errorBoundary`, `localeSwitcher`. ICU plurals for tile counts
+  and move summaries.
+- **`src/i18n/messages/de.json`** (new): full German translation (e.g.
+  `page.solve` → "Lösen", `rack.heading` → "Deine Steine",
+  `board.heading` → "Tisch-Sätze", `solution.badge.new` → "NEU").
+- **`src/app/[locale]/layout.tsx`** (new): locale-aware root layout with
+  `<html lang={locale}>`, `<NextIntlClientProvider>`, and `generateMetadata` using
+  translated title/description.
+- **`src/app/[locale]/page.tsx`** (new): main page moved here; uses
+  `useTranslations("page")` and renders `<LocaleSwitcher />`.
+- **`src/components/LocaleSwitcher.tsx`** (new): EN / DE toggle buttons using
+  `useLocale()` + typed `router.replace(pathname, { locale })` — no page reload needed.
+
+### Updated components
+
+- `BoardSection.tsx`: `validateSet` now returns `{ key, params } | null` instead of a
+  plain string; component resolves the translation key via `t(key, params)`. Headings,
+  labels, buttons, and error messages fully translated.
+- `RackSection.tsx`, `RulesPanel.tsx`, `SolutionView.tsx`, `TileGridPicker.tsx`,
+  `Tile.tsx`, `ErrorBoundary.tsx` — all use `useTranslations(namespace)`.
+- `ErrorBoundary.tsx`: added optional `heading?` and `fallback?` props + new
+  `TranslatedErrorBoundary` functional wrapper that injects translated strings.
+- `src/app/layout.tsx`: reduced to a pass-through wrapper (HTML/body live in
+  `[locale]/layout.tsx`).
+- `next.config.ts`: wrapped with `createNextIntlPlugin`.
+
+### Bug fixes
+
+- Fixed ruff formatting in `backend/api/main.py` and `backend/api/models.py`
+  (trailing whitespace / alignment issues flagged by CI).
+
+---
+
 ## [0.10.0] — 2026-03-21 — Phase 8: Rules Panel + Solution Clarity
 
 ### New features

@@ -1,0 +1,101 @@
+{
+  "common": {
+    "appName": "RummikubSolve"
+  },
+  "meta": {
+    "title": "RummikubSolve",
+    "description": "Optimaler Rummikub-Zuglöser — so viele Steine wie möglich legen."
+  },
+  "page": {
+    "firstTurn": "Erster Zug",
+    "reset": "Zurücksetzen",
+    "solve": "Lösen",
+    "solving": "Wird gelöst…",
+    "finishEditing": "Erst Bearbeitung abschließen"
+  },
+  "rulesPanel": {
+    "toggle": "Wie Sätze funktionieren",
+    "run": "Folge",
+    "runDesc": "3–13 Steine <strong>derselben Farbe</strong> in aufeinanderfolgenden Zahlen (1–13). Joker füllen Lücken.",
+    "runExample": "z.B. Rot 5 · Rot 6 · Rot 7",
+    "group": "Gruppe",
+    "groupDesc": "3–4 Steine mit <strong>derselben Zahl</strong>, jede in einer anderen Farbe. Joker ersetzen fehlende Farben.",
+    "groupExample": "z.B. Rot 8 · Blau 8 · Schwarz 8",
+    "firstTurn": "Erster Zug",
+    "firstTurnDesc": "Deine erste Ablage muss mindestens <strong>30 Punkte</strong> ergeben (Summe der Zahlenwerte der gelegten Steine). Tischsteine dürfen nicht genutzt werden.",
+    "joker": "Joker",
+    "jokerDesc": "Ersetzt jeden Stein. Sein Wert entspricht dem Stein, den er darstellt. Du kannst einen Joker vom Tisch nehmen, wenn du ihn durch den passenden Stein ersetzt."
+  },
+  "rack": {
+    "heading": "Deine Steine",
+    "empty": "Klicke oben auf Steine, um sie auf dein Rack zu legen."
+  },
+  "board": {
+    "heading": "Tisch-Sätze",
+    "addSet": "+ Satz hinzufügen",
+    "noSets": "Noch keine Tischsätze.",
+    "editSet": "Satz {n} bearbeiten",
+    "removeSet": "Satz {n} entfernen",
+    "run": "folge",
+    "group": "gruppe",
+    "typeRun": "Folge",
+    "typeGroup": "Gruppe",
+    "addToBoard": "Zum Tisch hinzufügen",
+    "saveChanges": "Änderungen speichern",
+    "cancel": "Abbrechen",
+    "validSet": "Gültiger Satz ✓",
+    "errors": {
+      "minTiles": "Mindestens 3 Steine nötig (du hast {count})",
+      "maxTiles": "Zu viele Steine (max. 13)",
+      "runColor": "Folge: alle Steine müssen dieselbe Farbe haben",
+      "runDuplicates": "Folge: keine doppelten Zahlen erlaubt",
+      "runJokers": "Folge: nicht genug Joker, um Lücken zu füllen",
+      "runRange": "Folge: Steine passen nicht in den Bereich 1–13",
+      "groupMax": "Gruppe: maximal 4 Steine erlaubt",
+      "groupNumber": "Gruppe: alle Steine müssen dieselbe Zahl haben",
+      "groupColors": "Gruppe: keine doppelten Farben erlaubt",
+      "groupJokers": "Gruppe: zu viele Joker"
+    }
+  },
+  "tilePicker": {
+    "joker": "Joker",
+    "ariaLabel": "{color} {number}",
+    "ariaMax": "{color} {number} (max. 2)",
+    "ariaSelected": "{color} {number} ({count} ausgewählt)",
+    "jokerAria": "Joker",
+    "jokerAriaMax": "Joker (max. 2)",
+    "jokerAriaSelected": "Joker ({count} ausgewählt)"
+  },
+  "tile": {
+    "removeLabel": "Stein entfernen"
+  },
+  "solution": {
+    "heading": "Lösung",
+    "error": "Der Löser hat einen Fehler zurückgegeben. Überprüfe dein Brett und versuche es erneut.",
+    "noSolutionFirstTurn": "Handwert liegt unter der 30-Punkte-Schwelle — kein Zug möglich.",
+    "noSolution": "Kein gültiger Zug möglich — es können keine Steine gelegt werden.",
+    "tilesPlaced": "{count, plural, one {# Stein gelegt} other {# Steine gelegt}}",
+    "tilesRemaining": "{count, plural, one {# verbleibend} other {# verbleibend}}",
+    "solveTime": "{ms} ms",
+    "optimal": "Optimal",
+    "remainingHand": "Verbleibend auf der Hand",
+    "moveInstructions": "Zuganleitungen",
+    "moveSummary": "{total, plural, one {# Zug} other {# Züge}}: {parts}",
+    "moveCreate": "{count, plural, one {# neuer Satz} other {# neue Sätze}}",
+    "moveExtend": "{count, plural, one {# Erweiterung} other {# Erweiterungen}}",
+    "moveRearrange": "{count, plural, one {# Umstellung} other {# Umstellungen}}",
+    "badge": {
+      "new": "NEU",
+      "extended": "+",
+      "rearranged": "↺",
+      "unchanged": "unverändert"
+    }
+  },
+  "errorBoundary": {
+    "heading": "Beim Anzeigen des Ergebnisses ist ein Fehler aufgetreten.",
+    "fallback": "Unbekannter Darstellungsfehler"
+  },
+  "localeSwitcher": {
+    "label": "Sprache"
+  }
+}

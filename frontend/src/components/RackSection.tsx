@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback } from "react";
+import { useTranslations } from "next-intl";
 import type { TileInput } from "../types/api";
 import { useGameStore } from "../store/game";
 import Tile from "./Tile";
 import TileGridPicker from "./TileGridPicker";
 
 export default function RackSection() {
+  const t = useTranslations("rack");
   const rack = useGameStore((s) => s.rack);
   const boardSets = useGameStore((s) => s.boardSets);
   const addRackTile = useGameStore((s) => s.addRackTile);
@@ -33,7 +35,7 @@ export default function RackSection() {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-        Your Rack
+        {t("heading")}
       </h2>
       <TileGridPicker onSelect={addRackTile} tileCount={tileCount} />
       {rack.length > 0 ? (
@@ -49,9 +51,7 @@ export default function RackSection() {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-400 italic">
-          Click tiles above to add them to your rack.
-        </p>
+        <p className="text-sm text-gray-400 italic">{t("empty")}</p>
       )}
     </section>
   );

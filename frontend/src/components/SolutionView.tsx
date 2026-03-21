@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { SolveResponse } from "../types/api";
 import Tile from "./Tile";
 
@@ -8,14 +9,16 @@ interface Props {
 }
 
 export default function SolutionView({ solution }: Props) {
+  const t = useTranslations("solution");
+
   if (solution.status === "error") {
     return (
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Solution
+          {t("heading")}
         </h2>
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          The solver returned an error. Check your board setup and try again.
+          {t("error")}
         </div>
       </section>
     );
@@ -23,12 +26,12 @@ export default function SolutionView({ solution }: Props) {
 
   if (solution.status === "no_solution") {
     const reason = solution.is_first_turn
-      ? "Hand value is below the 30-point threshold — no play possible this turn."
-      : "No valid move available — no tiles can be placed this turn.";
+      ? t("noSolutionFirstTurn")
+      : t("noSolution");
     return (
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Solution
+          {t("heading")}
         </h2>
         <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
           {reason}
@@ -40,26 +43,25 @@ export default function SolutionView({ solution }: Props) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-        Solution
+        {t("heading")}
       </h2>
 
       {/* Summary bar */}
       <div className="flex flex-wrap gap-2 text-sm">
         <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-medium">
-          {solution.tiles_placed} tile{solution.tiles_placed !== 1 ? "s" : ""}{" "}
-          placed
+          {t("tilesPlaced", { count: solution.tiles_placed })}
         </span>
         {solution.tiles_remaining > 0 && (
           <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
-            {solution.tiles_remaining} remaining
+            {t("tilesRemaining", { count: solution.tiles_remaining })}
           </span>
         )}
         <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded">
-          {solution.solve_time_ms} ms
+          {t("solveTime", { ms: solution.solve_time_ms })}
         </span>
         {solution.is_optimal && (
           <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
-            Optimal
+            {t("optimal")}
           </span>
         )}
       </div>
@@ -79,12 +81,12 @@ export default function SolutionView({ solution }: Props) {
                          :                "border-gray-200 bg-gray-50 opacity-60";
 
           const badge = isNew
-            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">NEW</span>
+            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">{t("badge.new")}</span>
             : isExtended
-            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0">+</span>
+            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0">{t("badge.extended")}</span>
             : isRearranged
-            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">↺</span>
-            : <span className="text-xs text-gray-400 italic shrink-0 pt-1">unchanged</span>;
+            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">{t("badge.rearranged")}</span>
+            : <span className="text-xs text-gray-400 italic shrink-0 pt-1">{t("badge.unchanged")}</span>;
 
           return (
             <div key={si} className={`flex items-start gap-2 p-2 rounded border ${borderBg}`}>
@@ -112,7 +114,7 @@ export default function SolutionView({ solution }: Props) {
       {(solution.remaining_rack?.length ?? 0) > 0 && (
         <div className="space-y-1">
           <p className="text-xs text-gray-500 uppercase tracking-wide">
-            Remaining in hand
+            {t("remainingHand")}
           </p>
           <div className="flex flex-wrap gap-1">
             {(solution.remaining_rack ?? []).map((tile, i) => (
@@ -132,7 +134,7 @@ export default function SolutionView({ solution }: Props) {
       {(solution.moves?.length ?? 0) > 0 && (
         <div className="space-y-2">
           <p className="text-xs text-gray-500 uppercase tracking-wide">
-            Move instructions
+            {t("moveInstructions")}
           </p>
           {/* Summary line */}
           {(() => {
@@ -141,13 +143,13 @@ export default function SolutionView({ solution }: Props) {
               {},
             );
             const parts: string[] = [];
-            if (counts.create)    parts.push(`${counts.create} new set${counts.create !== 1 ? "s" : ""}`);
-            if (counts.extend)    parts.push(`${counts.extend} extension${counts.extend !== 1 ? "s" : ""}`);
-            if (counts.rearrange) parts.push(`${counts.rearrange} rearrangement${counts.rearrange !== 1 ? "s" : ""}`);
+            if (counts.create)    parts.push(t("moveCreate", { count: counts.create }));
+            if (counts.extend)    parts.push(t("moveExtend", { count: counts.extend }));
+            if (counts.rearrange) parts.push(t("moveRearrange", { count: counts.rearrange }));
             const total = (solution.moves ?? []).length;
             return (
               <p className="text-xs text-gray-500">
-                {total} move{total !== 1 ? "s" : ""}: {parts.join(", ")}
+                {t("moveSummary", { total, parts: parts.join(", ") })}
               </p>
             );
           })()}

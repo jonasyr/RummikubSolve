@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { TileColor } from "../types/api";
 
 interface TileProps {
@@ -27,6 +28,8 @@ export default function Tile({
   onRemove,
   size = "md",
 }: TileProps) {
+  const t = useTranslations("tile");
+
   const sizeClass =
     size === "xs"
       ? "w-5 h-6 text-[10px]"
@@ -56,7 +59,7 @@ export default function Tile({
         <button
           onClick={onRemove}
           className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none hover:bg-red-600 z-10"
-          aria-label="Remove tile"
+          aria-label={t("removeLabel")}
         >
           ×
         </button>

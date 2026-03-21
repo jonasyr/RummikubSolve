@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { TileColor, TileInput } from "../types/api";
 
 const COLORS: TileColor[] = ["blue", "red", "black", "yellow"];
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export default function TileGridPicker({ onSelect, tileCount }: Props) {
+  const t = useTranslations("tilePicker");
   const count = (tile: TileInput) => tileCount?.(tile) ?? 0;
 
   return (
@@ -50,7 +52,13 @@ export default function TileGridPicker({ onSelect, tileCount }: Props) {
                     : "cursor-pointer hover:brightness-110 active:scale-95 transition-transform",
                 ].join(" ")}
                 style={{ fontSize: "clamp(8px, 2vw, 13px)" }}
-                aria-label={`${color} ${n}${atMax ? " (max 2)" : c > 0 ? ` (${c} selected)` : ""}`}
+                aria-label={
+                  atMax
+                    ? t("ariaMax", { color, number: n })
+                    : c > 0
+                      ? t("ariaSelected", { color, number: n, count: c })
+                      : t("ariaLabel", { color, number: n })
+                }
               >
                 {n}
                 {c > 0 && (
@@ -82,9 +90,15 @@ export default function TileGridPicker({ onSelect, tileCount }: Props) {
                   ? "opacity-40 cursor-not-allowed"
                   : "cursor-pointer hover:brightness-110 active:scale-95 transition-transform",
               ].join(" ")}
-              aria-label={`Joker${atMax ? " (max 2)" : c > 0 ? ` (${c} selected)` : ""}`}
+              aria-label={
+                atMax
+                  ? t("jokerAriaMax")
+                  : c > 0
+                    ? t("jokerAriaSelected", { count: c })
+                    : t("jokerAria")
+              }
             >
-              ★ Joker
+              ★ {t("joker")}
               {c > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black/70 text-white text-[8px] flex items-center justify-center leading-none pointer-events-none">
                   {c}

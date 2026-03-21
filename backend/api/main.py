@@ -192,8 +192,7 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
 
     # Multiset signatures of the OLD board sets, used to detect unchanged sets.
     old_set_sigs: list[Counter] = [
-        Counter((t.color, t.number, t.is_joker) for t in ts.tiles)
-        for ts in state.board_sets
+        Counter((t.color, t.number, t.is_joker) for t in ts.tiles) for ts in state.board_sets
     ]
 
     new_board: list[BoardSetOutput] = []
