@@ -127,9 +127,24 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
     joker_ph = Tile.joker(copy_id=0)
     variants: list[TileSet] = []
 
-    # Type 1: joker substitutes for an available tile in every base template.
+    # Type 1: joker substitutes for a rack tile in a base template.
+    # This frees the rack tile to go into a different (better) set.
+    # We restrict to rack-tile slots only: freeing a board tile adds no
+    # benefit (the ILP already handles all board-tile assignments via base
+    # templates), but it generates O(board_tiles × templates) variants that
+    # balloon the model and cause HiGHS to time out on complex boards.
+    rack_tile_keys: set[tuple[Color, int]] = {
+        (t.color, t.number)
+        for t in state.rack
+        if not t.is_joker and t.color is not None and t.number is not None
+    }
     for tmpl in base:
         for p in range(len(tmpl.tiles)):
+            slot = tmpl.tiles[p]
+            if slot.color is None or slot.number is None:
+                continue
+            if (slot.color, slot.number) not in rack_tile_keys:
+                continue
             new_tiles = list(tmpl.tiles)
             new_tiles[p] = joker_ph
             variants.append(TileSet(type=tmpl.type, tiles=new_tiles))

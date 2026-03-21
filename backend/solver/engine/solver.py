@@ -84,6 +84,21 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
             new_sets = list(state.board_sets) + new_sets
     else:
         new_sets, placed_tiles, remaining_rack, is_optimal = extract_solution(model)
+        # Detect timeout-without-solution: every board tile must appear in new_sets.
+        # If any are missing, HiGHS timed out before finding a feasible integer
+        # solution. Fall back to no-move (board unchanged, all rack tiles in hand).
+        board_tile_ids = {id(t) for ts in solve_state.board_sets for t in ts.tiles}
+        new_set_tile_ids = {id(t) for ts in new_sets for t in ts.tiles}
+        if board_tile_ids - new_set_tile_ids:
+            import structlog as _sl
+            _sl.get_logger().warning(
+                "solver.timeout_fallback",
+                missing_board_tiles=len(board_tile_ids - new_set_tile_ids),
+            )
+            new_sets = list(state.board_sets)
+            placed_tiles = []
+            remaining_rack = list(state.rack)
+            is_optimal = False
 
     solve_time_ms = (time.monotonic() - t_start) * 1000.0
 
