@@ -5,6 +5,77 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.2.0] — 2026-03-21 — Phase 1a: Rule Checker + Set Enumerator
+
+### What was implemented
+
+**`backend/solver/validator/rule_checker.py`** — first real solver logic; pure Python, no dependencies
+
+- `is_valid_set(tileset, rules)` — returns True/False for any TileSet:
+  - Dispatches to `_is_valid_run` or `_is_valid_group` based on `tileset.type`
+  - **Run validation:** separates jokers from non-jokers; checks same-color, no duplicate
+    numbers, then verifies jokers cover internal gaps (`n_max-n_min+1 - len(non_jokers) ≤ len(jokers)`);
+    finally checks a valid start position `a` exists within `[1, 14-total]` containing all
+    non-joker numbers; respects `rules.allow_wrap_runs`
+  - **Group validation:** checks ≤4 tiles total, same number, distinct colors among non-jokers,
+    and len(jokers) ≤ (4 - distinct color count)
+- `is_valid_board(state, rules)` — checks every set passes `is_valid_set` and that no physical
+  tile `(color, number, copy_id, is_joker)` appears more than once across all board sets
+
+**`backend/solver/generator/set_enumerator.py`** — pre-computes candidate sets for the ILP
+
+- `enumerate_runs(state)` — iterates 4 colors × starts 1–11 × ends start+2–13; includes a run
+  template only when every required `(color, number)` has ≥1 copy in `state.all_tiles`;
+  templates use `copy_id=0` as a placeholder (ILP resolves physical tile assignment)
+- `enumerate_groups(state)` — iterates 13 numbers × size-3 and size-4 color combinations
+  (`itertools.combinations`); same availability check
+- `enumerate_valid_sets(state)` — combines runs + groups; TODO comment marks the joker-expansion
+  point needed before Phase 2 ILP work
+
+**`backend/tests/conftest.py`** — added `full_tile_pool` fixture (all 104 non-joker tiles in rack)
+
+**`backend/tests/solver/test_rule_checker.py`** — 42 known-answer tests covering:
+- Valid runs: minimal, long, full span (1–13), joker fills gap, joker extends start/end,
+  two jokers, boundary cases (ending at 13, starting near 1)
+- Invalid runs: too short, gap without joker, mixed colors, duplicate number, too long (14 tiles),
+  span too wide for joker count
+- Valid groups: size 3 and 4, with joker, boundary numbers
+- Invalid groups: too short, too large (5 tiles), duplicate color, different numbers, too many jokers
+- Wrap-around rule variant (disabled by default; enabled via RulesConfig)
+- Board validation: empty, valid multi-set, invalid set in board, duplicate physical tile, two
+  legal copies of same tile
+
+**`backend/tests/solver/test_set_enumerator.py`** — 18 known-answer tests covering:
+- Full pool: 264 runs, 65 groups, 329 total (exact arithmetic verified)
+- Spot-checks: Red 4-5-6 present, Blue 1-13 present, specific groups present
+- Minimal pool: only Red 4-5-6 → exactly 1 run template
+- Missing tile: pool without Red 5 → no run containing 5
+- Single-number pool: all four "7" tiles → exactly 5 group templates (C(4,3)+C(4,4))
+- Three-color pool: only one 3-color group possible, no 4-color group
+- Missing color: no groups include a color absent from the pool
+- Empty pool: 0 runs, 0 groups
+- Cross-validation: every enumerated template passes `is_valid_set`
+
+### Verification (all passed before commit)
+```
+pytest:         88 passed, 0 failed  (28 existing + 60 new)
+ruff check:     0 errors
+ruff format:    clean
+mypy strict:    no issues in 24 source files
+```
+
+### What is NOT here yet (next phases)
+- Joker-expansion in `enumerate_valid_sets` (marked TODO — needed for ILP Phase 2)
+- `solution_verifier.py` (depends on rule_checker; implements full post-solve cross-check)
+- `engine/ilp_formulation.py` — ILP model construction with HiGHS (Phase 2)
+- `engine/solver.py` — main orchestrator: enumerate → formulate → solve → verify (Phase 2)
+- `engine/objective.py` — `compute_disruption_score` secondary objective (Phase 2)
+- `generator/move_generator.py` — human-readable move instructions (Phase 2/3)
+- `output/` modules — diff, formatter, explanation (Phase 3)
+- `/api/solve` endpoint (Phase 2)
+
+---
+
 ## [0.1.0] — 2026-03-21 — Project Foundation
 
 ### What was set up

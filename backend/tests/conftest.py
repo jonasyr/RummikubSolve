@@ -81,3 +81,14 @@ def board_with_rack(simple_run: TileSet) -> BoardState:
         board_sets=[simple_run],
         rack=[Tile(Color.RED, 7, 0)],
     )
+
+
+@pytest.fixture
+def full_tile_pool() -> BoardState:
+    """All 104 non-joker tiles in the rack, empty board.
+
+    Used to test enumeration with the maximum possible tile pool:
+    4 colors × 13 numbers × 2 copies = 104 tiles.
+    """
+    rack = [Tile(color, n, copy_id) for color in Color for n in range(1, 14) for copy_id in (0, 1)]
+    return BoardState(board_sets=[], rack=rack)
