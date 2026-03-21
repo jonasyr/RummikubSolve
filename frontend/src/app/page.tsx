@@ -6,6 +6,7 @@ import RackSection from "../components/RackSection";
 import BoardSection from "../components/BoardSection";
 import SolutionView from "../components/SolutionView";
 import ErrorBoundary from "../components/ErrorBoundary";
+import RulesPanel from "../components/RulesPanel";
 
 export default function Home() {
   const boardSets = useGameStore((s) => s.boardSets);
@@ -64,6 +65,7 @@ export default function Home() {
         </div>
       </div>
 
+      <RulesPanel />
       <RackSection />
       <BoardSection />
 

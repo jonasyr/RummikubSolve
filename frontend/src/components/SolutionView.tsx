@@ -67,23 +67,29 @@ export default function SolutionView({ solution }: Props) {
       {/* New board sets */}
       <div className="space-y-2">
         {(solution.new_board ?? []).map((set, si) => {
-          const isUnchanged = set.is_unchanged ?? false;
+          const isUnchanged  = set.is_unchanged ?? false;
+          const newCount     = (set.new_tile_indices ?? []).length;
+          const isNew        = !isUnchanged && newCount === set.tiles.length;
+          const isExtended   = !isUnchanged && newCount > 0 && !isNew;
+          const isRearranged = !isUnchanged && newCount === 0;
+
+          const borderBg = isNew        ? "border-green-200 bg-green-50"
+                         : isExtended   ? "border-blue-200 bg-white"
+                         : isRearranged ? "border-amber-200 bg-amber-50"
+                         :                "border-gray-200 bg-gray-50 opacity-60";
+
+          const badge = isNew
+            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">NEW</span>
+            : isExtended
+            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0">+</span>
+            : isRearranged
+            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">↺</span>
+            : <span className="text-xs text-gray-400 italic shrink-0 pt-1">unchanged</span>;
+
           return (
-            <div
-              key={si}
-              className={`flex items-start gap-2 p-2 rounded border ${
-                isUnchanged
-                  ? "bg-gray-50 border-gray-200 opacity-60"
-                  : "bg-white border-blue-200"
-              }`}
-            >
-              {/* Set number */}
-              <span className="text-xs font-bold text-gray-500 w-6 shrink-0 pt-1">
-                {si + 1}.
-              </span>
-              <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">
-                {set.type}
-              </span>
+            <div key={si} className={`flex items-start gap-2 p-2 rounded border ${borderBg}`}>
+              <span className="text-xs font-bold text-gray-500 w-6 shrink-0 pt-1">{si + 1}.</span>
+              <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">{set.type}</span>
               <div className="flex flex-wrap gap-1 flex-1">
                 {set.tiles.map((tile, ti) => (
                   <Tile
@@ -96,11 +102,7 @@ export default function SolutionView({ solution }: Props) {
                   />
                 ))}
               </div>
-              {isUnchanged && (
-                <span className="text-xs text-gray-400 italic shrink-0 pt-1">
-                  unchanged
-                </span>
-              )}
+              {badge}
             </div>
           );
         })}
@@ -132,15 +134,39 @@ export default function SolutionView({ solution }: Props) {
           <p className="text-xs text-gray-500 uppercase tracking-wide">
             Move instructions
           </p>
+          {/* Summary line */}
+          {(() => {
+            const counts = (solution.moves ?? []).reduce<Record<string, number>>(
+              (acc, m) => ({ ...acc, [m.action]: (acc[m.action] ?? 0) + 1 }),
+              {},
+            );
+            const parts: string[] = [];
+            if (counts.create)    parts.push(`${counts.create} new set${counts.create !== 1 ? "s" : ""}`);
+            if (counts.extend)    parts.push(`${counts.extend} extension${counts.extend !== 1 ? "s" : ""}`);
+            if (counts.rearrange) parts.push(`${counts.rearrange} rearrangement${counts.rearrange !== 1 ? "s" : ""}`);
+            const total = (solution.moves ?? []).length;
+            return (
+              <p className="text-xs text-gray-500">
+                {total} move{total !== 1 ? "s" : ""}: {parts.join(", ")}
+              </p>
+            );
+          })()}
           <ol className="space-y-1.5">
-            {(solution.moves ?? []).map((move, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-medium mt-0.5">
-                  {i + 1}
-                </span>
-                <span className="text-gray-700">{move.description}</span>
-              </li>
-            ))}
+            {(solution.moves ?? []).map((move, i) => {
+              const bulletClass: Record<string, string> = {
+                create:    "bg-green-100 text-green-700",
+                extend:    "bg-blue-100 text-blue-700",
+                rearrange: "bg-amber-100 text-amber-700",
+              };
+              return (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className={`shrink-0 w-5 h-5 rounded-full text-xs flex items-center justify-center font-medium mt-0.5 ${bulletClass[move.action] ?? "bg-gray-100 text-gray-700"}`}>
+                    {i + 1}
+                  </span>
+                  <span className="text-gray-700">{move.description}</span>
+                </li>
+              );
+            })}
           </ol>
         </div>
       )}
