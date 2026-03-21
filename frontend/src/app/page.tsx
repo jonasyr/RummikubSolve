@@ -5,12 +5,14 @@ import { solvePuzzle } from "../lib/api";
 import RackSection from "../components/RackSection";
 import BoardSection from "../components/BoardSection";
 import SolutionView from "../components/SolutionView";
+import ErrorBoundary from "../components/ErrorBoundary";
 
 export default function Home() {
   const boardSets = useGameStore((s) => s.boardSets);
   const rack = useGameStore((s) => s.rack);
   const isFirstTurn = useGameStore((s) => s.isFirstTurn);
   const isLoading = useGameStore((s) => s.isLoading);
+  const isBuildingSet = useGameStore((s) => s.isBuildingSet);
   const solution = useGameStore((s) => s.solution);
   const error = useGameStore((s) => s.error);
   const setIsFirstTurn = useGameStore((s) => s.setIsFirstTurn);
@@ -68,10 +70,10 @@ export default function Home() {
       {/* Solve button */}
       <button
         onClick={() => void handleSolve()}
-        disabled={isLoading || rack.length === 0}
+        disabled={isLoading || rack.length === 0 || isBuildingSet}
         className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold text-base hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
-        {isLoading ? "Solving…" : "Solve"}
+        {isLoading ? "Solving…" : isBuildingSet ? "Finish editing first" : "Solve"}
       </button>
 
       {/* Error banner */}
@@ -82,7 +84,11 @@ export default function Home() {
       )}
 
       {/* Solution */}
-      {solution && <SolutionView solution={solution} />}
+      {solution && (
+        <ErrorBoundary>
+          <SolutionView solution={solution} />
+        </ErrorBoundary>
+      )}
     </main>
   );
 }

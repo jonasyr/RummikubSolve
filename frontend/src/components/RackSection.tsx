@@ -8,18 +8,26 @@ import TileGridPicker from "./TileGridPicker";
 
 export default function RackSection() {
   const rack = useGameStore((s) => s.rack);
+  const boardSets = useGameStore((s) => s.boardSets);
   const addRackTile = useGameStore((s) => s.addRackTile);
   const removeRackTile = useGameStore((s) => s.removeRackTile);
 
   const tileCount = useCallback(
     (tile: TileInput): number => {
       const key = tile.joker ? "joker" : `${tile.color}-${tile.number}`;
-      return rack.filter((t) => {
+      const inRack = rack.filter((t) => {
         const k = t.joker ? "joker" : `${t.color}-${t.number}`;
         return k === key;
       }).length;
+      const inBoard = boardSets
+        .flatMap((s) => s.tiles)
+        .filter((t) => {
+          const k = t.joker ? "joker" : `${t.color}-${t.number}`;
+          return k === key;
+        }).length;
+      return inRack + inBoard;
     },
-    [rack],
+    [rack, boardSets],
   );
 
   return (

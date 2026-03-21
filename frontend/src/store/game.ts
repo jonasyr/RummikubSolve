@@ -32,6 +32,9 @@ interface GameState {
   solution: SolveResponse | null;
   error: string | null;
 
+  // UI state
+  isBuildingSet: boolean;
+
   // Actions — board
   addBoardSet: (set: BoardSetInput) => void;
   removeBoardSet: (index: number) => void;
@@ -49,6 +52,9 @@ interface GameState {
   setSolution: (solution: SolveResponse | null) => void;
   setError: (error: string | null) => void;
 
+  // Actions — UI state
+  setIsBuildingSet: (v: boolean) => void;
+
   // Actions — reset
   reset: () => void;
 }
@@ -64,6 +70,7 @@ const initialState = {
   isLoading: false,
   solution: null as SolveResponse | null,
   error: null as string | null,
+  isBuildingSet: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -99,6 +106,8 @@ export const useGameStore = create<GameState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   setSolution: (solution) => set({ solution }),
   setError: (error) => set({ error }),
+
+  setIsBuildingSet: (v) => set({ isBuildingSet: v }),
 
   reset: () => set(initialState),
 }));
