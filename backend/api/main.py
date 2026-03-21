@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import Counter
 from typing import Literal
 
 import sentry_sdk
@@ -183,22 +184,40 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
             msg = str(exc)
         raise HTTPException(status_code=422, detail=msg) from exc
 
-    # Build the set of placed-tile keys for new_tile_indices annotation.
-    placed_key_set = {(t.color, t.number, t.copy_id, t.is_joker) for t in solution.placed_tiles}
+    # Counter of placed-tile keys — consumed one-by-one so duplicate tiles
+    # (e.g. two Red 5s, one from rack and one from board) are highlighted correctly.
+    placed_key_counter: Counter[tuple] = Counter(
+        (t.color, t.number, t.copy_id, t.is_joker) for t in solution.placed_tiles
+    )
+
+    # Multiset signatures of the OLD board sets, used to detect unchanged sets.
+    old_set_sigs: list[Counter] = [
+        Counter((t.color, t.number, t.is_joker) for t in ts.tiles)
+        for ts in state.board_sets
+    ]
 
     new_board: list[BoardSetOutput] = []
     for ts in solution.new_sets:
         tile_outputs = [_tile_to_output(t) for t in ts.tiles]
-        new_tile_indices = [
-            i
-            for i, t in enumerate(ts.tiles)
-            if (t.color, t.number, t.copy_id, t.is_joker) in placed_key_set
-        ]
+
+        # Match each tile against the counter; consume one count per match.
+        new_tile_indices: list[int] = []
+        for i, t in enumerate(ts.tiles):
+            key = (t.color, t.number, t.copy_id, t.is_joker)
+            if placed_key_counter.get(key, 0) > 0:
+                new_tile_indices.append(i)
+                placed_key_counter[key] -= 1
+
+        # Unchanged = no rack tiles added AND tile multiset matches an old board set.
+        new_sig = Counter((t.color, t.number, t.is_joker) for t in ts.tiles)
+        is_unchanged = (not new_tile_indices) and (new_sig in old_set_sigs)
+
         new_board.append(
             BoardSetOutput(
                 type=ts.type.value,
                 tiles=tile_outputs,
                 new_tile_indices=new_tile_indices,
+                is_unchanged=is_unchanged,
             )
         )
 

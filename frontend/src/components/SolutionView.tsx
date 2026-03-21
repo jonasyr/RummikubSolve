@@ -66,28 +66,44 @@ export default function SolutionView({ solution }: Props) {
 
       {/* New board sets */}
       <div className="space-y-2">
-        {(solution.new_board ?? []).map((set, si) => (
-          <div
-            key={si}
-            className="flex items-start gap-2 p-2 bg-white rounded border border-gray-200"
-          >
-            <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">
-              {set.type}
-            </span>
-            <div className="flex flex-wrap gap-1">
-              {set.tiles.map((tile, ti) => (
-                <Tile
-                  key={ti}
-                  color={tile.color}
-                  number={tile.number}
-                  isJoker={tile.joker}
-                  highlighted={(set.new_tile_indices ?? []).includes(ti)}
-                  size="sm"
-                />
-              ))}
+        {(solution.new_board ?? []).map((set, si) => {
+          const isUnchanged = set.is_unchanged ?? false;
+          return (
+            <div
+              key={si}
+              className={`flex items-start gap-2 p-2 rounded border ${
+                isUnchanged
+                  ? "bg-gray-50 border-gray-200 opacity-60"
+                  : "bg-white border-blue-200"
+              }`}
+            >
+              {/* Set number */}
+              <span className="text-xs font-bold text-gray-500 w-6 shrink-0 pt-1">
+                {si + 1}.
+              </span>
+              <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">
+                {set.type}
+              </span>
+              <div className="flex flex-wrap gap-1 flex-1">
+                {set.tiles.map((tile, ti) => (
+                  <Tile
+                    key={ti}
+                    color={tile.color}
+                    number={tile.number}
+                    isJoker={tile.joker}
+                    highlighted={(set.new_tile_indices ?? []).includes(ti)}
+                    size="sm"
+                  />
+                ))}
+              </div>
+              {isUnchanged && (
+                <span className="text-xs text-gray-400 italic shrink-0 pt-1">
+                  unchanged
+                </span>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Remaining rack */}
