@@ -16,14 +16,14 @@ test("solver extends an existing board run with a rack tile", async ({
   await boardSection.getByRole("button", { name: /^red 6/i }).click();
   await page.getByRole("button", { name: /add to board/i }).click();
 
-  // Add red 7 to the rack via the rack section picker
-  const rackSection = page.locator("section").filter({ hasText: /Your Rack/i });
-  await rackSection.getByRole("button", { name: /^red 7/i }).click();
+  // Board builder is now closed — only the rack TileGridPicker is visible,
+  // so a page-level locator is unambiguous.
+  await page.getByRole("button", { name: /^red 7/i }).click();
 
   // Act
   await page.getByRole("button", { name: "Solve" }).click();
 
-  // Assert — an extend move referencing set 1 is shown
-  await expect(page.getByText(/extend/i)).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByText(/set 1/i)).toBeVisible();
+  // Assert — solver places 1 tile and describes the extend move
+  await expect(page.getByText("1 tile placed")).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText(/Add Red 7 to set 1/i)).toBeVisible();
 });

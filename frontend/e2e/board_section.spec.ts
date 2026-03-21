@@ -19,9 +19,10 @@ test("adds a board set and sees it rendered in the board section", async ({
   // Confirm the set
   await page.getByRole("button", { name: /add to board/i }).click();
 
-  // Assert — board section now shows a set with the "Run" type label
-  await expect(page.getByText(/run/i)).toBeVisible();
-  // The three tiles should be listed
+  // Assert — board section now shows the lowercase "run" type label on the set row
+  // (distinct from the "Run" heading in the RulesPanel).
+  await expect(boardSection.getByText("run", { exact: true })).toBeVisible();
+  // The three tiles should be listed inside the board section
   await expect(boardSection.getByText("4")).toBeVisible();
   await expect(boardSection.getByText("5")).toBeVisible();
   await expect(boardSection.getByText("6")).toBeVisible();
