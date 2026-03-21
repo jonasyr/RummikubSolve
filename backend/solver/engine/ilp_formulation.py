@@ -171,6 +171,32 @@ def build_ilp_model(
             cf = [1.0] * len(x_col) + [-1.0]
             highs.addRow(0.0, 0.0, len(cols), cols, cf)
 
+    # Constraint 3 — First-turn meld threshold (when rules.is_first_turn).
+    # On the first turn, the player may not rearrange the board (handled by
+    # passing a rack-only state in solver.py), and the combined face value of
+    # all placed rack tiles must be ≥ initial_meld_threshold.
+    #
+    # Encoding: Σ_{t ∈ rack, non-joker} number * h[t] ≤ total_rack_value - threshold
+    #           ≡ Σ_placed number ≥ threshold
+    #
+    # If total_rack_value < threshold the upper bound is negative, which is
+    # infeasible for a non-negative variable sum → HiGHS returns kInfeasible
+    # → solver.py maps this to tiles_placed=0 ("no valid first-turn play").
+    if rules.is_first_turn:
+        h_cols: list[int] = []
+        coeffs: list[float] = []
+        total_value = 0.0
+        for t_idx in rack_tile_idx_set:
+            tile = all_tiles[t_idx]
+            if not tile.is_joker and tile.number is not None:
+                h_cols.append(h_vars[t_idx])
+                val = float(tile.number)
+                coeffs.append(val)
+                total_value += val
+        ub = total_value - float(rules.initial_meld_threshold)
+        if h_cols:
+            highs.addRow(-1e30, ub, len(h_cols), h_cols, coeffs)
+
     # ── Objective ───────────────────────────────────────────────────────────
 
     # Primary: minimise tiles left in hand (= maximise tiles placed).

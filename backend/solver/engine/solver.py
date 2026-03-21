@@ -19,6 +19,7 @@ from __future__ import annotations
 import time
 
 from ..config.rules import RulesConfig
+from ..generator.move_generator import generate_moves
 from ..generator.set_enumerator import enumerate_valid_sets
 from ..models.board_state import BoardState, Solution
 from ..validator.solution_verifier import verify_solution
@@ -51,31 +52,54 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
 
     t_start = time.monotonic()
 
+    # For the first turn the player may only place their own rack tiles; the
+    # existing board is preserved unchanged.  We solve a rack-only sub-problem
+    # and prepend the original board sets to the output afterwards.
+    solve_state = BoardState(board_sets=[], rack=state.rack) if rules.is_first_turn else state
+
     # 1. Enumerate candidate set templates from all available tiles.
-    candidate_sets = enumerate_valid_sets(state)
+    candidate_sets = enumerate_valid_sets(solve_state)
 
     # 2. Build the ILP model.
-    model = build_ilp_model(state, candidate_sets, rules)
+    model = build_ilp_model(solve_state, candidate_sets, rules)
 
     # 3. Set solver options and run.
     model.highs.setOptionValue("time_limit", _SOLVE_TIMEOUT_SECONDS)
     model.highs.run()
 
-    # 4. Extract the solution (raises ValueError if infeasible).
-    new_sets, placed_tiles, remaining_rack, is_optimal = extract_solution(model)
+    # 4. Extract the solution.
+    # For first-turn solves, infeasibility means the rack can't meet the meld
+    # threshold — this is a valid "no play" outcome, not an error.
+    if rules.is_first_turn:
+        try:
+            new_sets, placed_tiles, remaining_rack, is_optimal = extract_solution(model)
+        except ValueError:
+            # Can't reach the threshold → player must draw; board is unchanged.
+            new_sets = list(state.board_sets)
+            placed_tiles = []
+            remaining_rack = list(state.rack)
+            is_optimal = True
+        else:
+            # Prepend the original (untouched) board sets.
+            new_sets = list(state.board_sets) + new_sets
+    else:
+        new_sets, placed_tiles, remaining_rack, is_optimal = extract_solution(model)
 
     solve_time_ms = (time.monotonic() - t_start) * 1000.0
+
+    # 5. Generate human-readable move instructions.
+    moves = generate_moves(state, new_sets, placed_tiles)
 
     solution = Solution(
         new_sets=new_sets,
         placed_tiles=placed_tiles,
         remaining_rack=remaining_rack,
-        moves=[],  # move_generator not yet implemented (Phase 3)
+        moves=moves,
         is_optimal=is_optimal,
         solve_time_ms=solve_time_ms,
     )
 
-    # 5. Post-solve verification (defense-in-depth per Blueprint §10.4).
+    # 6. Post-solve verification (defense-in-depth per Blueprint §10.4).
     if not verify_solution(state, solution, rules):
         raise ValueError(
             "Solver returned a solution that failed post-verification. "

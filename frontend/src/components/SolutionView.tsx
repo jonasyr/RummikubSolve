@@ -106,6 +106,25 @@ export default function SolutionView({ solution }: Props) {
           </div>
         </div>
       )}
+
+      {/* Move instructions */}
+      {solution.moves.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">
+            Move instructions
+          </p>
+          <ol className="space-y-1.5">
+            {solution.moves.map((move, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-medium mt-0.5">
+                  {i + 1}
+                </span>
+                <span className="text-gray-700">{move.description}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </section>
   );
 }

@@ -8,6 +8,7 @@ Each test builds a known game state and verifies:
 
 from __future__ import annotations
 
+from solver.config.rules import RulesConfig
 from solver.engine.solver import solve
 from solver.models.board_state import BoardState
 from solver.models.tile import Color, Tile
@@ -314,3 +315,73 @@ def test_solve_time_recorded() -> None:
     state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
     sol = solve(state)
     assert sol.solve_time_ms > 0
+
+
+# ---------------------------------------------------------------------------
+# First-turn rules (is_first_turn=True)
+# ---------------------------------------------------------------------------
+
+
+def test_first_turn_places_above_threshold() -> None:
+    """10+11+12 = 33 ≥ 30 → all three rack tiles placed."""
+    state = BoardState(board_sets=[], rack=[t(R, 10), t(R, 11), t(R, 12)])
+    sol = solve(state, RulesConfig(is_first_turn=True))
+    assert sol.tiles_placed == 3
+    assert sol.is_optimal
+    assert verify_solution(state, sol)
+
+
+def test_first_turn_below_threshold_no_play() -> None:
+    """4+5+6 = 15 < 30 → can't meet the meld threshold, 0 tiles placed."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
+    sol = solve(state, RulesConfig(is_first_turn=True))
+    assert sol.tiles_placed == 0
+    assert verify_solution(state, sol)
+
+
+def test_first_turn_exact_threshold() -> None:
+    """Group Blue 10 + Red 10 + Black 10 = 30 → exactly meets threshold."""
+    state = BoardState(board_sets=[], rack=[t(B, 10), t(R, 10), t(BL, 10)])
+    sol = solve(state, RulesConfig(is_first_turn=True, initial_meld_threshold=30))
+    assert sol.tiles_placed == 3
+    assert verify_solution(state, sol)
+
+
+def test_first_turn_preserves_existing_board() -> None:
+    """Existing board sets are returned unchanged alongside the new rack play."""
+    board = [run(R, 4, 5, 6)]
+    state = BoardState(board_sets=board, rack=[t(R, 10), t(R, 11), t(R, 12)])
+    sol = solve(state, RulesConfig(is_first_turn=True))
+    assert sol.tiles_placed == 3
+    # Original board run must appear in the solution unchanged.
+    board_keys = {(tile.color, tile.number) for tile in board[0].tiles}
+    solution_board_keys = {(tile.color, tile.number) for ts in sol.new_sets for tile in ts.tiles}
+    assert board_keys.issubset(solution_board_keys)
+    assert verify_solution(state, sol)
+
+
+def test_first_turn_cannot_use_board_tiles() -> None:
+    """On the first turn the player may not extend board sets.
+
+    Board: Red 4-5-6.  Rack: Red 7 (alone, value 7 < 30).
+    Without board access, Red 7 can't form any set → 0 tiles placed.
+    """
+    state = BoardState(board_sets=[run(R, 4, 5, 6)], rack=[t(R, 7)])
+    sol = solve(state, RulesConfig(is_first_turn=True))
+    assert sol.tiles_placed == 0
+    assert verify_solution(state, sol)
+
+
+def test_first_turn_joker_does_not_count_toward_threshold() -> None:
+    """Jokers contribute 0 to the meld threshold.
+
+    Joker + Red 12 + Red 13 → valid run (11-12-13 with joker as 11), but
+    12 + 13 = 25 < 30 → threshold not met → 0 tiles placed.
+    """
+    state = BoardState(
+        board_sets=[],
+        rack=[Tile.joker(copy_id=0), t(R, 12), t(R, 13)],
+    )
+    sol = solve(state, RulesConfig(is_first_turn=True, initial_meld_threshold=30))
+    assert sol.tiles_placed == 0
+    assert verify_solution(state, sol)
