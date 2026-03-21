@@ -115,15 +115,33 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
     """
     base = enumerate_runs(state) + enumerate_groups(state)
 
-    joker_count = sum(1 for t in state.all_tiles if t.is_joker)
-    if joker_count == 0:
-        return base
-
+    # Count physical copies of each (color, number) tile in the pool.
+    # Rummikub has 2 copies of every tile, so the board can contain two
+    # identical valid sets (e.g. two [1R,2R,3R] runs). The ILP uses a
+    # binary y[s] per template, so each template can only be activated once.
+    # We must include each template N times (N = min copies of required tiles)
+    # so the ILP can assign distinct physical tile copies to each instance.
     avail: Counter[tuple[Color, int]] = Counter(
         (t.color, t.number)
         for t in state.all_tiles
         if not t.is_joker and t.color is not None and t.number is not None
     )
+    expanded: list[TileSet] = []
+    for tmpl in base:
+        required = [
+            (t.color, t.number)
+            for t in tmpl.tiles
+            if not t.is_joker and t.color is not None and t.number is not None
+        ]
+        n_copies = min((avail[(c, n)] for c, n in required), default=1)
+        for _ in range(n_copies):
+            expanded.append(tmpl)
+    base = expanded
+
+    joker_count = sum(1 for t in state.all_tiles if t.is_joker)
+    if joker_count == 0:
+        return base
+
     joker_ph = Tile.joker(copy_id=0)
     variants: list[TileSet] = []
 
