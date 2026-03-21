@@ -8,7 +8,7 @@ interface TileProps {
   isJoker?: boolean;
   highlighted?: boolean;
   onRemove?: () => void;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
 }
 
 // Static map so Tailwind JIT can detect all class names at build time.
@@ -27,7 +27,12 @@ export default function Tile({
   onRemove,
   size = "md",
 }: TileProps) {
-  const sizeClass = size === "sm" ? "w-7 h-8 text-xs" : "w-9 h-10 text-sm";
+  const sizeClass =
+    size === "xs"
+      ? "w-5 h-6 text-[10px]"
+      : size === "sm"
+        ? "w-7 h-8 text-xs"
+        : "w-9 h-10 text-sm";
 
   const bgClass = isJoker
     ? "bg-gray-800 text-yellow-400"

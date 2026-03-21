@@ -8,6 +8,19 @@ interface Props {
 }
 
 export default function SolutionView({ solution }: Props) {
+  if (solution.status === "error") {
+    return (
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Solution
+        </h2>
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          The solver returned an error. Check your board setup and try again.
+        </div>
+      </section>
+    );
+  }
+
   if (solution.status === "no_solution") {
     return (
       <section className="space-y-2">

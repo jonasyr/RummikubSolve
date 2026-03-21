@@ -15,7 +15,7 @@ export default function TileGridPicker({ onSelect }: Props) {
     <div className="overflow-x-auto">
       <div className="inline-block">
         {COLORS.map((color) => (
-          <div key={color} className="flex gap-1 mb-1">
+          <div key={color} className="flex gap-[2px] mb-[2px]">
             {NUMBERS.map((n) => (
               <button
                 key={n}
@@ -23,7 +23,7 @@ export default function TileGridPicker({ onSelect }: Props) {
                 className="p-0 border-0 bg-transparent cursor-pointer hover:scale-110 active:scale-95 transition-transform"
                 aria-label={`${color} ${n}`}
               >
-                <Tile color={color} number={n} size="sm" />
+                <Tile color={color} number={n} size="xs" />
               </button>
             ))}
           </div>
@@ -34,7 +34,7 @@ export default function TileGridPicker({ onSelect }: Props) {
             className="p-0 border-0 bg-transparent cursor-pointer hover:scale-110 active:scale-95 transition-transform"
             aria-label="Joker"
           >
-            <Tile isJoker size="sm" />
+            <Tile isJoker size="xs" />
           </button>
         </div>
       </div>

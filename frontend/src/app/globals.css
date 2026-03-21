@@ -21,4 +21,6 @@ body {
   /* Respect safe areas for notch / dynamic island / home indicator */
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+  /* Prevent horizontal page scroll caused by overflow in child elements */
+  overflow-x: hidden;
 }
