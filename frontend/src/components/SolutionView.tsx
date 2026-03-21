@@ -22,13 +22,16 @@ export default function SolutionView({ solution }: Props) {
   }
 
   if (solution.status === "no_solution") {
+    const reason = solution.is_first_turn
+      ? "Hand value is below the 30-point threshold — no play possible this turn."
+      : "No valid move available — no tiles can be placed this turn.";
     return (
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
           Solution
         </h2>
         <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
-          No move possible — no tiles can be placed this turn.
+          {reason}
         </div>
       </section>
     );

@@ -288,3 +288,32 @@ def test_valid_board_two_copies_same_tile() -> None:
     set_b = run(red(4, 1), red(5, 1), red(6, 1))
     state = BoardState(board_sets=[set_a, set_b], rack=[])
     assert is_valid_board(state)
+
+
+# ---------------------------------------------------------------------------
+# Hypothesis property test
+# ---------------------------------------------------------------------------
+
+
+from hypothesis import given, settings  # noqa: E402
+from hypothesis import strategies as st  # noqa: E402
+
+
+@given(
+    set_type=st.sampled_from(list(SetType)),
+    tile_data=st.lists(
+        st.tuples(
+            st.sampled_from(list(Color)),
+            st.integers(min_value=1, max_value=13),
+        ),
+        min_size=0,
+        max_size=15,
+    ),
+)
+@settings(max_examples=200)
+def test_is_valid_set_never_raises(set_type: SetType, tile_data: list[tuple[Color, int]]) -> None:
+    """is_valid_set must return a bool for any tile combination — never raise."""
+    tiles = [Tile(color=c, number=n, copy_id=0) for c, n in tile_data]
+    ts = TileSet(type=set_type, tiles=tiles)
+    result = is_valid_set(ts, RulesConfig())
+    assert isinstance(result, bool)

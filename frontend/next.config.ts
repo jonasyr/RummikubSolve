@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Output standalone build for Docker
-  // output: "standalone",  // Uncomment when deploying via Docker
+  // Standalone output bundles everything needed to run inside Docker without
+  // node_modules being present in the runtime image.
+  output: "standalone",
 
-  // Strict React mode
   reactStrictMode: true,
 };
 

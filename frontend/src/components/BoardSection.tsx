@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useGameStore } from "../store/game";
 import Tile from "./Tile";
 import TileGridPicker from "./TileGridPicker";
@@ -10,14 +10,20 @@ export default function BoardSection() {
   const boardSets = useGameStore((s) => s.boardSets);
   const addBoardSet = useGameStore((s) => s.addBoardSet);
   const removeBoardSet = useGameStore((s) => s.removeBoardSet);
+  const updateBoardSet = useGameStore((s) => s.updateBoardSet);
 
   const [building, setBuilding] = useState(false);
   const [pendingType, setPendingType] = useState<"run" | "group">("run");
   const [pendingTiles, setPendingTiles] = useState<TileInput[]>([]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   function confirmSet() {
     if (pendingTiles.length === 0) return;
-    addBoardSet({ type: pendingType, tiles: pendingTiles });
+    if (editingIndex !== null) {
+      updateBoardSet(editingIndex, { type: pendingType, tiles: pendingTiles });
+    } else {
+      addBoardSet({ type: pendingType, tiles: pendingTiles });
+    }
     cancelSet();
   }
 
@@ -25,7 +31,38 @@ export default function BoardSection() {
     setBuilding(false);
     setPendingTiles([]);
     setPendingType("run");
+    setEditingIndex(null);
   }
+
+  function startEditing(si: number) {
+    const set = boardSets[si];
+    setEditingIndex(si);
+    setPendingType(set.type);
+    setPendingTiles([...set.tiles]);
+    setBuilding(true);
+  }
+
+  const tileCountForPending = useCallback(
+    (tile: TileInput): number => {
+      const key = tile.joker ? "joker" : `${tile.color}-${tile.number}`;
+      const inPending = pendingTiles.filter((t) => {
+        const k = t.joker ? "joker" : `${t.color}-${t.number}`;
+        return k === key;
+      }).length;
+      const inBoard = boardSets.reduce((sum, set, idx) => {
+        if (idx === editingIndex) return sum;
+        return (
+          sum +
+          set.tiles.filter((t) => {
+            const k = t.joker ? "joker" : `${t.color}-${t.number}`;
+            return k === key;
+          }).length
+        );
+      }, 0);
+      return inPending + inBoard;
+    },
+    [pendingTiles, boardSets, editingIndex],
+  );
 
   return (
     <section className="space-y-3">
@@ -68,6 +105,13 @@ export default function BoardSection() {
               ))}
             </div>
             <button
+              onClick={() => startEditing(si)}
+              className="shrink-0 text-gray-400 hover:text-blue-500 text-base leading-none"
+              aria-label={`Edit set ${si + 1}`}
+            >
+              ✎
+            </button>
+            <button
               onClick={() => removeBoardSet(si)}
               className="shrink-0 text-gray-400 hover:text-red-500 text-lg leading-none"
               aria-label={`Remove set ${si + 1}`}
@@ -100,6 +144,7 @@ export default function BoardSection() {
 
           <TileGridPicker
             onSelect={(tile) => setPendingTiles((prev) => [...prev, tile])}
+            tileCount={tileCountForPending}
           />
 
           {/* Pending tiles preview */}
@@ -126,7 +171,7 @@ export default function BoardSection() {
               disabled={pendingTiles.length === 0}
               className="px-3 py-1 rounded text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Add to Board
+              {editingIndex !== null ? "Save Changes" : "Add to Board"}
             </button>
             <button
               onClick={cancelSet}

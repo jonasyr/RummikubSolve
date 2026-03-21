@@ -4,19 +4,74 @@ Phase 2 scope: health check + POST /api/solve.
 
 Run locally:
     uvicorn api.main:app --reload --port 8000
+
+Environment variables (see .env.example at the repo root):
+    SENTRY_DSN       — Sentry DSN; leave empty to disable error reporting.
+    ENVIRONMENT      — "development" (default) or "production".
+    ALLOWED_ORIGIN   — CORS allowed origin; defaults to "*" (all origins).
 """
 
 from __future__ import annotations
 
+import logging
+import os
+from typing import Literal
+
+import sentry_sdk
 import structlog
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
+
+_ENV = os.getenv("ENVIRONMENT", "development")
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+
+# ---------------------------------------------------------------------------
+# Sentry — initialise before anything else so startup errors are captured
+# ---------------------------------------------------------------------------
+
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        environment=_ENV,
+        traces_sample_rate=0.1,  # sample 10 % of transactions for performance
+        send_default_pii=False,
+    )
+
+# ---------------------------------------------------------------------------
+# Logging (structlog)
+# — JSON renderer in production; colored console in development
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(format="%(message)s", level=logging.INFO)
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        (
+            structlog.dev.ConsoleRenderer()
+            if _ENV == "development"
+            else structlog.processors.JSONRenderer()
+        ),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(),
+)
+
 logger = structlog.get_logger()
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.2.0",
+    version="0.6.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -26,10 +81,13 @@ app = FastAPI(
 # Middleware
 # ---------------------------------------------------------------------------
 
+# allow_credentials cannot be True when allow_origins is the wildcard "*"
+# (CORS specification §3.2 — browsers will reject such responses).
+_ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tighten to frontend origin in production
-    allow_credentials=True,
+    allow_origins=["*"] if _ALLOWED_ORIGIN == "*" else [_ALLOWED_ORIGIN],
+    allow_credentials=(_ALLOWED_ORIGIN != "*"),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -92,6 +150,8 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
     valid sets. Returns the new board arrangement and remaining rack tiles.
     Solve time is typically <100 ms.
     """
+    logger.info("solve_request", rack_size=len(request.rack), board_sets=len(request.board))
+
     # Convert API models → domain models.
     try:
         rack = [_tile_input_to_domain(t) for t in request.rack]
@@ -135,15 +195,21 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
             )
         )
 
-    status = "solved" if solution.tiles_placed > 0 else "no_solution"
+    _status: Literal["solved", "no_solution"] = (
+        "solved" if solution.tiles_placed > 0 else "no_solution"
+    )
 
     return SolveResponse(
-        status=status,  # type: ignore[arg-type]
+        status=_status,
         tiles_placed=solution.tiles_placed,
         tiles_remaining=solution.tiles_remaining,
         solve_time_ms=round(solution.solve_time_ms, 2),
         is_optimal=solution.is_optimal,
+        is_first_turn=request.rules.is_first_turn,
         new_board=new_board,
         remaining_rack=[_tile_to_output(t) for t in solution.remaining_rack],
-        moves=[MoveOutput(action=m.action, description=m.description) for m in solution.moves],
+        moves=[
+            MoveOutput(action=m.action, description=m.description, set_index=m.set_index)
+            for m in solution.moves
+        ],
     )

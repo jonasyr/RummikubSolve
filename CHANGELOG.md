@@ -5,6 +5,187 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.7.0] — 2026-03-21 — Phase 5: Cleanup, Polish & API Tests
+
+### Bug fixes
+
+- `api/main.py`: `MoveOutput.set_index` was dropped during serialisation — fixed
+  by passing `set_index=m.set_index` in the list comprehension.
+- `api/main.py` + `pyproject.toml`: version was `"0.2.0"` / `"0.1.0"` (Phase 2
+  artefacts never updated); both now read `"0.6.0"`.
+- `BoardSection.tsx`: `TileGridPicker` inside the set builder had no `tileCount`
+  prop — users could add more than 2 copies of a tile to a board set, violating
+  game rules. Now tracks tiles in the pending set + existing board sets.
+
+### New features
+
+- Board set editing: each set now has an ✎ edit button that repopulates the
+  inline builder. `updateBoardSet` (already in the store) is wired up.
+- `SolveResponse.is_first_turn` field echoed back to frontend; `SolutionView`
+  uses it to show "Below threshold" vs "No valid move" in the `no_solution` case.
+
+### Validation
+
+- `models.py`: Pydantic `Field` constraints added —
+  board set `tiles` requires 3–13 entries; `rack` capped at 104;
+  `board` capped at 50 sets. Invalid inputs now return 422 with clear messages.
+- `solution_verifier.py`: added first-turn meld-threshold check as defense-in-depth.
+
+### Tests
+
+- `tests/api/test_solve_endpoint.py` (new): 9 integration tests covering `/health`,
+  `/api/solve` happy paths, 422 error paths, first-turn rules, and `set_index`
+  serialisation. Uses `httpx.AsyncClient` + ASGI transport (no real network).
+- `test_rule_checker.py`: one Hypothesis property test — `is_valid_set` must return
+  a `bool` for any tile combination (200 random examples, never raises).
+
+### Code quality
+
+- Deleted dead-code stubs: `solver/output/solution_formatter.py`,
+  `diff_calculator.py`, `explanation.py` — logic already inlined in `main.py`.
+- Fixed `type: ignore[arg-type]` in `main.py` with an explicit `Literal` annotation.
+- Added per-request `structlog` line in `/api/solve` handler.
+- Added `role="alert"` on the frontend error banner.
+
+### Docs
+
+- `README.md`: added environment-variable table, E2E test instructions, expanded
+  Docker Compose section, and dev-status link.
+- `CHANGELOG.md`: this entry.
+
+---
+
+## [0.6.0] — 2026-03-21 — Phase 4: Observability, Containerisation & E2E Tests
+
+### What was implemented
+
+**Observability — `backend/api/main.py`**
+
+- Sentry SDK initialised at startup via `SENTRY_DSN` env var; no-op (zero overhead)
+  when the variable is unset or empty. `traces_sample_rate=0.1` captures 10 % of
+  transactions for performance monitoring. `send_default_pii=False` by default.
+- `structlog` now configured explicitly: JSON renderer in `ENVIRONMENT=production`,
+  colored `ConsoleRenderer` in development. Log level set to `INFO` via standard
+  `logging.basicConfig`.
+- CORS `allow_origins` now driven by `ALLOWED_ORIGIN` env var (default `"*"`).
+  Fixes a pre-existing spec violation where `allow_credentials=True` was combined
+  with the wildcard origin; credentials are now disabled when the origin is `"*"`.
+
+**Environment documentation — `.env.example`**
+
+- Documents all four env vars with defaults, descriptions, and production examples:
+  `SENTRY_DSN`, `ENVIRONMENT`, `ALLOWED_ORIGIN`, `NEXT_PUBLIC_API_URL`.
+- `docker-compose.yml` updated to forward `ENVIRONMENT`, `SENTRY_DSN`, and
+  `ALLOWED_ORIGIN` from the host shell / `.env` file into the backend container.
+
+**Frontend containerisation**
+
+- `frontend/next.config.ts`: `output: "standalone"` uncommented — Next.js emits a
+  self-contained `server.js` + minimal `node_modules` tree during `next build`.
+- `frontend/Dockerfile`: multi-stage image (`node:22-alpine` builder → runner).
+  `NEXT_PUBLIC_API_URL` accepted as a `--build-arg` (baked into the JS bundle at
+  build time). Non-root `nextjs` user in the runtime stage.
+- `docker-compose.yml`: `frontend` service added; depends on `backend`
+  `service_healthy` so the UI waits for the API before accepting traffic.
+
+**Playwright E2E tests — `frontend/e2e/`**
+
+- `playwright.config.ts`: Chromium-only, `webServer` auto-starts `next dev`,
+  single worker + 1 retry in CI, HTML report artifact on failure.
+- `package.json`: `@playwright/test ^1.50.0` added to devDependencies; `e2e` and
+  `e2e:ui` npm scripts added.
+- `e2e/solve_basic_run.spec.ts`: adds Red 10–12 to rack, solves, asserts
+  "3 tiles placed" + "Optimal" + "Move instructions" visible.
+- `e2e/solve_first_turn.spec.ts` (2 tests): first-turn pass (33 ≥ 30) and
+  first-turn block (15 < 30 → "no tiles can be placed").
+- `e2e/tile_limit.spec.ts`: clicks same tile twice, asserts button is disabled on
+  the second copy (count ≥ 2).
+
+**CI — `.github/workflows/e2e.yml`**
+
+- Triggered on pushes/PRs touching `backend/**` or `frontend/**`.
+- Starts the FastAPI backend in the background, waits for `/health` with retries,
+  then runs Playwright (which auto-starts the Next.js dev server via `webServer`).
+- Uploads the Playwright HTML report as a workflow artifact on failure (7-day
+  retention).
+
+### Verification (all passed before commit)
+
+```
+pytest:          137 passed, 0 failed
+ruff check:      0 errors
+ruff format:     clean
+mypy strict:     no issues in 24 source files
+tsc --noEmit:    0 errors (includes playwright.config.ts)
+next lint:       0 warnings / errors
+next build:      ✓ standalone output — .next/standalone/server.js present
+```
+
+### What is NOT here yet
+
+- Actual deployment to Vercel + Fly.io (requires external service configuration)
+- PWA icon assets (manifest.json placeholder remains)
+- Database / persistence layer (stateless solver by design)
+
+---
+
+## [0.5.0] — 2026-03-21 — Phase 2b + 3b: First-Turn Rule, Move Generator & Tile Count Limits
+
+### What was implemented
+
+**Phase 2b — First-Turn ILP Constraint**
+
+- `backend/solver/engine/ilp_formulation.py`: Constraint 3 added — when `rules.is_first_turn=True`,
+  encodes `Σ placed_tile_numbers ≥ initial_meld_threshold` as an upper-bound row on `h[t]` variables.
+  Jokers contribute 0 points toward the threshold. If the rack value is below the threshold the
+  upper bound becomes negative, HiGHS returns `kInfeasible`, and `solver.py` maps that to 0 tiles placed.
+- `backend/solver/engine/solver.py`: First-turn solves build a rack-only `BoardState(board_sets=[], rack=...)`;
+  `ValueError` from an infeasible ILP is caught and returned as a "no play" outcome instead of a 422 error;
+  original board sets are prepended to the result unchanged so the full board is always in the response.
+- 6 new ILP tests: above threshold, below threshold, exact threshold, board preservation, board-tile
+  isolation, and joker-has-no-value.
+
+**Phase 3b — Move Generator**
+
+- `backend/solver/generator/move_generator.py`: replaces `NotImplementedError` with a diff-based
+  implementation. For each new set, partitions tiles into rack-origin vs board-origin and classifies
+  the move as `create` (set built entirely from rack), `extend` (rack tiles added to an identifiable
+  existing set — carries `set_index`), or `rearrange` (board tiles redistributed across sets).
+  Unchanged board sets emit no instruction.
+- `backend/solver/engine/solver.py`: `generate_moves` wired in; `moves=[]` placeholder removed.
+- 7 new move-generator unit tests in `tests/solver/test_move_generator.py`.
+
+**Phase 3b — Tile Count Limits (frontend)**
+
+- `frontend/src/components/TileGridPicker.tsx`: new optional `tileCount` prop; tile buttons are
+  disabled at count ≥ 2 (Rummikub maximum) and show a small count badge overlay when ≥ 1 copy is
+  already in the rack.
+- `frontend/src/components/RackSection.tsx`: per-tile counts derived from the rack array via
+  `useCallback` and passed to `TileGridPicker`.
+- `frontend/src/components/SolutionView.tsx`: numbered "Move instructions" section rendered when
+  `solution.moves.length > 0`.
+
+### Verification (all passed before commit)
+
+```
+pytest:          137 passed, 0 failed  (124 existing + 13 new)
+ruff check:      0 errors
+ruff format:     clean
+mypy strict:     no issues in 24 source files
+tsc --noEmit:    0 errors
+next lint:       0 warnings / errors
+next build:      ✓ clean
+```
+
+### What is NOT here yet (next phase)
+
+- Sentry integration — Phase 4
+- Playwright E2E tests — Phase 4
+- Frontend Dockerfile / standalone containerisation — Phase 4
+- Environment variable documentation (`.env.example`) — Phase 4
+
+---
+
 ## [0.4.0] — 2026-03-21 — Phase 3: Frontend Core UI
 
 ### What was implemented
