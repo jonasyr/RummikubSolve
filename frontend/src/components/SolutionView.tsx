@@ -1,0 +1,98 @@
+"use client";
+
+import type { SolveResponse } from "../types/api";
+import Tile from "./Tile";
+
+interface Props {
+  solution: SolveResponse;
+}
+
+export default function SolutionView({ solution }: Props) {
+  if (solution.status === "no_solution") {
+    return (
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+          Solution
+        </h2>
+        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+          No move possible — no tiles can be placed this turn.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+        Solution
+      </h2>
+
+      {/* Summary bar */}
+      <div className="flex flex-wrap gap-2 text-sm">
+        <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-medium">
+          {solution.tiles_placed} tile{solution.tiles_placed !== 1 ? "s" : ""}{" "}
+          placed
+        </span>
+        {solution.tiles_remaining > 0 && (
+          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
+            {solution.tiles_remaining} remaining
+          </span>
+        )}
+        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded">
+          {solution.solve_time_ms} ms
+        </span>
+        {solution.is_optimal && (
+          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
+            Optimal
+          </span>
+        )}
+      </div>
+
+      {/* New board sets */}
+      <div className="space-y-2">
+        {solution.new_board.map((set, si) => (
+          <div
+            key={si}
+            className="flex items-start gap-2 p-2 bg-white rounded border border-gray-200"
+          >
+            <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">
+              {set.type}
+            </span>
+            <div className="flex flex-wrap gap-1">
+              {set.tiles.map((tile, ti) => (
+                <Tile
+                  key={ti}
+                  color={tile.color}
+                  number={tile.number}
+                  isJoker={tile.joker}
+                  highlighted={set.new_tile_indices.includes(ti)}
+                  size="sm"
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Remaining rack */}
+      {solution.remaining_rack.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">
+            Remaining in hand
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {solution.remaining_rack.map((tile, i) => (
+              <Tile
+                key={i}
+                color={tile.color}
+                number={tile.number}
+                isJoker={tile.joker}
+                size="sm"
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
