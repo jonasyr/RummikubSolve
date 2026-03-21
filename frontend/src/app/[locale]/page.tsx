@@ -1,13 +1,18 @@
 "use client";
 
-import { useGameStore } from "../store/game";
-import { solvePuzzle } from "../lib/api";
-import RackSection from "../components/RackSection";
-import BoardSection from "../components/BoardSection";
-import SolutionView from "../components/SolutionView";
-import ErrorBoundary from "../components/ErrorBoundary";
+import { useTranslations } from "next-intl";
+import { useGameStore } from "../../store/game";
+import { solvePuzzle } from "../../lib/api";
+import RackSection from "../../components/RackSection";
+import BoardSection from "../../components/BoardSection";
+import SolutionView from "../../components/SolutionView";
+import { TranslatedErrorBoundary } from "../../components/ErrorBoundary";
+import RulesPanel from "../../components/RulesPanel";
+import LocaleSwitcher from "../../components/LocaleSwitcher";
 
 export default function Home() {
+  const t = useTranslations("page");
+
   const boardSets = useGameStore((s) => s.boardSets);
   const rack = useGameStore((s) => s.rack);
   const isFirstTurn = useGameStore((s) => s.isFirstTurn);
@@ -46,6 +51,7 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">RummikubSolve</h1>
         <div className="flex items-center gap-3">
+          <LocaleSwitcher />
           <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
             <input
               type="checkbox"
@@ -53,17 +59,18 @@ export default function Home() {
               onChange={(e) => setIsFirstTurn(e.target.checked)}
               className="rounded"
             />
-            First turn
+            {t("firstTurn")}
           </label>
           <button
             onClick={reset}
             className="text-sm px-2 py-1 rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100"
           >
-            Reset
+            {t("reset")}
           </button>
         </div>
       </div>
 
+      <RulesPanel />
       <RackSection />
       <BoardSection />
 
@@ -73,21 +80,28 @@ export default function Home() {
         disabled={isLoading || rack.length === 0 || isBuildingSet}
         className="w-full py-3 rounded-lg bg-blue-600 text-white font-semibold text-base hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
-        {isLoading ? "Solving…" : isBuildingSet ? "Finish editing first" : "Solve"}
+        {isLoading
+          ? t("solving")
+          : isBuildingSet
+            ? t("finishEditing")
+            : t("solve")}
       </button>
 
       {/* Error banner */}
       {error && (
-        <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div
+          role="alert"
+          className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+        >
           {error}
         </div>
       )}
 
       {/* Solution */}
       {solution && (
-        <ErrorBoundary>
+        <TranslatedErrorBoundary>
           <SolutionView solution={solution} />
-        </ErrorBoundary>
+        </TranslatedErrorBoundary>
       )}
     </main>
   );

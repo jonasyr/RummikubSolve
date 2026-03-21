@@ -68,10 +68,26 @@ def generate_moves(
             # doesn't exactly match any pre-existing set (i.e. was reshuffled).
             board_fp = frozenset(_key(t) for t in from_board)
             if board_fp not in old_fingerprints:
+                # Find which old set contributed the most tiles so we can tell
+                # the player where to take the tiles from.
+                best_src: int | None = None
+                best_overlap = 0
+                for i, fp in enumerate(old_fingerprints):
+                    overlap = len(fp & board_fp)
+                    if overlap > best_overlap:
+                        best_overlap, best_src = overlap, i
+                if best_src is not None and best_overlap > 0:
+                    desc = (
+                        f"Take tiles from set {best_src + 1} and "
+                        f"reform as {new_set.type.value}: {_fmt(from_board)}"
+                    )
+                else:
+                    desc = f"Rearrange into {new_set.type.value}: {_fmt(from_board)}"
                 moves.append(
                     MoveInstruction(
                         action="rearrange",
-                        description=f"Rearrange into {new_set.type.value}: {_fmt(from_board)}",
+                        description=desc,
+                        set_index=best_src,
                     )
                 )
             continue

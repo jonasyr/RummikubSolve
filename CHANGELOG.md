@@ -5,6 +5,172 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.11.0] — 2026-03-21 — Phase 9: Multi-language i18n (EN + DE)
+
+### New features
+
+- **`next-intl ^3`** installed; URL-based locale routing (`/en/`, `/de/`) via
+  `next-intl/middleware` and `defineRouting`.
+- **`src/middleware.ts`** (new): routes every request through next-intl middleware so
+  the browser is redirected to `/en` or `/de` based on `Accept-Language` headers and
+  cookie preference.
+- **`src/i18n/config.ts`** (new): single source of truth — `locales = ["en", "de"]`,
+  `defaultLocale = "en"`, exported `Locale` type.
+- **`src/i18n/routing.ts`** (new): `defineRouting({ locales, defaultLocale })` consumed
+  by middleware and `createNavigation`.
+- **`src/i18n/request.ts`** (new): `getRequestConfig` dynamically imports the matching
+  `messages/{locale}.json` file per request.
+- **`src/i18n/navigation.ts`** (new): typed `Link`, `useRouter`, `usePathname` via
+  `createNavigation(routing)`.
+- **`src/i18n/messages/en.json`** (new): ~100 English strings across namespaces:
+  `common`, `meta`, `page`, `rulesPanel`, `rack`, `board` (with `errors`), `tilePicker`,
+  `tile`, `solution`, `errorBoundary`, `localeSwitcher`. ICU plurals for tile counts
+  and move summaries.
+- **`src/i18n/messages/de.json`** (new): full German translation (e.g.
+  `page.solve` → "Lösen", `rack.heading` → "Deine Steine",
+  `board.heading` → "Tisch-Sätze", `solution.badge.new` → "NEU").
+- **`src/app/[locale]/layout.tsx`** (new): locale-aware root layout with
+  `<html lang={locale}>`, `<NextIntlClientProvider>`, and `generateMetadata` using
+  translated title/description.
+- **`src/app/[locale]/page.tsx`** (new): main page moved here; uses
+  `useTranslations("page")` and renders `<LocaleSwitcher />`.
+- **`src/components/LocaleSwitcher.tsx`** (new): EN / DE toggle buttons using
+  `useLocale()` + typed `router.replace(pathname, { locale })` — no page reload needed.
+
+### Updated components
+
+- `BoardSection.tsx`: `validateSet` now returns `{ key, params } | null` instead of a
+  plain string; component resolves the translation key via `t(key, params)`. Headings,
+  labels, buttons, and error messages fully translated.
+- `RackSection.tsx`, `RulesPanel.tsx`, `SolutionView.tsx`, `TileGridPicker.tsx`,
+  `Tile.tsx`, `ErrorBoundary.tsx` — all use `useTranslations(namespace)`.
+- `ErrorBoundary.tsx`: added optional `heading?` and `fallback?` props + new
+  `TranslatedErrorBoundary` functional wrapper that injects translated strings.
+- `src/app/layout.tsx`: reduced to a pass-through wrapper (HTML/body live in
+  `[locale]/layout.tsx`).
+- `next.config.ts`: wrapped with `createNextIntlPlugin`.
+
+### Bug fixes
+
+- Fixed ruff formatting in `backend/api/main.py` and `backend/api/models.py`
+  (trailing whitespace / alignment issues flagged by CI).
+
+---
+
+## [0.10.0] — 2026-03-21 — Phase 8: Rules Panel + Solution Clarity
+
+### New features
+
+- `RulesPanel.tsx` (new): collapsible "ℹ How sets work" panel inserted between the
+  page header and the rack picker. Uses native `<details>/<summary>` — zero JS, zero
+  React state, closed by default. Explains Run, Group, First-turn threshold (≥30 pts),
+  and Joker rules.
+- `page.tsx`: imports and renders `<RulesPanel />`.
+
+### Solution display improvements
+
+- **4-way set-status badges** (`SolutionView.tsx`): sets in the solution board now carry
+  a colored border + badge derived entirely from existing fields (`is_unchanged`,
+  `new_tile_indices`, `tiles.length`) — no new API data needed:
+  - **NEW** (green border + green badge) — all tiles came from the rack
+  - **+** (blue border + blue badge) — existing set extended with rack tiles
+  - **↺** (amber border + amber badge) — board tiles reshuffled, no new tiles
+  - *unchanged* (gray, muted) — set is identical to the pre-solve board
+- **Move summary line**: one-liner above the step list, e.g.
+  *"3 moves: 2 new sets, 1 extension"*, computed from `solution.moves`.
+- **Action-typed move bullets**: the numbered circle next to each instruction is now
+  color-coded — green for `create`, blue for `extend`, amber for `rearrange`.
+  The `action` field was already present in `MoveOutput` but was never surfaced in
+  the UI.
+
+### Verification
+
+```
+tsc --noEmit:  0 errors
+next build:    clean
+```
+
+---
+
+## [0.9.0] — 2026-03-21 — Phase 7: Physical Executability
+
+### Bug fixes
+
+- **`new_tile_indices` over-highlighting** (`api/main.py`): replaced `placed_key_set`
+  (a plain Python `set`) with a `Counter` that is consumed one entry at a time as tiles
+  are matched. Previously, when the same tile appeared in both the board and the rack
+  (e.g. Red 5 on board + Red 5 in rack), the set collapsed both copies to one key and
+  highlighted every matching tile — including board tiles never placed from the rack.
+
+### New features
+
+- **`is_unchanged` field** (`api/models.py`, `api/main.py`): `BoardSetOutput` now
+  carries `is_unchanged: bool`. Computed in `main.py` by comparing each new set's tile
+  multiset (`Counter` of color+number+joker) against the old board sets. A set is
+  unchanged when no rack tiles were added AND the tile composition matches an existing
+  board set exactly.
+- **Set numbers in solution UI** (`SolutionView.tsx`): each set in the solution board
+  now displays a bold number prefix ("1.", "2.", …) that directly corresponds to the
+  set indices referenced in move instructions ("Add to set 2").
+- **Source-set hint in rearrange descriptions** (`move_generator.py`): pure-board
+  rearrangement moves now say *"Take tiles from set 2 and reform as run: Red 4, Red 5,
+  Red 6"* instead of the previous opaque *"Rearrange into run: …"*. The best-matching
+  old set is found by tile-key overlap and referenced by 1-based index.
+- **`is_unchanged` in frontend types** (`types/api.ts`): `BoardSetOutput` extended
+  with `is_unchanged?: boolean`.
+
+### Verification
+
+```
+pytest:       147 passed, 0 failed
+tsc --noEmit: 0 errors
+next build:   clean
+```
+
+---
+
+## [0.8.0] — 2026-03-21 — Phase 6: UX Flow Fixes
+
+### Bug fixes
+
+- **Rack picker tile count** (`RackSection.tsx`): `tileCount` now sums tiles across
+  both `rack` AND `boardSets`, enforcing the 2-copy Rummikub limit globally. Previously
+  only rack tiles were counted, allowing >2 copies of the same tile when some were
+  already on the board.
+- **Pydantic 422 error format** (`api.ts`): `detail` arrays (FastAPI's default Pydantic
+  validation shape) are now joined into a readable string instead of rendering as
+  `[object Object],[object Object]`.
+- **`SolutionView` null safety** (`SolutionView.tsx`): all `.map()`, `.length`, and
+  `.includes()` calls on `new_board`, `moves`, `remaining_rack`, and `new_tile_indices`
+  guarded with optional chaining / `?? []` to prevent runtime render crashes when any
+  field is unexpectedly null.
+
+### New features
+
+- **`isBuildingSet` store field** (`store/game.ts`): builder open/closed state moved
+  from local `useState` in `BoardSection` into the Zustand store. `reset()` clears it
+  via `initialState`. Enables page-level awareness of the builder state.
+- **Solve button guarded** (`page.tsx`): Solve is disabled and shows *"Finish editing
+  first"* while the board set builder is open (`isBuildingSet`), preventing the solver
+  from running with incomplete board state.
+- **Board locked during solve** (`BoardSection.tsx`): Add Set / Edit (✎) / Remove (×)
+  buttons are disabled while `isLoading`, preventing mid-flight board mutations that
+  would make the response inconsistent with what was sent.
+- **Reset closes builder** (`BoardSection.tsx` + `store/game.ts`): clicking Reset now
+  also closes the builder UI because `isBuildingSet` is part of `initialState`.
+- **`ErrorBoundary` component** (`ErrorBoundary.tsx`, new): React class-based error
+  boundary wrapping `<SolutionView>`. Render errors that previously surfaced only in the
+  browser console now show a user-friendly red fallback panel instead of a blank screen.
+
+### Verification
+
+```
+tsc --noEmit: 0 errors
+next build:   clean
+```
+
+---
+
 ## [0.7.0] — 2026-03-21 — Phase 5: Cleanup, Polish & API Tests
 
 ### Bug fixes

@@ -70,6 +70,7 @@ class BoardSetOutput(BaseModel):
     type: str
     tiles: list[TileOutput]
     new_tile_indices: list[int] = []  # 0-based positions of newly placed tiles
+    is_unchanged: bool = False  # True when set is identical to an existing board set
 
 
 class MoveOutput(BaseModel):

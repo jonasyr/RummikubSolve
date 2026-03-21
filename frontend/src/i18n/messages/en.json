@@ -1,0 +1,101 @@
+{
+  "common": {
+    "appName": "RummikubSolve"
+  },
+  "meta": {
+    "title": "RummikubSolve",
+    "description": "Optimal Rummikub move solver — place as many tiles as possible."
+  },
+  "page": {
+    "firstTurn": "First turn",
+    "reset": "Reset",
+    "solve": "Solve",
+    "solving": "Solving…",
+    "finishEditing": "Finish editing first"
+  },
+  "rulesPanel": {
+    "toggle": "How sets work",
+    "run": "Run",
+    "runDesc": "3–13 tiles of the <strong>same color</strong>, in consecutive numbers (1–13). Jokers fill gaps.",
+    "runExample": "e.g. Red 5 · Red 6 · Red 7",
+    "group": "Group",
+    "groupDesc": "3–4 tiles with the <strong>same number</strong>, each a different color. Jokers substitute missing colors.",
+    "groupExample": "e.g. Red 8 · Blue 8 · Black 8",
+    "firstTurn": "First turn",
+    "firstTurnDesc": "Your initial meld must total <strong>≥ 30 points</strong> (sum of face values of placed tiles). Board tiles may not be reused.",
+    "joker": "Joker",
+    "jokerDesc": "Substitutes any tile. Its value equals the tile it represents. You may retrieve a joker from the board by replacing it with the matching tile."
+  },
+  "rack": {
+    "heading": "Your Rack",
+    "empty": "Click tiles above to add them to your rack."
+  },
+  "board": {
+    "heading": "Board Sets",
+    "addSet": "+ Add Set",
+    "noSets": "No board sets yet.",
+    "editSet": "Edit set {n}",
+    "removeSet": "Remove set {n}",
+    "run": "run",
+    "group": "group",
+    "typeRun": "Run",
+    "typeGroup": "Group",
+    "addToBoard": "Add to Board",
+    "saveChanges": "Save Changes",
+    "cancel": "Cancel",
+    "validSet": "Valid set ✓",
+    "errors": {
+      "minTiles": "Need at least 3 tiles (have {count})",
+      "maxTiles": "Too many tiles (max 13)",
+      "runColor": "Run: all tiles must be the same color",
+      "runDuplicates": "Run: cannot have duplicate numbers",
+      "runJokers": "Run: not enough jokers to fill gaps between tiles",
+      "runRange": "Run: tiles don't fit within the 1–13 range",
+      "groupMax": "Group: can have at most 4 tiles",
+      "groupNumber": "Group: all tiles must have the same number",
+      "groupColors": "Group: cannot have duplicate colors",
+      "groupJokers": "Group: too many jokers"
+    }
+  },
+  "tilePicker": {
+    "joker": "Joker",
+    "ariaLabel": "{color} {number}",
+    "ariaMax": "{color} {number} (max 2)",
+    "ariaSelected": "{color} {number} ({count} selected)",
+    "jokerAria": "Joker",
+    "jokerAriaMax": "Joker (max 2)",
+    "jokerAriaSelected": "Joker ({count} selected)"
+  },
+  "tile": {
+    "removeLabel": "Remove tile"
+  },
+  "solution": {
+    "heading": "Solution",
+    "error": "The solver returned an error. Check your board setup and try again.",
+    "noSolutionFirstTurn": "Hand value is below the 30-point threshold — no play possible this turn.",
+    "noSolution": "No valid move available — no tiles can be placed this turn.",
+    "tilesPlaced": "{count, plural, one {# tile placed} other {# tiles placed}}",
+    "tilesRemaining": "{count, plural, one {# remaining} other {# remaining}}",
+    "solveTime": "{ms} ms",
+    "optimal": "Optimal",
+    "remainingHand": "Remaining in hand",
+    "moveInstructions": "Move instructions",
+    "moveSummary": "{total, plural, one {# move} other {# moves}}: {parts}",
+    "moveCreate": "{count, plural, one {# new set} other {# new sets}}",
+    "moveExtend": "{count, plural, one {# extension} other {# extensions}}",
+    "moveRearrange": "{count, plural, one {# rearrangement} other {# rearrangements}}",
+    "badge": {
+      "new": "NEW",
+      "extended": "+",
+      "rearranged": "↺",
+      "unchanged": "unchanged"
+    }
+  },
+  "errorBoundary": {
+    "heading": "Something went wrong displaying the result.",
+    "fallback": "Unknown rendering error"
+  },
+  "localeSwitcher": {
+    "label": "Language"
+  }
+}

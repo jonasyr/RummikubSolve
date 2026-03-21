@@ -54,6 +54,8 @@ export interface BoardSetOutput {
   tiles: TileOutput[];
   /** 0-based indices of tiles in this set that came from the rack */
   new_tile_indices: number[];
+  /** True when the set is identical to an existing board set (no tiles added/removed) */
+  is_unchanged?: boolean;
 }
 
 export interface MoveOutput {
