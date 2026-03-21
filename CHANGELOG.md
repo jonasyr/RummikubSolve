@@ -5,6 +5,58 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.12.0] — 2026-03-21 — Phase 10: Post-merge Bug Fixes, New Tests & Changelog
+
+### Bug fixes
+
+- **Backend — joker validation** (`api/models.py`): a tile sent as
+  `{"joker": true, "color": "red"}` previously passed Pydantic validation and
+  silently violated the domain invariant. A guard now raises
+  `"Joker tiles must not have a color or number."`, returning HTTP 422.
+- **Backend — event-loop blocking** (`api/main.py`): the `/api/solve` endpoint
+  was declared `async def` despite containing no async I/O. Changed to `def` so
+  FastAPI correctly routes it through a thread pool and the event loop stays free
+  for other requests.
+- **Backend — Counter type annotations** (`api/main.py`): `Counter` generics
+  used `str | None` for tile colour fields, but the domain `Tile.color` is a
+  `Color` enum. Updated to `Color | None` for correct mypy inference.
+- **Frontend — concurrent-solve race condition** (`app/[locale]/page.tsx`):
+  rapid clicks on "Solve" would send overlapping requests; a slower response
+  could overwrite a newer one. An `AbortController` stored in a `useRef` now
+  cancels the previous in-flight fetch before starting a new one. `AbortError`
+  is silently swallowed so the UI stays clean.
+- **Frontend — missing `aria-live`** (`app/[locale]/page.tsx`): the error
+  banner had `role="alert"` but no `aria-live` attribute. Added
+  `aria-live="assertive"` so screen readers announce errors immediately.
+- **Frontend — accidental reset** (`app/[locale]/page.tsx`): the Reset button
+  wiped all board/rack data without confirmation. A `window.confirm()` guard is
+  now shown whenever tiles or sets are present. The confirmation message is
+  fully translated (`page.resetConfirm` in `en.json` / `de.json`).
+
+### New tests
+
+- **Backend API** — 9 new tests added to `tests/api/test_solve_endpoint.py`,
+  each following strict AAA (Arrange / Act / Assert) structure:
+  - `test_solve_group_happy_path` — three same-number different-colour tiles
+  - `test_solve_with_joker_in_run` — joker fills a gap in a run
+  - `test_solve_extends_existing_board_set` — rack tile extends a board run
+  - `test_solve_two_tiles_in_rack_returns_no_solution` — insufficient tiles
+  - `test_solve_response_contains_all_required_fields` — schema completeness
+  - `test_is_unchanged_true_for_unmodified_board_set` — `is_unchanged` flag
+  - `test_new_tile_indices_populated_for_rack_tile` — highlight index accuracy
+  - `test_joker_with_color_returns_422` — validates joker guard (B1 above)
+  - `test_joker_with_number_returns_422` — validates joker guard (B1 above)
+- **Backend unit** — 3 new tests added to `tests/test_models.py`:
+  - `test_tile_input_joker_minimal_valid` — bare joker is valid
+  - `test_tile_input_joker_with_color_raises` — ValidationError expected
+  - `test_tile_input_joker_with_number_raises` — ValidationError expected
+- **E2E Playwright** — 2 new spec files:
+  - `e2e/board_section.spec.ts` — add a set via UI, verify it renders
+  - `e2e/extend_board_set.spec.ts` — add board run + rack tile, solve,
+    assert extend move shown with correct set reference
+
+---
+
 ## [0.11.0] — 2026-03-21 — Phase 9: Multi-language i18n (EN + DE)
 
 ### New features

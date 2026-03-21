@@ -29,7 +29,10 @@ class TileInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_tile(self) -> TileInput:
-        if not self.joker:
+        if self.joker:
+            if self.color is not None or self.number is not None:
+                raise ValueError("Joker tiles must not have a color or number.")
+        else:
             if self.color is None or self.number is None:
                 raise ValueError("Non-joker tiles require both 'color' and 'number'.")
             if not (1 <= (self.number or 0) <= 13):

@@ -144,7 +144,7 @@ def _tile_to_output(t: Tile) -> TileOutput:
 
 
 @app.post("/api/solve", response_model=SolveResponse, tags=["solver"])
-async def solve_endpoint(request: SolveRequest) -> SolveResponse:
+def solve_endpoint(request: SolveRequest) -> SolveResponse:
     """Solve a Rummikub board state and return the optimal move.
 
     Places the maximum number of rack tiles while keeping all board tiles in
@@ -186,12 +186,12 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
 
     # Counter of placed-tile keys — consumed one-by-one so duplicate tiles
     # (e.g. two Red 5s, one from rack and one from board) are highlighted correctly.
-    placed_key_counter: Counter[tuple[str | None, int | None, int, bool]] = Counter(
+    placed_key_counter: Counter[tuple[Color | None, int | None, int, bool]] = Counter(
         (t.color, t.number, t.copy_id, t.is_joker) for t in solution.placed_tiles
     )
 
     # Multiset signatures of the OLD board sets, used to detect unchanged sets.
-    old_set_sigs: list[Counter[tuple[str | None, int | None, bool]]] = [
+    old_set_sigs: list[Counter[tuple[Color | None, int | None, bool]]] = [
         Counter((t.color, t.number, t.is_joker) for t in ts.tiles) for ts in state.board_sets
     ]
 

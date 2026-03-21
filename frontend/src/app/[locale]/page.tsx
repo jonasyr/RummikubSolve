@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useGameStore } from "../../store/game";
 import { solvePuzzle } from "../../lib/api";
@@ -26,23 +27,44 @@ export default function Home() {
   const setError = useGameStore((s) => s.setError);
   const reset = useGameStore((s) => s.reset);
 
+  // Abort any in-flight request when a new solve is triggered.
+  const abortRef = useRef<AbortController | null>(null);
+
   async function handleSolve() {
     if (rack.length === 0) return;
+
+    // Cancel any previous in-flight request.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError(null);
     setSolution(null);
     try {
-      const result = await solvePuzzle({
-        board: boardSets,
-        rack,
-        rules: { is_first_turn: isFirstTurn },
-      });
+      const result = await solvePuzzle(
+        { board: boardSets, rack, rules: { is_first_turn: isFirstTurn } },
+        controller.signal,
+      );
       setSolution(result);
     } catch (err) {
+      // Ignore cancellations — a new request is already in flight.
+      if (err instanceof Error && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleReset() {
+    if (
+      (rack.length > 0 || boardSets.length > 0) &&
+      !window.confirm(t("resetConfirm"))
+    ) {
+      return;
+    }
+    abortRef.current?.abort();
+    reset();
   }
 
   return (
@@ -62,7 +84,7 @@ export default function Home() {
             {t("firstTurn")}
           </label>
           <button
-            onClick={reset}
+            onClick={handleReset}
             className="text-sm px-2 py-1 rounded text-gray-500 hover:text-gray-700 hover:bg-gray-100"
           >
             {t("reset")}
@@ -91,6 +113,7 @@ export default function Home() {
       {error && (
         <div
           role="alert"
+          aria-live="assertive"
           className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
         >
           {error}

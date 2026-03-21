@@ -9,6 +9,7 @@
   "page": {
     "firstTurn": "Erster Zug",
     "reset": "Zurücksetzen",
+    "resetConfirm": "Alles zurücksetzen? Alle Steine und Sätze werden gelöscht.",
     "solve": "Lösen",
     "solving": "Wird gelöst…",
     "finishEditing": "Erst Bearbeitung abschließen"
