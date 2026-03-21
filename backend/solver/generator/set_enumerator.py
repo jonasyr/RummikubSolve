@@ -115,24 +115,58 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
     """
     base = enumerate_runs(state) + enumerate_groups(state)
 
-    joker_count = sum(1 for t in state.all_tiles if t.is_joker)
-    if joker_count == 0:
-        return base
-
+    # Count physical copies of each (color, number) tile in the pool.
+    # Rummikub has 2 copies of every tile, so the board can contain two
+    # identical valid sets (e.g. two [1R,2R,3R] runs). The ILP uses a
+    # binary y[s] per template, so each template can only be activated once.
+    # We must include each template N times (N = min copies of required tiles)
+    # so the ILP can assign distinct physical tile copies to each instance.
     avail: Counter[tuple[Color, int]] = Counter(
         (t.color, t.number)
         for t in state.all_tiles
         if not t.is_joker and t.color is not None and t.number is not None
     )
+    expanded: list[TileSet] = []
+    for tmpl in base:
+        required = [
+            (t.color, t.number)
+            for t in tmpl.tiles
+            if not t.is_joker and t.color is not None and t.number is not None
+        ]
+        n_copies = min((avail[(c, n)] for c, n in required), default=1)
+        for _ in range(n_copies):
+            expanded.append(tmpl)
+    base = expanded
+
+    joker_count = sum(1 for t in state.all_tiles if t.is_joker)
+    if joker_count == 0:
+        return base
+
     joker_ph = Tile.joker(copy_id=0)
     variants: list[TileSet] = []
 
-    # Type 1: joker substitutes for an available tile in every base template.
+    # Type 1: joker substitutes for any tile in a base template.
+    # This allows the physical joker (whether a board tile or rack tile) to
+    # occupy a slot in a template, freeing the original tile for another set.
+    # We must generate variants for ALL positions — restricting to rack-tile
+    # slots only causes infeasibility when the joker is a board tile and the
+    # tile it covers in the original set is also present in the pool as another
+    # board tile (so type 2 "fill-missing" won't generate the template either).
+    # Deduplication via fingerprints prevents identical templates from being
+    # added twice (e.g. when type 1 and type 2 would produce the same variant).
+    seen_variants: set[tuple] = set()
+
     for tmpl in base:
         for p in range(len(tmpl.tiles)):
+            slot = tmpl.tiles[p]
+            if slot.color is None or slot.number is None:
+                continue  # already a joker slot — skip
             new_tiles = list(tmpl.tiles)
             new_tiles[p] = joker_ph
-            variants.append(TileSet(type=tmpl.type, tiles=new_tiles))
+            fp = (tmpl.type, tuple((t.is_joker, t.color, t.number) for t in new_tiles))
+            if fp not in seen_variants:
+                seen_variants.add(fp)
+                variants.append(TileSet(type=tmpl.type, tiles=new_tiles))
 
     # Type 2: joker fills the one MISSING slot in an otherwise formable set.
     # Runs with exactly 1 unavailable tile:
@@ -148,7 +182,10 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
                     joker_ph if (c, n) == missing_key else Tile(color=c, number=n, copy_id=0)
                     for c, n in required
                 ]
-                variants.append(TileSet(type=SetType.RUN, tiles=run_tiles))
+                fp2 = (SetType.RUN, tuple((t.is_joker, t.color, t.number) for t in run_tiles))
+                if fp2 not in seen_variants:
+                    seen_variants.add(fp2)
+                    variants.append(TileSet(type=SetType.RUN, tiles=run_tiles))
 
     # Groups with exactly 1 unavailable tile:
     colors = list(Color)
@@ -166,6 +203,9 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
                     else Tile(color=c, number=number, copy_id=0)
                     for c in color_combo
                 ]
-                variants.append(TileSet(type=SetType.GROUP, tiles=grp_tiles))
+                fp2 = (SetType.GROUP, tuple((t.is_joker, t.color, t.number) for t in grp_tiles))
+                if fp2 not in seen_variants:
+                    seen_variants.add(fp2)
+                    variants.append(TileSet(type=SetType.GROUP, tiles=grp_tiles))
 
     return base + variants
