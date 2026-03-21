@@ -44,7 +44,18 @@ yarn-error.log*
 .DS_Store
 
 # Docker
-*.dockerignore
+.dockerignore
+docker-compose.override.yml
+
+# Solver artefacts (PuLP/HiGHS intermediate files)
+*.lp
+*.sol
+*.mps
+
+# Coverage
+coverage.xml
+.coverage.*
 
 # Misc
 *.log
+Thumbs.db
