@@ -1,0 +1,20 @@
+import type { SolveRequest, SolveResponse } from "../types/api";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export async function solvePuzzle(
+  request: SolveRequest,
+): Promise<SolveResponse> {
+  const res = await fetch(`${API_URL}/api/solve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(data.detail ?? `HTTP ${res.status}`);
+  }
+
+  return res.json() as Promise<SolveResponse>;
+}
