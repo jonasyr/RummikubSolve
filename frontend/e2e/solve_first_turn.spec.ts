@@ -34,7 +34,7 @@ test("first-turn: no play when rack value is below the threshold", async ({
 
   await page.getByRole("button", { name: "Solve" }).click();
 
-  await expect(page.getByText(/no tiles can be placed/i)).toBeVisible({
+  await expect(page.getByText(/below the.*threshold/i)).toBeVisible({
     timeout: 5_000,
   });
 });
