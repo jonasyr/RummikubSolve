@@ -171,7 +171,15 @@ export default function BoardSection() {
       {isBuildingSet && (
         <div className="p-3 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
           <TileGridPicker
-            onSelect={(tile) => setPendingTiles((prev) => [...prev, tile])}
+            onSelect={(tile) =>
+              setPendingTiles((prev) => {
+                const next = [...prev, tile];
+                // Auto-sort runs by number as tiles are picked.
+                return getValidType(next) === "run"
+                  ? [...next].sort((a, b) => (a.number ?? 0) - (b.number ?? 0))
+                  : next;
+              })
+            }
             tileCount={tileCountForPending}
           />
 
