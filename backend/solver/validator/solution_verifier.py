@@ -48,9 +48,18 @@ def verify_solution(
     if rules is None:
         rules = RulesConfig()
 
+    import structlog as _structlog
+    _log = _structlog.get_logger()
+
     # 1. All sets in the proposed solution must be individually valid.
-    for ts in solution.new_sets:
+    for i, ts in enumerate(solution.new_sets):
         if not is_valid_set(ts, rules):
+            _log.warning(
+                "verify_solution.check1_failed",
+                set_index=i,
+                set_type=ts.type,
+                tiles=[str(t) for t in ts.tiles],
+            )
             return False
 
     # 2. Rack accounting: placed + remaining must equal the original rack.
@@ -64,6 +73,12 @@ def verify_solution(
         _tile_key(t) for t in original_state.rack
     )
     if placed_keys + remaining_keys != original_rack_keys:
+        _log.warning(
+            "verify_solution.check2_failed",
+            placed=dict(placed_keys),
+            remaining=dict(remaining_keys),
+            original_rack=dict(original_rack_keys),
+        )
         return False
 
     # 3a. First-turn: verify the meld threshold was met if any tiles were placed.
@@ -72,6 +87,11 @@ def verify_solution(
             t.number for t in solution.placed_tiles if not t.is_joker and t.number is not None
         )
         if placed_value < rules.initial_meld_threshold:
+            _log.warning(
+                "verify_solution.check3a_failed",
+                placed_value=placed_value,
+                threshold=rules.initial_meld_threshold,
+            )
             return False
 
     # 3b. The tiles appearing in new_sets must be exactly board_tiles + placed_tiles.
@@ -81,4 +101,14 @@ def verify_solution(
     board_keys: Counter[tuple[Color | None, int | None, int, bool]] = Counter(
         _tile_key(t) for t in original_state.board_tiles
     )
-    return new_set_keys == board_keys + placed_keys
+    if new_set_keys != board_keys + placed_keys:
+        expected = board_keys + placed_keys
+        missing = expected - new_set_keys
+        extra = new_set_keys - expected
+        _log.warning(
+            "verify_solution.check3b_failed",
+            missing_from_new_sets=dict(missing),
+            extra_in_new_sets=dict(extra),
+        )
+        return False
+    return True

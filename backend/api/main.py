@@ -123,15 +123,32 @@ from .models import (  # noqa: E402  (import after app init is intentional)
 )
 
 
-def _tile_input_to_domain(ti: object) -> Tile:
-    """Convert a TileInput API model to a domain Tile."""
+def _assign_copy_ids(tile_inputs: list[object]) -> list[Tile]:
+    """Convert a list of TileInput API models to domain Tiles with correct copy_ids.
+
+    Tiles with the same (color, number, is_joker) are assigned copy_id=0 and
+    copy_id=1 in order of appearance so the ILP can treat them as distinct
+    physical tiles.
+    """
     from .models import TileInput
 
-    assert isinstance(ti, TileInput)
-    if ti.joker:
-        return Tile.joker(copy_id=0)
-    assert ti.color is not None and ti.number is not None
-    return Tile(color=Color(ti.color), number=ti.number, copy_id=0)
+    seen: Counter[tuple[Color | None, int | None, bool]] = Counter()
+    result: list[Tile] = []
+    for ti in tile_inputs:
+        assert isinstance(ti, TileInput)
+        if ti.joker:
+            key: tuple[Color | None, int | None, bool] = (None, None, True)
+            copy_id = seen[key]
+            seen[key] += 1
+            result.append(Tile.joker(copy_id=copy_id))
+        else:
+            assert ti.color is not None and ti.number is not None
+            color = Color(ti.color)
+            key = (color, ti.number, False)
+            copy_id = seen[key]
+            seen[key] += 1
+            result.append(Tile(color=color, number=ti.number, copy_id=copy_id))
+    return result
 
 
 def _tile_to_output(t: Tile) -> TileOutput:
@@ -155,11 +172,19 @@ def solve_endpoint(request: SolveRequest) -> SolveResponse:
 
     # Convert API models → domain models.
     try:
-        rack = [_tile_input_to_domain(t) for t in request.rack]
+        # Assign copy_ids across ALL tiles (board + rack) together so that
+        # duplicate (color, number) tiles get distinct copy_ids (0 and 1).
+        all_tile_inputs = [t for bs in request.board for t in bs.tiles] + list(request.rack)
+        all_domain_tiles = _assign_copy_ids(all_tile_inputs)
+        board_tile_count = sum(len(bs.tiles) for bs in request.board)
+        board_tiles_flat = all_domain_tiles[:board_tile_count]
+        rack = all_domain_tiles[board_tile_count:]
         board_sets: list[TileSet] = []
+        offset = 0
         for bs in request.board:
-            tiles = [_tile_input_to_domain(t) for t in bs.tiles]
-            board_sets.append(TileSet(type=SetType(bs.type), tiles=tiles))
+            n = len(bs.tiles)
+            board_sets.append(TileSet(type=SetType(bs.type), tiles=board_tiles_flat[offset:offset + n]))
+            offset += n
     except (ValueError, AssertionError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
