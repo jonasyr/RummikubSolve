@@ -183,7 +183,8 @@ def solve_endpoint(request: SolveRequest) -> SolveResponse:
         offset = 0
         for bs in request.board:
             n = len(bs.tiles)
-            board_sets.append(TileSet(type=SetType(bs.type), tiles=board_tiles_flat[offset:offset + n]))
+            tiles_slice = board_tiles_flat[offset : offset + n]
+            board_sets.append(TileSet(type=SetType(bs.type), tiles=tiles_slice))
             offset += n
     except (ValueError, AssertionError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
