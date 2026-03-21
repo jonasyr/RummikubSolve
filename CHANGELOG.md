@@ -5,6 +5,76 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.4.0] — 2026-03-21 — Phase 3: Frontend Core UI
+
+### What was implemented
+
+**`frontend/src/lib/api.ts`** — API client
+
+- `solvePuzzle(request) → Promise<SolveResponse>`: POST to `/api/solve`
+- Reads `NEXT_PUBLIC_API_URL` (falls back to `http://localhost:8000`)
+- Throws with backend `detail` message on non-2xx; catches JSON parse failures
+
+**`frontend/src/components/Tile.tsx`** — tile chip component
+
+- Three sizes: `xs` (20×24 px, used in picker), `sm` (28×32 px), `md` (36×40 px)
+- Color backgrounds via static `BG` map (`tile-blue/red/black/yellow` from Tailwind config)
+- Joker renders `★` in yellow-on-dark; `highlighted` prop adds a yellow ring (marks newly placed tiles); `onRemove` renders an `×` overlay button
+
+**`frontend/src/components/TileGridPicker.tsx`** — 4×13 click grid
+
+- 4 rows (blue, red, black, yellow) × 13 columns (1–13) + joker button
+- Uses `size="xs"` + `gap-[2px]`: grid is 284 px, fits 320 px–375 px screens without overflow
+- Purely presentational; calls `onSelect(tile)` on click
+
+**`frontend/src/components/RackSection.tsx`** — rack input and display
+
+- Embeds `TileGridPicker`; clicking adds tile via `addRackTile`
+- Displays current rack as removable tile chips
+
+**`frontend/src/components/BoardSection.tsx`** — board set editor
+
+- Lists existing sets with per-set remove button
+- "Add Set" opens inline set-builder: RUN/GROUP toggle + `TileGridPicker` for pending tiles + confirm/cancel
+
+**`frontend/src/components/SolutionView.tsx`** — solution display
+
+- Handles all three statuses: `solved` (summary bar + new board + remaining rack), `no_solution` (yellow callout), `error` (red callout)
+- Tiles in `new_tile_indices` rendered with `highlighted` ring to identify rack placements
+
+**`frontend/src/app/page.tsx`** — main page (replaced placeholder)
+
+- `"use client"` single-column mobile layout: header (title + first-turn toggle + reset), rack, board, solve button, error banner, solution
+- Solve button disabled while loading or rack is empty
+- `handleSolve` dispatches to Zustand store: `setLoading` → `solvePuzzle` → `setSolution` / `setError`
+
+**Fixes applied after audit:**
+
+- `Tile`: added `xs` size (20 px wide) so the picker grid fits all screens ≥ 320 px
+- `SolutionView`: `status="error"` now shows a red callout instead of falling through to a broken render
+- `globals.css`: `overflow-x: hidden` on body prevents horizontal page scroll
+- `manifest.json`: removed references to non-existent icon files
+
+### Verification (all passed before commit)
+
+```
+tsc --noEmit:   0 errors
+next lint:      0 warnings / errors
+next build:     ✓ 3.36 kB page bundle
+```
+
+### What is NOT here yet (next phases)
+
+- `generator/move_generator.py` — human-readable move instructions (Phase 3b)
+- Per-tile quantity limits in UI — max 2 copies per tile type (Phase 3b)
+- Board set edit (currently only delete) (Phase 3b)
+- Initial meld threshold constraint in ILP (`rules.is_first_turn` — Phase 2b)
+- PWA icons (placeholder icons needed before Phase 4 deploy)
+- Sentry integration — Phase 4
+- Playwright E2E tests — Phase 4
+
+---
+
 ## [0.3.0] — 2026-03-21 — Phase 2: ILP Solver + API Endpoint
 
 ### What was implemented
