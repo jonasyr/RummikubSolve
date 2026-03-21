@@ -12,8 +12,16 @@ export async function solvePuzzle(
   });
 
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(data.detail ?? `HTTP ${res.status}`);
+    const data = (await res.json().catch(() => ({}))) as {
+      detail?: string | Array<{ msg: string }>;
+    };
+    let message: string;
+    if (Array.isArray(data.detail)) {
+      message = data.detail.map((e) => e.msg).join("; ");
+    } else {
+      message = data.detail ?? `HTTP ${res.status}`;
+    }
+    throw new Error(message);
   }
 
   return res.json() as Promise<SolveResponse>;

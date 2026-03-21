@@ -66,7 +66,7 @@ export default function SolutionView({ solution }: Props) {
 
       {/* New board sets */}
       <div className="space-y-2">
-        {solution.new_board.map((set, si) => (
+        {(solution.new_board ?? []).map((set, si) => (
           <div
             key={si}
             className="flex items-start gap-2 p-2 bg-white rounded border border-gray-200"
@@ -81,7 +81,7 @@ export default function SolutionView({ solution }: Props) {
                   color={tile.color}
                   number={tile.number}
                   isJoker={tile.joker}
-                  highlighted={set.new_tile_indices.includes(ti)}
+                  highlighted={(set.new_tile_indices ?? []).includes(ti)}
                   size="sm"
                 />
               ))}
@@ -91,13 +91,13 @@ export default function SolutionView({ solution }: Props) {
       </div>
 
       {/* Remaining rack */}
-      {solution.remaining_rack.length > 0 && (
+      {(solution.remaining_rack?.length ?? 0) > 0 && (
         <div className="space-y-1">
           <p className="text-xs text-gray-500 uppercase tracking-wide">
             Remaining in hand
           </p>
           <div className="flex flex-wrap gap-1">
-            {solution.remaining_rack.map((tile, i) => (
+            {(solution.remaining_rack ?? []).map((tile, i) => (
               <Tile
                 key={i}
                 color={tile.color}
@@ -111,13 +111,13 @@ export default function SolutionView({ solution }: Props) {
       )}
 
       {/* Move instructions */}
-      {solution.moves.length > 0 && (
+      {(solution.moves?.length ?? 0) > 0 && (
         <div className="space-y-2">
           <p className="text-xs text-gray-500 uppercase tracking-wide">
             Move instructions
           </p>
           <ol className="space-y-1.5">
-            {solution.moves.map((move, i) => (
+            {(solution.moves ?? []).map((move, i) => (
               <li key={i} className="flex items-start gap-2 text-sm">
                 <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-medium mt-0.5">
                   {i + 1}

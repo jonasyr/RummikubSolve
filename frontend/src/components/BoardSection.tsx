@@ -74,8 +74,9 @@ export default function BoardSection() {
   const addBoardSet = useGameStore((s) => s.addBoardSet);
   const removeBoardSet = useGameStore((s) => s.removeBoardSet);
   const updateBoardSet = useGameStore((s) => s.updateBoardSet);
-
-  const [building, setBuilding] = useState(false);
+  const isBuildingSet = useGameStore((s) => s.isBuildingSet);
+  const setIsBuildingSet = useGameStore((s) => s.setIsBuildingSet);
+  const isLoading = useGameStore((s) => s.isLoading);
   const [pendingType, setPendingType] = useState<"run" | "group">("run");
   const [pendingTiles, setPendingTiles] = useState<TileInput[]>([]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -94,7 +95,7 @@ export default function BoardSection() {
   }
 
   function cancelSet() {
-    setBuilding(false);
+    setIsBuildingSet(false);
     setPendingTiles([]);
     setPendingType("run");
     setEditingIndex(null);
@@ -105,7 +106,7 @@ export default function BoardSection() {
     setEditingIndex(si);
     setPendingType(set.type);
     setPendingTiles([...set.tiles]);
-    setBuilding(true);
+    setIsBuildingSet(true);
   }
 
   const tileCountForPending = useCallback(
@@ -136,10 +137,11 @@ export default function BoardSection() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
           Board Sets
         </h2>
-        {!building && (
+        {!isBuildingSet && (
           <button
-            onClick={() => setBuilding(true)}
-            className="text-sm px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium"
+            onClick={() => setIsBuildingSet(true)}
+            disabled={isLoading}
+            className="text-sm px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
             + Add Set
           </button>
@@ -147,7 +149,7 @@ export default function BoardSection() {
       </div>
 
       {/* Existing sets */}
-      {boardSets.length === 0 && !building && (
+      {boardSets.length === 0 && !isBuildingSet && (
         <p className="text-sm text-gray-400 italic">No board sets yet.</p>
       )}
       <div className="space-y-2">
@@ -172,14 +174,16 @@ export default function BoardSection() {
             </div>
             <button
               onClick={() => startEditing(si)}
-              className="shrink-0 text-gray-400 hover:text-blue-500 text-base leading-none"
+              disabled={isLoading}
+              className="shrink-0 text-gray-400 hover:text-blue-500 text-base leading-none disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label={`Edit set ${si + 1}`}
             >
               ✎
             </button>
             <button
               onClick={() => removeBoardSet(si)}
-              className="shrink-0 text-gray-400 hover:text-red-500 text-lg leading-none"
+              disabled={isLoading}
+              className="shrink-0 text-gray-400 hover:text-red-500 text-lg leading-none disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label={`Remove set ${si + 1}`}
             >
               ×
@@ -189,7 +193,7 @@ export default function BoardSection() {
       </div>
 
       {/* Inline set builder */}
-      {building && (
+      {isBuildingSet && (
         <div className="p-3 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
           {/* Type selector */}
           <div className="flex gap-2">
