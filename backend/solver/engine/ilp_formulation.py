@@ -199,9 +199,22 @@ def build_ilp_model(
 
     # ── Objective ───────────────────────────────────────────────────────────
 
-    # Primary: minimise tiles left in hand (= maximise tiles placed).
-    for h_col in h_vars.values():
-        highs.changeColCost(h_col, 1.0)
+    # Primary:   minimise tiles left in hand (= maximise tiles placed).
+    # Secondary: among equal tile-count solutions, minimise the sum of face
+    #            values of remaining tiles (prefer keeping low-value tiles).
+    #
+    # Encoding: cost(h[t]) = 1.0 + tile_value / BIG_M
+    # BIG_M > max possible rack value sum (13 tiles × 13 = 169) → the
+    # fractional part can never flip the primary ranking.
+    BIG_M = 200.0
+    for t_idx, h_col in h_vars.items():
+        tile = all_tiles[t_idx]
+        tile_value = (
+            float(tile.number)
+            if (not tile.is_joker and tile.number is not None)
+            else 0.0
+        )
+        highs.changeColCost(h_col, 1.0 + tile_value / BIG_M)
 
     return ILPModel(
         highs=highs,

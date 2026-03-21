@@ -89,7 +89,28 @@
       "new": "NEU",
       "extended": "+",
       "rearranged": "↺",
-      "unchanged": "unverändert"
+      "unchanged": "unverändert",
+      "newTitle": "Neuer Satz aus Handsteinen",
+      "extendedTitle": "Vorhandener Satz um Handsteine erweitert",
+      "rearrangedTitle": "Tischsteine neu angeordnet",
+      "unchangedTitle": "Satz unverändert"
+    },
+    "colors": {
+      "blue": "Blau",
+      "red": "Rot",
+      "black": "Schwarz",
+      "yellow": "Gelb"
+    },
+    "types": {
+      "run": "Folge",
+      "group": "Gruppe"
+    },
+    "moveDesc": {
+      "create": "Neu als {type}: {tiles}",
+      "extend": "Füge {tiles} zu Satz {n} hinzu",
+      "rearrangeFrom": "Von Satz {n} nehmen und als {type} neu legen: {tiles}",
+      "rearrange": "Als {type} neu legen: {tiles}",
+      "rearrangeWith": "Umstellen mit {tiles}: {allTiles}"
     }
   },
   "errorBoundary": {

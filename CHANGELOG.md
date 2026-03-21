@@ -5,6 +5,79 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.13.0] — 2026-03-21 — UX cleanup & solver quality improvements
+
+### UX improvements (frontend)
+
+- **Tooltips on solution badges** (`SolutionView.tsx`): the `↺`, `NEU`/`NEW`, `+`,
+  and `unverändert`/`unchanged` badges now show a `title` tooltip on hover explaining
+  what each status means. Both EN and DE strings added to `messages/*.json`.
+- **Tiles sorted within runs** (`SolutionView.tsx`): tiles inside a run-type solution
+  set are now sorted ascending by number before display (e.g. 7 · 8 · 9 instead of
+  7 · 9 · 8). Original indices are preserved for rack-tile highlighting.
+- **Move descriptions fully translated** (`SolutionView.tsx`): move instruction text
+  was previously returned as English-only strings from the backend. The frontend now
+  reconstructs localised descriptions from structured data (`new_board`, `new_tile_indices`,
+  `set_index`) using new ICU translation keys (`moveDesc.*`, `colors.*`, `types.*`) in
+  both `en.json` and `de.json`.
+- **Add-set builder appears at top** (`BoardSection.tsx`): the inline tile-picker for
+  adding a new board set previously rendered below all existing sets, requiring scroll
+  when many sets were present. It now appears immediately below the section header.
+- **Auto-detect run vs group** (`BoardSection.tsx`): removed the manual "Folge / Gruppe"
+  type selector. The app now tries `run` first and `group` second, accepts whichever
+  validates, and shows the detected type in the confirmation feedback. This also removes
+  the now-unused `typeRun` / `typeGroup` translation keys from the component logic.
+- **Rack tiles counted in board set picker** (`BoardSection.tsx`): the tile-grid picker
+  used when building a board set did not account for tiles already on the rack. A tile
+  present on the rack now shows count ≥ 1 in the picker, preventing double-booking.
+
+### Solver improvement (backend)
+
+- **Minimise remaining tile value as secondary objective** (`engine/ilp_formulation.py`):
+  when no perfect solution exists (not all rack tiles can be placed), the ILP now
+  prefers arrangements that leave the lowest total face value in hand. Implemented by
+  adding `tile.number / 200.0` to each hand variable's objective coefficient — small
+  enough to never override the primary "maximise tiles placed" goal.
+
+---
+
+## [0.12.1] — 2026-03-21 — Post-release solver & test patches
+
+### Bug fixes
+
+- **Backend — duplicate-board-set infeasibility** (`generator/set_enumerator.py`):
+  when the board contained two identical sets (e.g. two copies of Red 1-2-3 using both
+  physical tile copies), the ILP had only one binary template for that set and could not
+  activate it twice → declared infeasible. Each base template is now duplicated up to
+  N times where N = `min(available copies of required tiles)`, resolving the constraint.
+- **Backend — joker-board infeasibility** (`generator/set_enumerator.py`,
+  `engine/solver.py`): type-1 joker variants were incorrectly restricted to rack tiles,
+  causing infeasibility when a joker was a board tile whose covered number also appeared
+  elsewhere on the board. Reverted to generating type-1 variants for all tile positions
+  with fingerprint-based deduplication. Solver timeout raised from 2 s to 30 s for
+  complex joker boards.
+- **Backend — timeout leaves board tiles unplaced** (`engine/solver.py`): if HiGHS
+  timed out before finding a feasible integer solution, `extract_solution` could return
+  a partial result missing board tiles. Added a post-extraction guard that detects
+  missing board tiles and falls back to no-move (unchanged board, full rack in hand).
+- **Backend — copy_id always 0** (`api/main.py`, `validator/solution_verifier.py`):
+  all tiles were assigned `copy_id=0` regardless of duplicates, so the ILP treated
+  both physical copies of a tile as the same variable. Replaced `_tile_input_to_domain`
+  with `_assign_copy_ids` which assigns `copy_id=0`/`1` based on occurrence order
+  across board + rack tiles together.
+- **Frontend — RulesPanel `FORMATTING_ERROR`** (`components/RulesPanel.tsx`):
+  `dangerouslySetInnerHTML` combined with `t()` caused next-intl to throw
+  `FORMATTING_ERROR` because `<strong>` tags were parsed as unresolved ICU variables.
+  Switched to `t.rich()` with a `strong` component renderer — no `dangerouslySetInnerHTML`
+  needed, no XSS surface.
+- **E2E — strict-mode locator violations** (`e2e/board_section.spec.ts`,
+  `e2e/extend_board_set.spec.ts`): tile buttons and type labels matched multiple
+  elements when both the rack and board-builder pickers were visible simultaneously.
+  Scoped all tile interactions to the containing `section` element and updated
+  assertions to match actual rendered text.
+
+---
+
 ## [0.12.0] — 2026-03-21 — Phase 10: Post-merge Bug Fixes, New Tests & Changelog
 
 ### Bug fixes

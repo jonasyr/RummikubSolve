@@ -64,6 +64,13 @@ function validateSet(
   return null;
 }
 
+/** Try "run" first, then "group". Returns the first valid type or null. */
+function getValidType(tiles: TileInput[]): "run" | "group" | null {
+  if (validateSet("run", tiles) === null) return "run";
+  if (validateSet("group", tiles) === null) return "group";
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -71,28 +78,35 @@ function validateSet(
 export default function BoardSection() {
   const t = useTranslations("board");
   const boardSets = useGameStore((s) => s.boardSets);
+  const rack = useGameStore((s) => s.rack);
   const addBoardSet = useGameStore((s) => s.addBoardSet);
   const removeBoardSet = useGameStore((s) => s.removeBoardSet);
   const updateBoardSet = useGameStore((s) => s.updateBoardSet);
   const isBuildingSet = useGameStore((s) => s.isBuildingSet);
   const setIsBuildingSet = useGameStore((s) => s.setIsBuildingSet);
   const isLoading = useGameStore((s) => s.isLoading);
-  const [pendingType, setPendingType] = useState<"run" | "group">("run");
   const [pendingTiles, setPendingTiles] = useState<TileInput[]>([]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  const validationResult = validateSet(pendingType, pendingTiles);
-  const validationError = validationResult
-    ? t(validationResult.key as Parameters<typeof t>[0], validationResult.params)
-    : null;
-  const canConfirm = pendingTiles.length >= 3 && validationResult === null;
+  // Auto-detect type from current pending tiles.
+  const validType = pendingTiles.length >= 3 ? getValidType(pendingTiles) : null;
+  const canConfirm = validType !== null;
+
+  // For live error feedback when tiles >= 3 and neither type is valid, show the run error.
+  const validationError = (() => {
+    if (pendingTiles.length < 3) return null;
+    if (validType !== null) return null;
+    const runResult = validateSet("run", pendingTiles);
+    const result = runResult ?? validateSet("group", pendingTiles);
+    return result ? t(result.key as Parameters<typeof t>[0], result.params) : null;
+  })();
 
   function confirmSet() {
-    if (!canConfirm) return;
+    if (!canConfirm || validType === null) return;
     if (editingIndex !== null) {
-      updateBoardSet(editingIndex, { type: pendingType, tiles: pendingTiles });
+      updateBoardSet(editingIndex, { type: validType, tiles: pendingTiles });
     } else {
-      addBoardSet({ type: pendingType, tiles: pendingTiles });
+      addBoardSet({ type: validType, tiles: pendingTiles });
     }
     cancelSet();
   }
@@ -100,14 +114,12 @@ export default function BoardSection() {
   function cancelSet() {
     setIsBuildingSet(false);
     setPendingTiles([]);
-    setPendingType("run");
     setEditingIndex(null);
   }
 
   function startEditing(si: number) {
     const set = boardSets[si];
     setEditingIndex(si);
-    setPendingType(set.type);
     setPendingTiles([...set.tiles]);
     setIsBuildingSet(true);
   }
@@ -129,9 +141,13 @@ export default function BoardSection() {
           }).length
         );
       }, 0);
-      return inPending + inBoard;
+      const inRack = rack.filter((t) => {
+        const k = t.joker ? "joker" : `${t.color}-${t.number}`;
+        return k === key;
+      }).length;
+      return inPending + inBoard + inRack;
     },
-    [pendingTiles, boardSets, editingIndex],
+    [pendingTiles, boardSets, editingIndex, rack],
   );
 
   return (
@@ -150,6 +166,60 @@ export default function BoardSection() {
           </button>
         )}
       </div>
+
+      {/* Inline set builder — shown at top so it's immediately visible */}
+      {isBuildingSet && (
+        <div className="p-3 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
+          <TileGridPicker
+            onSelect={(tile) => setPendingTiles((prev) => [...prev, tile])}
+            tileCount={tileCountForPending}
+          />
+
+          {/* Pending tiles preview */}
+          {pendingTiles.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {pendingTiles.map((tile, i) => (
+                <Tile
+                  key={i}
+                  color={tile.color ?? null}
+                  number={tile.number ?? null}
+                  isJoker={tile.joker ?? false}
+                  size="sm"
+                  onRemove={() =>
+                    setPendingTiles((prev) => prev.filter((_, idx) => idx !== i))
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Live validation feedback */}
+          {pendingTiles.length >= 3 && validationError && (
+            <p className="text-xs text-red-600 font-medium">{validationError}</p>
+          )}
+          {pendingTiles.length >= 3 && !validationError && validType && (
+            <p className="text-xs text-green-600 font-medium">
+              {t("validSet")} ({t(validType as "run" | "group")})
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={confirmSet}
+              disabled={!canConfirm}
+              className="px-3 py-1 rounded text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {editingIndex !== null ? t("saveChanges") : t("addToBoard")}
+            </button>
+            <button
+              onClick={cancelSet}
+              className="px-3 py-1 rounded text-sm font-medium bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Existing sets */}
       {boardSets.length === 0 && !isBuildingSet && (
@@ -194,75 +264,6 @@ export default function BoardSection() {
           </div>
         ))}
       </div>
-
-      {/* Inline set builder */}
-      {isBuildingSet && (
-        <div className="p-3 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
-          {/* Type selector */}
-          <div className="flex gap-2">
-            {(["run", "group"] as const).map((tp) => (
-              <button
-                key={tp}
-                onClick={() => setPendingType(tp)}
-                className={`px-3 py-1 rounded text-sm font-medium capitalize ${
-                  pendingType === tp
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
-                }`}
-              >
-                {t(`type${tp.charAt(0).toUpperCase()}${tp.slice(1)}` as "typeRun" | "typeGroup")}
-              </button>
-            ))}
-          </div>
-
-          <TileGridPicker
-            onSelect={(tile) => setPendingTiles((prev) => [...prev, tile])}
-            tileCount={tileCountForPending}
-          />
-
-          {/* Pending tiles preview */}
-          {pendingTiles.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {pendingTiles.map((tile, i) => (
-                <Tile
-                  key={i}
-                  color={tile.color ?? null}
-                  number={tile.number ?? null}
-                  isJoker={tile.joker ?? false}
-                  size="sm"
-                  onRemove={() =>
-                    setPendingTiles((prev) => prev.filter((_, idx) => idx !== i))
-                  }
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Live validation feedback */}
-          {pendingTiles.length >= 3 && validationError && (
-            <p className="text-xs text-red-600 font-medium">{validationError}</p>
-          )}
-          {pendingTiles.length >= 3 && !validationError && (
-            <p className="text-xs text-green-600 font-medium">{t("validSet")}</p>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={confirmSet}
-              disabled={!canConfirm}
-              className="px-3 py-1 rounded text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {editingIndex !== null ? t("saveChanges") : t("addToBoard")}
-            </button>
-            <button
-              onClick={cancelSet}
-              className="px-3 py-1 rounded text-sm font-medium bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
-            >
-              {t("cancel")}
-            </button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
