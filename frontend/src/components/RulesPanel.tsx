@@ -2,6 +2,10 @@
 
 import { useTranslations } from "next-intl";
 
+const bold = (chunks: React.ReactNode) => (
+  <strong className="font-semibold text-gray-800">{chunks}</strong>
+);
+
 export default function RulesPanel() {
   const t = useTranslations("rulesPanel");
 
@@ -14,19 +18,19 @@ export default function RulesPanel() {
 
         <div>
           <p className="font-semibold text-gray-700">{t("run")}</p>
-          <p dangerouslySetInnerHTML={{ __html: t("runDesc") }} />
+          <p>{t.rich("runDesc", { strong: bold })}</p>
           <p className="text-xs text-gray-400 mt-0.5">{t("runExample")}</p>
         </div>
 
         <div>
           <p className="font-semibold text-gray-700">{t("group")}</p>
-          <p dangerouslySetInnerHTML={{ __html: t("groupDesc") }} />
+          <p>{t.rich("groupDesc", { strong: bold })}</p>
           <p className="text-xs text-gray-400 mt-0.5">{t("groupExample")}</p>
         </div>
 
         <div>
           <p className="font-semibold text-gray-700">{t("firstTurn")}</p>
-          <p dangerouslySetInnerHTML={{ __html: t("firstTurnDesc") }} />
+          <p>{t.rich("firstTurnDesc", { strong: bold })}</p>
         </div>
 
         <div>

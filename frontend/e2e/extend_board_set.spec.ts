@@ -7,13 +7,18 @@ test("solver extends an existing board run with a rack tile", async ({
   await page.goto("/");
 
   await page.getByRole("button", { name: /add set/i }).click();
-  await page.getByRole("button", { name: /^red 4/i }).click();
-  await page.getByRole("button", { name: /^red 5/i }).click();
-  await page.getByRole("button", { name: /^red 6/i }).click();
+
+  // Scope tile clicks to the board section builder (avoids ambiguity with the
+  // always-visible rack TileGridPicker which has the same tile buttons).
+  const boardSection = page.locator("section").filter({ hasText: /Board Sets/i });
+  await boardSection.getByRole("button", { name: /^red 4/i }).click();
+  await boardSection.getByRole("button", { name: /^red 5/i }).click();
+  await boardSection.getByRole("button", { name: /^red 6/i }).click();
   await page.getByRole("button", { name: /add to board/i }).click();
 
-  // Add red 7 to the rack
-  await page.getByRole("button", { name: /^red 7/i }).click();
+  // Add red 7 to the rack via the rack section picker
+  const rackSection = page.locator("section").filter({ hasText: /Your Rack/i });
+  await rackSection.getByRole("button", { name: /^red 7/i }).click();
 
   // Act
   await page.getByRole("button", { name: "Solve" }).click();
