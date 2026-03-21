@@ -4,15 +4,69 @@ Phase 2 scope: health check + POST /api/solve.
 
 Run locally:
     uvicorn api.main:app --reload --port 8000
+
+Environment variables (see .env.example at the repo root):
+    SENTRY_DSN       — Sentry DSN; leave empty to disable error reporting.
+    ENVIRONMENT      — "development" (default) or "production".
+    ALLOWED_ORIGIN   — CORS allowed origin; defaults to "*" (all origins).
 """
 
 from __future__ import annotations
 
+import logging
+import os
+
+import sentry_sdk
 import structlog
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+# ---------------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------------
+
+_ENV = os.getenv("ENVIRONMENT", "development")
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+
+# ---------------------------------------------------------------------------
+# Sentry — initialise before anything else so startup errors are captured
+# ---------------------------------------------------------------------------
+
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        environment=_ENV,
+        traces_sample_rate=0.1,  # sample 10 % of transactions for performance
+        send_default_pii=False,
+    )
+
+# ---------------------------------------------------------------------------
+# Logging (structlog)
+# — JSON renderer in production; colored console in development
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(format="%(message)s", level=logging.INFO)
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        (
+            structlog.dev.ConsoleRenderer()
+            if _ENV == "development"
+            else structlog.processors.JSONRenderer()
+        ),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(),
+)
+
 logger = structlog.get_logger()
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="RummikubSolve API",
@@ -26,10 +80,13 @@ app = FastAPI(
 # Middleware
 # ---------------------------------------------------------------------------
 
+# allow_credentials cannot be True when allow_origins is the wildcard "*"
+# (CORS specification §3.2 — browsers will reject such responses).
+_ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tighten to frontend origin in production
-    allow_credentials=True,
+    allow_origins=["*"] if _ALLOWED_ORIGIN == "*" else [_ALLOWED_ORIGIN],
+    allow_credentials=(_ALLOWED_ORIGIN != "*"),
     allow_methods=["*"],
     allow_headers=["*"],
 )
