@@ -1,12 +1,69 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import type { SolveResponse } from "../types/api";
+import type { SolveResponse, BoardSetOutput, MoveOutput, TileOutput } from "../types/api";
 import Tile from "./Tile";
 
 interface Props {
   solution: SolveResponse;
 }
+
+// ---------------------------------------------------------------------------
+// Helpers for localised move descriptions
+// ---------------------------------------------------------------------------
+
+type TFunc = ReturnType<typeof useTranslations<"solution">>;
+
+function formatTiles(tiles: TileOutput[], t: TFunc): string {
+  return tiles
+    .map((tile) =>
+      tile.joker
+        ? "Joker"
+        : `${t(`colors.${tile.color}` as Parameters<TFunc>[0])} ${tile.number}`,
+    )
+    .join(", ");
+}
+
+function buildDescription(
+  move: MoveOutput,
+  changedSet: BoardSetOutput,
+  t: TFunc,
+): string {
+  const typeName = t(`types.${changedSet.type}` as Parameters<TFunc>[0]);
+  const newIdx = changedSet.new_tile_indices ?? [];
+  const rackTiles = changedSet.tiles.filter((_, i) => newIdx.includes(i));
+  const boardTiles = changedSet.tiles.filter((_, i) => !newIdx.includes(i));
+  const n = (move.set_index ?? 0) + 1;
+
+  if (move.action === "create") {
+    return t("moveDesc.create", { type: typeName, tiles: formatTiles(rackTiles, t) });
+  }
+  if (move.action === "extend") {
+    return t("moveDesc.extend", { tiles: formatTiles(rackTiles, t), n });
+  }
+  if (move.action === "rearrange") {
+    if (rackTiles.length > 0) {
+      return t("moveDesc.rearrangeWith", {
+        tiles: formatTiles(rackTiles, t),
+        allTiles: formatTiles(changedSet.tiles, t),
+      });
+    }
+    if (move.set_index !== null) {
+      return t("moveDesc.rearrangeFrom", {
+        n,
+        type: typeName,
+        tiles: formatTiles(boardTiles, t),
+      });
+    }
+    return t("moveDesc.rearrange", { type: typeName, tiles: formatTiles(boardTiles, t) });
+  }
+  // Fallback: use raw backend text
+  return move.description;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function SolutionView({ solution }: Props) {
   const t = useTranslations("solution");
@@ -39,6 +96,9 @@ export default function SolutionView({ solution }: Props) {
       </section>
     );
   }
+
+  // Changed sets map 1-to-1 with solution.moves (move_generator skips unchanged sets).
+  const changedSets = (solution.new_board ?? []).filter((s) => !s.is_unchanged);
 
   return (
     <section className="space-y-3">
@@ -81,19 +141,26 @@ export default function SolutionView({ solution }: Props) {
                          :                "border-gray-200 bg-gray-50 opacity-60";
 
           const badge = isNew
-            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">{t("badge.new")}</span>
+            ? <span title={t("badge.newTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0 cursor-help">{t("badge.new")}</span>
             : isExtended
-            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0">{t("badge.extended")}</span>
+            ? <span title={t("badge.extendedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0 cursor-help">{t("badge.extended")}</span>
             : isRearranged
-            ? <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">{t("badge.rearranged")}</span>
-            : <span className="text-xs text-gray-400 italic shrink-0 pt-1">{t("badge.unchanged")}</span>;
+            ? <span title={t("badge.rearrangedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0 cursor-help">{t("badge.rearranged")}</span>
+            : <span title={t("badge.unchangedTitle")} className="text-xs text-gray-400 italic shrink-0 pt-1 cursor-help">{t("badge.unchanged")}</span>;
+
+          // Sort tiles by number within runs; preserve original indices for highlighting.
+          const sortedEntries = set.tiles
+            .map((tile, ti) => ({ tile, ti }))
+            .sort((a, b) =>
+              set.type === "run" ? (a.tile.number ?? 0) - (b.tile.number ?? 0) : 0,
+            );
 
           return (
             <div key={si} className={`flex items-start gap-2 p-2 rounded border ${borderBg}`}>
               <span className="text-xs font-bold text-gray-500 w-6 shrink-0 pt-1">{si + 1}.</span>
               <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">{set.type}</span>
               <div className="flex flex-wrap gap-1 flex-1">
-                {set.tiles.map((tile, ti) => (
+                {sortedEntries.map(({ tile, ti }) => (
                   <Tile
                     key={ti}
                     color={tile.color}
@@ -160,12 +227,15 @@ export default function SolutionView({ solution }: Props) {
                 extend:    "bg-blue-100 text-blue-700",
                 rearrange: "bg-amber-100 text-amber-700",
               };
+              const desc = changedSets[i]
+                ? buildDescription(move, changedSets[i], t)
+                : move.description;
               return (
                 <li key={i} className="flex items-start gap-2 text-sm">
                   <span className={`shrink-0 w-5 h-5 rounded-full text-xs flex items-center justify-center font-medium mt-0.5 ${bulletClass[move.action] ?? "bg-gray-100 text-gray-700"}`}>
                     {i + 1}
                   </span>
-                  <span className="text-gray-700">{move.description}</span>
+                  <span className="text-gray-700">{desc}</span>
                 </li>
               );
             })}

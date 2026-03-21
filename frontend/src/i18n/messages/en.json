@@ -89,7 +89,28 @@
       "new": "NEW",
       "extended": "+",
       "rearranged": "↺",
-      "unchanged": "unchanged"
+      "unchanged": "unchanged",
+      "newTitle": "New set built entirely from rack tiles",
+      "extendedTitle": "Existing board set extended with rack tiles",
+      "rearrangedTitle": "Existing board tiles rearranged into a new configuration",
+      "unchangedTitle": "Set unchanged from previous board state"
+    },
+    "colors": {
+      "blue": "Blue",
+      "red": "Red",
+      "black": "Black",
+      "yellow": "Yellow"
+    },
+    "types": {
+      "run": "Run",
+      "group": "Group"
+    },
+    "moveDesc": {
+      "create": "New {type}: {tiles}",
+      "extend": "Add {tiles} to set {n}",
+      "rearrangeFrom": "Take from set {n}, reform as {type}: {tiles}",
+      "rearrange": "Reform as {type}: {tiles}",
+      "rearrangeWith": "Rearrange with {tiles}: {allTiles}"
     }
   },
   "errorBoundary": {
