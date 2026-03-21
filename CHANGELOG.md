@@ -5,6 +5,92 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.3.0] — 2026-03-21 — Phase 2: ILP Solver + API Endpoint
+
+### What was implemented
+
+**`backend/solver/generator/set_enumerator.py`** — joker expansion added to `enumerate_valid_sets`
+
+- Two types of single-joker variants generated when jokers are in the pool:
+  - **Type 1 (substitute):** joker replaces an *available* tile in a base template, freeing that tile for another set
+  - **Type 2 (fill-missing):** joker fills a slot whose non-joker tile is *absent* from the pool — enabling templates that couldn't otherwise form (e.g., [Red 4, Joker, Red 6] when Red 5 is missing)
+- `enumerate_runs` and `enumerate_groups` remain unchanged (pure non-joker, used as base)
+- No jokers in pool → result is identical to Phase 1a (existing tests unchanged)
+
+**`backend/solver/engine/ilp_formulation.py`** — ILP model construction
+
+- `ILPModel` dataclass: wraps a `highspy.Highs` instance + variable index mappings (`y_vars`, `x_vars`, `h_vars`, `rack_tile_indices`)
+- `build_ilp_model(state, candidate_sets, rules) → ILPModel`:
+  - **Variables:** `y[s] ∈ {0,1}` per template, `x[t,s] ∈ {0,1}` per (tile, template) pair (sparse), `h[t] ∈ {0,1}` per rack tile
+  - **Constraint 1 — Tile conservation:** board tiles placed exactly once; rack tiles placed or held
+  - **Constraint 2 — Slot satisfaction:** each template slot filled by exactly one matching physical tile when the template is active
+  - **Objective:** minimize Σ h[t] (= maximize tiles placed from rack)
+  - Joker slots detected from `tile.is_joker` on template tiles; physical jokers fill them
+  - Infeasible board → encoded as `0 = 1` constraint so HiGHS propagates infeasibility
+- `extract_solution(model) → (new_sets, placed_tiles, remaining_rack, is_optimal)`:
+  - Reads `col_value` with EPS=0.5 threshold; treats `kModelEmpty` (empty pool) as optimal
+
+**`backend/solver/engine/solver.py`** — main orchestrator
+
+- `solve(state, rules) → Solution`:
+  1. `enumerate_valid_sets` → candidate templates
+  2. `build_ilp_model` → HiGHS model
+  3. `model.highs.run()` with 2-second time limit
+  4. `extract_solution` → Solution dataclass
+  5. `verify_solution` → raises `ValueError` if post-verification fails
+- Returns `is_optimal=True` when HiGHS proves optimality (always for typical game sizes)
+
+**`backend/solver/engine/objective.py`** — disruption scoring
+
+- `compute_disruption_score(old_board_sets, new_board_sets) → int`: counts board tiles that moved to a different set index; used as a post-solve metric (not yet encoded in ILP objective)
+
+**`backend/solver/validator/solution_verifier.py`** — post-solve verification
+
+- `verify_solution(state, solution, rules) → bool`:
+  - All sets in `solution.new_sets` pass `is_valid_set`
+  - `placed_tiles ∪ remaining_rack == original_state.rack` (by tile keys)
+  - Tiles in `new_sets == board_tiles ∪ placed_tiles` (multiset equality)
+
+**`backend/api/main.py`** — `/api/solve` endpoint activated (Phase 2)
+
+- `POST /api/solve` converts Pydantic request → domain `BoardState`, calls `solve()`, converts `Solution` → `SolveResponse`
+- `new_tile_indices` annotated per set (identifies which tiles came from the rack)
+- Returns `status: "solved"` if any tiles placed, `"no_solution"` if rack unchanged
+- Error paths: 422 for invalid input or infeasible board
+
+**`backend/tests/solver/test_ilp_solver.py`** — 22 known-answer ILP tests
+
+- Empty board rack-only plays: minimal run, minimal group, 4-tile group, 13-tile run, too-short rack
+- Extending existing board sets: end, start, both ends; gap prevents extension
+- Board rearrangement: merging runs across positions to place more rack tiles
+- Group from rack without disturbing board; all-four-color group
+- Duplicate tiles: both copies of same tile usable in different sets simultaneously
+- Joker: fills gap in run, fills slot in group, stays in hand when no compatible set
+- Edge cases: empty rack (is_optimal=True), solve_time_ms > 0
+
+**`backend/tests/solver/test_solution_verifier.py`** — 9 tests for verify_solution
+
+**`backend/tests/solver/test_objective.py`** — 5 tests for compute_disruption_score
+
+### Verification (all passed before commit)
+```
+pytest:         124 passed, 0 failed  (88 existing + 36 new)
+ruff check:     0 errors
+ruff format:    clean
+mypy strict:    no issues in 24 source files
+```
+
+### What is NOT here yet (next phases)
+- `generator/move_generator.py` — human-readable move instructions (Phase 3)
+- `output/` modules — diff, formatter, explanation (Phase 3)
+- Initial meld threshold constraint in ILP (rules.is_first_turn — Phase 2b)
+- Double-joker template variants (currently only single-joker expansion)
+- Frontend UI components (tile grid picker, board display, solution view) — Phase 3
+- Sentry integration — Phase 4
+- Playwright E2E tests — Phase 4
+
+---
+
 ## [0.2.0] — 2026-03-21 — Phase 1a: Rule Checker + Set Enumerator
 
 ### What was implemented
