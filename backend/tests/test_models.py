@@ -1,4 +1,4 @@
-"""Tests for the domain model layer (solver/models/).
+"""Tests for the domain model layer (solver/models/ and api/models).
 
 These tests verify pure data construction and invariants — no solver logic.
 All tests must pass from the very first commit of the foundation.
@@ -7,7 +7,9 @@ All tests must pass from the very first commit of the foundation.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
+from api.models import TileInput
 from solver.models.board_state import BoardState, MoveInstruction, Solution
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
@@ -239,3 +241,35 @@ def test_move_instruction_construction() -> None:
     assert move.action == "extend"
     assert move.set_index == 0
     assert move.tile is None
+
+
+# ---------------------------------------------------------------------------
+# TileInput API model validation (AAA)
+# ---------------------------------------------------------------------------
+
+
+def test_tile_input_joker_minimal_valid() -> None:
+    """A bare joker (no color, no number) is a valid TileInput."""
+    # Arrange / Act
+    tile = TileInput(joker=True)
+
+    # Assert
+    assert tile.joker is True
+    assert tile.color is None
+    assert tile.number is None
+
+
+def test_tile_input_joker_with_color_raises() -> None:
+    """A joker tile that also specifies a color violates the domain invariant."""
+    # Arrange — invalid: joker cannot carry a color
+    with pytest.raises(ValidationError, match="Joker tiles must not have"):
+        # Act
+        TileInput(joker=True, color="red")  # type: ignore[arg-type]
+
+
+def test_tile_input_joker_with_number_raises() -> None:
+    """A joker tile that also specifies a number violates the domain invariant."""
+    # Arrange — invalid: joker cannot carry a number
+    with pytest.raises(ValidationError, match="Joker tiles must not have"):
+        # Act
+        TileInput(joker=True, number=5)

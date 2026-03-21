@@ -9,6 +9,7 @@
   "page": {
     "firstTurn": "First turn",
     "reset": "Reset",
+    "resetConfirm": "Reset everything? All tiles and sets will be cleared.",
     "solve": "Solve",
     "solving": "Solving…",
     "finishEditing": "Finish editing first"

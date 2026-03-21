@@ -4,11 +4,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export async function solvePuzzle(
   request: SolveRequest,
+  signal?: AbortSignal,
 ): Promise<SolveResponse> {
   const res = await fetch(`${API_URL}/api/solve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
+    signal,
   });
 
   if (!res.ok) {
