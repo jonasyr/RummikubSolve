@@ -174,7 +174,14 @@ async def solve_endpoint(request: SolveRequest) -> SolveResponse:
         solution = _run_solver(state, rules)
     except ValueError as exc:
         logger.error("solve_failed", error=str(exc))
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raw = str(exc).lower()
+        if "infeasible" in raw or "invalid" in raw:
+            msg = (
+                "The board has no valid arrangement — check that every set is a legal run or group."  # noqa: E501
+            )
+        else:
+            msg = str(exc)
+        raise HTTPException(status_code=422, detail=msg) from exc
 
     # Build the set of placed-tile keys for new_tile_indices annotation.
     placed_key_set = {(t.color, t.number, t.copy_id, t.is_joker) for t in solution.placed_tiles}

@@ -4,7 +4,70 @@ import { useCallback, useState } from "react";
 import { useGameStore } from "../store/game";
 import Tile from "./Tile";
 import TileGridPicker from "./TileGridPicker";
-import type { TileInput } from "../types/api";
+import type { TileColor, TileInput } from "../types/api";
+
+// ---------------------------------------------------------------------------
+// Client-side set validation (mirrors backend rule_checker.py logic)
+// ---------------------------------------------------------------------------
+
+function validateSet(
+  type: "run" | "group",
+  tiles: TileInput[],
+): string | null {
+  if (tiles.length < 3) return `Need at least 3 tiles (have ${tiles.length})`;
+  if (tiles.length > 13) return "Too many tiles (max 13)";
+
+  const jokers = tiles.filter((t) => t.joker);
+  const nonJokers = tiles.filter((t) => !t.joker);
+  const jLen = jokers.length;
+
+  if (type === "run") {
+    // All jokers — structurally valid for any run.
+    if (nonJokers.length === 0) return null;
+
+    const colors = [...new Set(nonJokers.map((t) => t.color as TileColor))];
+    if (colors.length > 1) return "Run: all tiles must be the same color";
+
+    const nums = nonJokers.map((t) => t.number!).sort((a, b) => a - b);
+    if (new Set(nums).size < nums.length)
+      return "Run: cannot have duplicate numbers";
+
+    const nMin = nums[0];
+    const nMax = nums[nums.length - 1];
+    const internalGaps = nMax - nMin + 1 - nums.length;
+    if (internalGaps > jLen)
+      return "Run: not enough jokers to fill gaps between tiles";
+
+    // A valid start position `a` must satisfy:
+    //   a ≤ nMin, a ≥ nMax - total + 1, a ≥ 1, a + total - 1 ≤ 13
+    const total = tiles.length;
+    const lo = Math.max(1, nMax - total + 1);
+    const hi = Math.min(nMin, 14 - total);
+    if (lo > hi) return "Run: tiles don't fit within the 1–13 range";
+
+    return null;
+  }
+
+  // group
+  if (tiles.length > 4) return "Group: can have at most 4 tiles";
+  if (nonJokers.length === 0) return null; // all jokers
+
+  const nums = [...new Set(nonJokers.map((t) => t.number))];
+  if (nums.length > 1) return "Group: all tiles must have the same number";
+
+  const colors = nonJokers.map((t) => t.color!);
+  if (new Set(colors).size < colors.length)
+    return "Group: cannot have duplicate colors";
+
+  const distinctColors = new Set(colors).size;
+  if (jLen > 4 - distinctColors) return "Group: too many jokers";
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function BoardSection() {
   const boardSets = useGameStore((s) => s.boardSets);
@@ -17,8 +80,11 @@ export default function BoardSection() {
   const [pendingTiles, setPendingTiles] = useState<TileInput[]>([]);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
+  const validationError = validateSet(pendingType, pendingTiles);
+  const canConfirm = pendingTiles.length >= 3 && validationError === null;
+
   function confirmSet() {
-    if (pendingTiles.length === 0) return;
+    if (!canConfirm) return;
     if (editingIndex !== null) {
       updateBoardSet(editingIndex, { type: pendingType, tiles: pendingTiles });
     } else {
@@ -165,10 +231,18 @@ export default function BoardSection() {
             </div>
           )}
 
+          {/* Live validation feedback */}
+          {pendingTiles.length >= 3 && validationError && (
+            <p className="text-xs text-red-600 font-medium">{validationError}</p>
+          )}
+          {pendingTiles.length >= 3 && !validationError && (
+            <p className="text-xs text-green-600 font-medium">Valid set ✓</p>
+          )}
+
           <div className="flex gap-2">
             <button
               onClick={confirmSet}
-              disabled={pendingTiles.length === 0}
+              disabled={!canConfirm}
               className="px-3 py-1 rounded text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {editingIndex !== null ? "Save Changes" : "Add to Board"}
