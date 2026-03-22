@@ -49,6 +49,7 @@ def verify_solution(
         rules = RulesConfig()
 
     import structlog as _structlog
+
     _log = _structlog.get_logger()
 
     # 1. All sets in the proposed solution must be individually valid.
