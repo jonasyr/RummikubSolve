@@ -20,6 +20,14 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "mobile-chrome",
+      use: { ...devices["Pixel 5"] },    // 393×851 — mid-range Android phone
+    },
+    {
+      name: "mobile-safari",
+      use: { ...devices["iPhone SE"] },  // 375×667 — smallest supported iPhone
+    },
   ],
   // Playwright will start the Next.js dev server automatically.
   // The backend must already be running on NEXT_PUBLIC_API_URL (default :8000).
