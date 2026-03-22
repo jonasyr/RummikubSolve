@@ -119,23 +119,21 @@ from .models import (  # noqa: E402  (import after app init is intentional)
     MoveOutput,
     SolveRequest,
     SolveResponse,
+    TileInput,
     TileOutput,
 )
 
 
-def _assign_copy_ids(tile_inputs: list[object]) -> list[Tile]:
+def _assign_copy_ids(tile_inputs: list[TileInput]) -> list[Tile]:
     """Convert a list of TileInput API models to domain Tiles with correct copy_ids.
 
     Tiles with the same (color, number, is_joker) are assigned copy_id=0 and
     copy_id=1 in order of appearance so the ILP can treat them as distinct
     physical tiles.
     """
-    from .models import TileInput
-
     seen: Counter[tuple[Color | None, int | None, bool]] = Counter()
     result: list[Tile] = []
     for ti in tile_inputs:
-        assert isinstance(ti, TileInput)
         if ti.joker:
             key: tuple[Color | None, int | None, bool] = (None, None, True)
             copy_id = seen[key]

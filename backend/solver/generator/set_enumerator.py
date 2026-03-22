@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections import Counter
 from itertools import combinations
+from typing import Any
 
 from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
@@ -154,7 +155,7 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
     # board tile (so type 2 "fill-missing" won't generate the template either).
     # Deduplication via fingerprints prevents identical templates from being
     # added twice (e.g. when type 1 and type 2 would produce the same variant).
-    seen_variants: set[tuple] = set()
+    seen_variants: set[tuple[Any, ...]] = set()
 
     for tmpl in base:
         for p in range(len(tmpl.tiles)):
