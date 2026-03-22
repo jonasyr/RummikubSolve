@@ -153,14 +153,14 @@ export default function BoardSection() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           {t("heading")}
         </h2>
         {!isBuildingSet && (
           <button
             onClick={() => setIsBuildingSet(true)}
             disabled={isLoading}
-            className="text-sm px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            className="text-sm px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {t("addSet")}
           </button>
@@ -169,7 +169,7 @@ export default function BoardSection() {
 
       {/* Inline set builder — shown at top so it's immediately visible */}
       {isBuildingSet && (
-        <div className="p-3 border border-blue-200 rounded-lg bg-blue-50 space-y-3">
+        <div className="p-3 border border-blue-200 dark:border-blue-800 rounded-lg bg-blue-50 dark:bg-blue-900/20 space-y-3">
           <TileGridPicker
             onSelect={(tile) =>
               setPendingTiles((prev) => {
@@ -203,10 +203,10 @@ export default function BoardSection() {
 
           {/* Live validation feedback */}
           {pendingTiles.length >= 3 && validationError && (
-            <p className="text-xs text-red-600 font-medium">{validationError}</p>
+            <p className="text-xs text-red-600 dark:text-red-400 font-medium">{validationError}</p>
           )}
           {pendingTiles.length >= 3 && !validationError && validType && (
-            <p className="text-xs text-green-600 font-medium">
+            <p className="text-xs text-green-600 dark:text-green-400 font-medium">
               {t("validSet")} ({t(validType as "run" | "group")})
             </p>
           )}
@@ -221,7 +221,7 @@ export default function BoardSection() {
             </button>
             <button
               onClick={cancelSet}
-              className="px-3 py-1 rounded text-sm font-medium bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
+              className="px-3 py-1 rounded text-sm font-medium bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               {t("cancel")}
             </button>
@@ -231,15 +231,15 @@ export default function BoardSection() {
 
       {/* Existing sets */}
       {boardSets.length === 0 && !isBuildingSet && (
-        <p className="text-sm text-gray-400 italic">{t("noSets")}</p>
+        <p className="text-sm text-gray-400 dark:text-gray-500 italic">{t("noSets")}</p>
       )}
       <div className="space-y-2">
         {boardSets.map((set, si) => (
           <div
             key={si}
-            className="flex items-start gap-2 p-2 bg-gray-50 rounded border border-gray-200"
+            className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
           >
-            <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">
+            <span className="text-xs text-gray-400 dark:text-gray-500 uppercase w-8 shrink-0 pt-1">
               {t(set.type as "run" | "group")}
             </span>
             <div className="flex flex-wrap gap-1 flex-1">
@@ -256,7 +256,7 @@ export default function BoardSection() {
             <button
               onClick={() => startEditing(si)}
               disabled={isLoading}
-              className="shrink-0 text-gray-400 hover:text-blue-500 text-base leading-none disabled:opacity-40 disabled:cursor-not-allowed"
+              className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 text-base leading-none disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label={t("editSet", { n: si + 1 })}
             >
               ✎
@@ -264,7 +264,7 @@ export default function BoardSection() {
             <button
               onClick={() => removeBoardSet(si)}
               disabled={isLoading}
-              className="shrink-0 text-gray-400 hover:text-red-500 text-lg leading-none disabled:opacity-40 disabled:cursor-not-allowed"
+              className="shrink-0 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 text-lg leading-none disabled:opacity-40 disabled:cursor-not-allowed"
               aria-label={t("removeSet", { n: si + 1 })}
             >
               ×

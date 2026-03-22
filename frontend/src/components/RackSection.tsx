@@ -34,7 +34,7 @@ export default function RackSection() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
         {t("heading")}
       </h2>
       <TileGridPicker onSelect={addRackTile} tileCount={tileCount} />
@@ -51,7 +51,7 @@ export default function RackSection() {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-gray-400 italic">{t("empty")}</p>
+        <p className="text-sm text-gray-400 dark:text-gray-500 italic">{t("empty")}</p>
       )}
     </section>
   );

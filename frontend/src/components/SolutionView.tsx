@@ -71,10 +71,10 @@ export default function SolutionView({ solution }: Props) {
   if (solution.status === "error") {
     return (
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           {t("heading")}
         </h2>
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
           {t("error")}
         </div>
       </section>
@@ -87,10 +87,10 @@ export default function SolutionView({ solution }: Props) {
       : t("noSolution");
     return (
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           {t("heading")}
         </h2>
-        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-sm">
+        <div className="p-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-800 dark:text-yellow-300 text-sm">
           {reason}
         </div>
       </section>
@@ -102,25 +102,25 @@ export default function SolutionView({ solution }: Props) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
         {t("heading")}
       </h2>
 
       {/* Summary bar */}
       <div className="flex flex-wrap gap-2 text-sm">
-        <span className="px-2 py-1 bg-green-100 text-green-800 rounded font-medium">
+        <span className="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 rounded font-medium">
           {t("tilesPlaced", { count: solution.tiles_placed })}
         </span>
         {solution.tiles_remaining > 0 && (
-          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
+          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded">
             {t("tilesRemaining", { count: solution.tiles_remaining })}
           </span>
         )}
-        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded">
+        <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
           {t("solveTime", { ms: solution.solve_time_ms })}
         </span>
         {solution.is_optimal && (
-          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
+          <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded font-medium">
             {t("optimal")}
           </span>
         )}
@@ -135,18 +135,18 @@ export default function SolutionView({ solution }: Props) {
           const isExtended   = !isUnchanged && newCount > 0 && !isNew;
           const isRearranged = !isUnchanged && newCount === 0;
 
-          const borderBg = isNew        ? "border-green-200 bg-green-50"
-                         : isExtended   ? "border-blue-200 bg-white"
-                         : isRearranged ? "border-amber-200 bg-amber-50"
-                         :                "border-gray-200 bg-gray-50 opacity-60";
+          const borderBg = isNew        ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/30"
+                         : isExtended   ? "border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800"
+                         : isRearranged ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30"
+                         :                "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 opacity-60";
 
           const badge = isNew
-            ? <span title={t("badge.newTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0 cursor-help">{t("badge.new")}</span>
+            ? <span title={t("badge.newTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 shrink-0 cursor-help">{t("badge.new")}</span>
             : isExtended
-            ? <span title={t("badge.extendedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0 cursor-help">{t("badge.extended")}</span>
+            ? <span title={t("badge.extendedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 shrink-0 cursor-help">{t("badge.extended")}</span>
             : isRearranged
-            ? <span title={t("badge.rearrangedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0 cursor-help">{t("badge.rearranged")}</span>
-            : <span title={t("badge.unchangedTitle")} className="text-xs text-gray-400 italic shrink-0 pt-1 cursor-help">{t("badge.unchanged")}</span>;
+            ? <span title={t("badge.rearrangedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 shrink-0 cursor-help">{t("badge.rearranged")}</span>
+            : <span title={t("badge.unchangedTitle")} className="text-xs text-gray-400 dark:text-gray-500 italic shrink-0 pt-1 cursor-help">{t("badge.unchanged")}</span>;
 
           // Sort tiles by number within runs; preserve original indices for highlighting.
           const sortedEntries = set.tiles
@@ -157,8 +157,8 @@ export default function SolutionView({ solution }: Props) {
 
           return (
             <div key={si} className={`flex items-start gap-2 p-2 rounded border ${borderBg}`}>
-              <span className="text-xs font-bold text-gray-500 w-6 shrink-0 pt-1">{si + 1}.</span>
-              <span className="text-xs text-gray-400 uppercase w-8 shrink-0 pt-1">{set.type}</span>
+              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 w-6 shrink-0 pt-1">{si + 1}.</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500 uppercase w-8 shrink-0 pt-1">{set.type}</span>
               <div className="flex flex-wrap gap-1 flex-1">
                 {sortedEntries.map(({ tile, ti }) => (
                   <Tile
@@ -180,7 +180,7 @@ export default function SolutionView({ solution }: Props) {
       {/* Remaining rack */}
       {(solution.remaining_rack?.length ?? 0) > 0 && (
         <div className="space-y-1">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
             {t("remainingHand")}
           </p>
           <div className="flex flex-wrap gap-1">
@@ -200,7 +200,7 @@ export default function SolutionView({ solution }: Props) {
       {/* Move instructions */}
       {(solution.moves?.length ?? 0) > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
             {t("moveInstructions")}
           </p>
           {/* Summary line */}
@@ -215,7 +215,7 @@ export default function SolutionView({ solution }: Props) {
             if (counts.rearrange) parts.push(t("moveRearrange", { count: counts.rearrange }));
             const total = (solution.moves ?? []).length;
             return (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 {t("moveSummary", { total, parts: parts.join(", ") })}
               </p>
             );
@@ -223,19 +223,19 @@ export default function SolutionView({ solution }: Props) {
           <ol className="space-y-1.5">
             {(solution.moves ?? []).map((move, i) => {
               const bulletClass: Record<string, string> = {
-                create:    "bg-green-100 text-green-700",
-                extend:    "bg-blue-100 text-blue-700",
-                rearrange: "bg-amber-100 text-amber-700",
+                create:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300",
+                extend:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
+                rearrange: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300",
               };
               const desc = changedSets[i]
                 ? buildDescription(move, changedSets[i], t)
                 : move.description;
               return (
                 <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className={`shrink-0 w-5 h-5 rounded-full text-xs flex items-center justify-center font-medium mt-0.5 ${bulletClass[move.action] ?? "bg-gray-100 text-gray-700"}`}>
+                  <span className={`shrink-0 w-5 h-5 rounded-full text-xs flex items-center justify-center font-medium mt-0.5 ${bulletClass[move.action] ?? "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"}`}>
                     {i + 1}
                   </span>
-                  <span className="text-gray-700">{desc}</span>
+                  <span className="text-gray-700 dark:text-gray-300">{desc}</span>
                 </li>
               );
             })}
