@@ -92,3 +92,20 @@ class SolveResponse(BaseModel):
     new_board: list[BoardSetOutput]
     remaining_rack: list[TileOutput]
     moves: list[MoveOutput]
+
+
+# ---------------------------------------------------------------------------
+# Puzzle models
+# ---------------------------------------------------------------------------
+
+
+class PuzzleRequest(BaseModel):
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    seed: int | None = None
+
+
+class PuzzleResponse(BaseModel):
+    board_sets: list[BoardSetInput]
+    rack: list[TileInput]
+    difficulty: str
+    tile_count: int

@@ -64,6 +64,20 @@ export interface MoveOutput {
   set_index: number | null;
 }
 
+export type Difficulty = "easy" | "medium" | "hard";
+
+export interface PuzzleRequest {
+  difficulty?: Difficulty;
+  seed?: number;
+}
+
+export interface PuzzleResponse {
+  board_sets: BoardSetInput[];
+  rack: TileInput[];
+  difficulty: Difficulty;
+  tile_count: number;
+}
+
 export type SolveStatus = "solved" | "no_solution" | "error";
 
 export interface SolveResponse {

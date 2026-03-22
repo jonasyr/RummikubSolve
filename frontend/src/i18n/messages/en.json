@@ -113,6 +113,15 @@
       "rearrangeWith": "Rearrange with {tiles}: {allTiles}"
     }
   },
+  "puzzle": {
+    "title": "Practice Puzzle",
+    "easy": "Easy",
+    "medium": "Medium",
+    "hard": "Hard",
+    "getButton": "Get Puzzle ▶",
+    "loading": "Loading…",
+    "error": "Could not load puzzle — please try again."
+  },
   "errorBoundary": {
     "heading": "Something went wrong displaying the result.",
     "fallback": "Unknown rendering error"

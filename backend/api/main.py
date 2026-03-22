@@ -72,7 +72,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.17.0",
+    version="0.18.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -114,9 +114,17 @@ from solver.models.board_state import BoardState  # noqa: E402
 from solver.models.tile import Color, Tile  # noqa: E402
 from solver.models.tileset import SetType, TileSet  # noqa: E402
 
+from solver.generator.puzzle_generator import (  # noqa: E402
+    PuzzleGenerationError,
+    generate_puzzle,
+)
+
 from .models import (  # noqa: E402  (import after app init is intentional)
+    BoardSetInput,
     BoardSetOutput,
     MoveOutput,
+    PuzzleRequest,
+    PuzzleResponse,
     SolveRequest,
     SolveResponse,
     TileInput,
@@ -261,4 +269,48 @@ def solve_endpoint(request: SolveRequest) -> SolveResponse:
             MoveOutput(action=m.action, description=m.description, set_index=m.set_index)
             for m in solution.moves
         ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# /api/puzzle
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/puzzle", response_model=PuzzleResponse, tags=["solver"])
+def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
+    """Generate a random, pre-verified Rummikub practice puzzle.
+
+    Returns a board state and a rack of tiles that can always be fully placed.
+    Difficulty controls how many tiles are in the rack and how complex the
+    required placement is.
+    """
+    logger.info("puzzle_request", difficulty=request.difficulty, seed=request.seed)
+
+    try:
+        result = generate_puzzle(difficulty=request.difficulty, seed=request.seed)
+    except PuzzleGenerationError as exc:
+        logger.warning("puzzle_generation_failed", error=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail="Could not generate a puzzle — please try again.",
+        ) from exc
+
+    def _tile_to_input(t: Tile) -> TileInput:
+        if t.is_joker:
+            return TileInput(joker=True)
+        assert t.color is not None and t.number is not None
+        return TileInput(color=t.color.value, number=t.number)  # type: ignore[arg-type]
+
+    board_sets_input: list[BoardSetInput] = [
+        BoardSetInput(type=ts.type.value, tiles=[_tile_to_input(t) for t in ts.tiles])  # type: ignore[arg-type]
+        for ts in result.board_sets
+    ]
+    rack_input: list[TileInput] = [_tile_to_input(t) for t in result.rack]
+
+    return PuzzleResponse(
+        board_sets=board_sets_input,
+        rack=rack_input,
+        difficulty=result.difficulty,
+        tile_count=len(result.rack),
     )

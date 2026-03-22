@@ -9,6 +9,7 @@ import BoardSection from "../../components/BoardSection";
 import SolutionView from "../../components/SolutionView";
 import { TranslatedErrorBoundary } from "../../components/ErrorBoundary";
 import RulesPanel from "../../components/RulesPanel";
+import PuzzleControls from "../../components/PuzzleControls";
 import LocaleSwitcher from "../../components/LocaleSwitcher";
 
 export default function Home() {
@@ -93,6 +94,7 @@ export default function Home() {
       </div>
 
       <RulesPanel />
+      <PuzzleControls />
       <RackSection />
       <BoardSection />
 

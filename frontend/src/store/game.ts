@@ -11,8 +11,10 @@
  */
 import { create } from "zustand";
 
+import { fetchPuzzle } from "../lib/api";
 import type {
   BoardSetInput,
+  Difficulty,
   SolveResponse,
   TileInput,
 } from "../types/api";
@@ -29,6 +31,7 @@ interface GameState {
 
   // Async
   isLoading: boolean;
+  isPuzzleLoading: boolean;
   solution: SolveResponse | null;
   error: string | null;
 
@@ -55,6 +58,9 @@ interface GameState {
   // Actions — UI state
   setIsBuildingSet: (v: boolean) => void;
 
+  // Actions — puzzle
+  loadPuzzle: (difficulty: Difficulty) => Promise<void>;
+
   // Actions — reset
   reset: () => void;
 }
@@ -68,6 +74,7 @@ const initialState = {
   rack: [] as TileInput[],
   isFirstTurn: false,
   isLoading: false,
+  isPuzzleLoading: false,
   solution: null as SolveResponse | null,
   error: null as string | null,
   isBuildingSet: false,
@@ -108,6 +115,24 @@ export const useGameStore = create<GameState>((set) => ({
   setError: (error) => set({ error }),
 
   setIsBuildingSet: (v) => set({ isBuildingSet: v }),
+
+  loadPuzzle: async (difficulty) => {
+    set({ isPuzzleLoading: true, error: null, solution: null });
+    try {
+      const puzzle = await fetchPuzzle({ difficulty });
+      set({
+        boardSets: puzzle.board_sets,
+        rack: puzzle.rack,
+        isPuzzleLoading: false,
+        isFirstTurn: false,
+      });
+    } catch (err) {
+      set({
+        isPuzzleLoading: false,
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  },
 
   reset: () => set(initialState),
 }));

@@ -113,6 +113,15 @@
       "rearrangeWith": "Umstellen mit {tiles}: {allTiles}"
     }
   },
+  "puzzle": {
+    "title": "Übungsrätsel",
+    "easy": "Leicht",
+    "medium": "Mittel",
+    "hard": "Schwer",
+    "getButton": "Rätsel laden ▶",
+    "loading": "Wird geladen…",
+    "error": "Rätsel konnte nicht geladen werden — bitte erneut versuchen."
+  },
   "errorBoundary": {
     "heading": "Beim Anzeigen des Ergebnisses ist ein Fehler aufgetreten.",
     "fallback": "Unbekannter Darstellungsfehler"

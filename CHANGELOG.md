@@ -5,6 +5,49 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.18.0] — 2026-03-22 — Puzzle Generator (Phase 6b)
+
+### Added
+
+- **`POST /api/puzzle`** — new endpoint that returns a randomly generated, pre-verified
+  Rummikub practice puzzle. Accepts `difficulty` ("easy"/"medium"/"hard") and an optional
+  `seed` for reproducibility. Returns `board_sets`, `rack`, `difficulty`, and `tile_count`.
+  503 on generation failure (retry-able), 422 on invalid difficulty.
+
+- **`solver/generator/puzzle_generator.py`** — core algorithm:
+  - Enumerates all valid runs + groups on a full 104-tile (non-joker) pool.
+  - Greedily selects 5–9 compatible sets (no shared physical tile copies).
+  - Extracts the rack according to difficulty:
+    - `easy`: 2–3 tiles from the ends of long runs (remaining run stays ≥ 3 tiles).
+    - `medium`: removes 1 complete set (3–5 tiles).
+    - `hard`: removes 2 complete sets (6–12 tiles).
+  - Verifies solvability: `solve(board, rack).tiles_placed == len(rack)`.
+  - Raises `PuzzleGenerationError` after `max_attempts` (default 150).
+
+- **Frontend — Practice Puzzle panel** (`PuzzleControls.tsx`):
+  - Collapsible panel (same `<details>/<summary>` pattern as RulesPanel).
+  - Three difficulty toggle buttons (Easy / Medium / Hard).
+  - "Get Puzzle ▶" button with spinner while loading.
+  - On load: populates board and rack; clears previous solution.
+  - Mounted in `app/[locale]/page.tsx` between RulesPanel and RackSection.
+
+- **Frontend i18n** — `puzzle` namespace added to `en.json` and `de.json`
+  (keys: `title`, `easy`, `medium`, `hard`, `getButton`, `loading`, `error`).
+
+- **TypeScript** — `PuzzleRequest` / `PuzzleResponse` / `Difficulty` types in `types/api.ts`.
+  `fetchPuzzle()` function in `lib/api.ts`. `isPuzzleLoading` state + `loadPuzzle()` action
+  in `store/game.ts`.
+
+### Tests
+
+- `tests/solver/test_puzzle_generator.py` — 9 unit tests covering happy path for each
+  difficulty, board validity, full solvability, rack-size minima, determinism, and error handling.
+- `tests/api/test_puzzle_endpoint.py` — 6 integration tests covering all three difficulties,
+  invalid input (422), required fields, and seeded determinism.
+- `frontend/e2e/puzzle_mode.spec.ts` — E2E: open panel → select Easy → Get Puzzle → Solve.
+
+---
+
 ## [0.17.0] — 2026-03-22 — Double-joker solver fix (Phase 6a)
 
 ### Fixed — solver correctness
