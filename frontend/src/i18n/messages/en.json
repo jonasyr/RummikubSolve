@@ -118,6 +118,7 @@
     "easy": "Easy",
     "medium": "Medium",
     "hard": "Hard",
+    "expert": "Expert",
     "custom": "Custom",
     "setsToRemove": "Sets to remove",
     "getButton": "Get Puzzle ▶",

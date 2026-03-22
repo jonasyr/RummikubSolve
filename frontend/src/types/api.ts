@@ -64,7 +64,7 @@ export interface MoveOutput {
   set_index: number | null;
 }
 
-export type Difficulty = "easy" | "medium" | "hard" | "custom";
+export type Difficulty = "easy" | "medium" | "hard" | "expert" | "custom";
 
 export interface PuzzleRequest {
   difficulty?: Difficulty;

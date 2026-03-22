@@ -97,3 +97,12 @@ async def test_custom_sets_to_remove_zero_422(client: AsyncClient) -> None:
 async def test_custom_sets_to_remove_six_422(client: AsyncClient) -> None:
     r = await client.post("/api/puzzle", json={"difficulty": "custom", "sets_to_remove": 6})
     assert r.status_code == 422
+
+
+async def test_expert_puzzle_200(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "expert", "seed": 20})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["difficulty"] == "expert"
+    assert len(data["rack"]) == 2
+    assert len(data["board_sets"]) >= 2

@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useGameStore } from "../store/game";
 import type { Difficulty, PuzzleRequest } from "../types/api";
 
-const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard", "custom"];
+const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard", "expert", "custom"];
 
 export default function PuzzleControls() {
   const t = useTranslations("puzzle");

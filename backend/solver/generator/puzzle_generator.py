@@ -8,6 +8,8 @@ Difficulty is defined by rack size and the kind of placement needed:
   easy:   2–3 tiles, all from run ends (simple extensions)
   medium: 3–6 tiles, from one complete set (player must recreate a set)
   hard:   6–12 tiles, from two complete sets (player must create multiple sets)
+  expert: 2 tiles from different board sets, no trivial placement exists —
+          player must rearrange the board to find any valid placement
 
 Solvability is guaranteed by construction (all extracted tiles can be
 re-placed by the solver). Joker-free in v1.
@@ -24,9 +26,10 @@ from ..engine.solver import solve
 from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
 from ..models.tileset import SetType, TileSet
+from ..validator.rule_checker import is_valid_set
 from .set_enumerator import enumerate_groups, enumerate_runs
 
-Difficulty = Literal["easy", "medium", "hard", "custom"]
+Difficulty = Literal["easy", "medium", "hard", "expert", "custom"]
 
 
 class PuzzleGenerationError(Exception):
@@ -62,9 +65,10 @@ def generate_puzzle(
         ValueError:             If difficulty is not a known value.
         PuzzleGenerationError:  If no suitable puzzle is found.
     """
-    if difficulty not in ("easy", "medium", "hard", "custom"):
+    if difficulty not in ("easy", "medium", "hard", "expert", "custom"):
         raise ValueError(
-            f"Unknown difficulty {difficulty!r}. Use 'easy', 'medium', 'hard', or 'custom'."
+            f"Unknown difficulty {difficulty!r}. "
+            f"Use 'easy', 'medium', 'hard', 'expert', or 'custom'."
         )
 
     rng = random.Random(seed)
@@ -90,11 +94,14 @@ def _attempt_generate(
     all_sets = enumerate_runs(full_pool) + enumerate_groups(full_pool)
     rng.shuffle(all_sets)
 
-    # For custom difficulty, scale the board up so enough sets remain after removal.
+    # Scale the board target for difficulties that need more sets to work with.
     if difficulty == "custom":
         lo = max(5, sets_to_remove + 4)
         hi = max(9, sets_to_remove + 7)
         n_target = rng.randint(lo, hi)
+    elif difficulty == "expert":
+        # Larger board gives more candidate sets for the extraction pairing search.
+        n_target = rng.randint(8, 12)
     else:
         n_target = rng.randint(5, 9)
     board_sets = _pick_compatible_sets(all_sets, n_target)
@@ -173,6 +180,8 @@ def _extract_rack(
         return _extract_easy(board_sets, rng)
     if difficulty == "medium":
         return _extract_medium(board_sets, rng)
+    if difficulty == "expert":
+        return _extract_expert(board_sets, rng)
     if difficulty == "custom":
         return _extract_custom(board_sets, rng, sets_to_remove)
     return _extract_hard(board_sets, rng)
@@ -242,6 +251,67 @@ def _extract_hard(
     rack = [t for i, ts in enumerate(board_sets) if i in indices for t in ts.tiles]
     remaining = [ts for i, ts in enumerate(board_sets) if i not in indices]
     return remaining, rack
+
+
+def _any_trivial_extension(rack: list[Tile], board_sets: list[TileSet]) -> bool:
+    """Return True if any rack tile can be directly appended to any board set.
+
+    Uses the same rule_checker as the solver, so the check is authoritative.
+    A puzzle is disqualified as "expert" if this returns True — the player
+    would have an obvious move without needing to rearrange anything.
+    """
+    for tile in rack:
+        for ts in board_sets:
+            if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
+                return True
+    return False
+
+
+def _extract_expert(
+    board_sets: list[TileSet], rng: random.Random
+) -> tuple[list[TileSet], list[Tile]]:
+    """Extract 2 rack tiles by completely sacrificing 2 board sets.
+
+    Selects 2 "sacrifice" sets S1 and S2, picks 1 tile from each as a rack
+    tile, then drops S1 and S2 entirely from the board (their remaining tiles
+    go to the bag — unused in the puzzle). The player's board only contains
+    the other sets.
+
+    Why "complete sacrifice" instead of "shorten a set":
+        If we merely removed a tile from the end of a run, the shortened run
+        would still accept that tile back as a trivial extension. By removing
+        the source set entirely, there is no "obvious home" left on the board.
+        The tile can only be placed by rearranging other board sets, which is
+        the hallmark of expert-level Rummikub play.
+
+    Tries all set-pairs shuffled randomly; returns the first pair where
+    neither rack tile can be directly appended to any remaining board set.
+    Requires ≥ 4 board sets (2 to sacrifice, ≥ 2 left on the board).
+    """
+    if len(board_sets) < 4:
+        return board_sets, []
+
+    n = len(board_sets)
+    pair_indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    rng.shuffle(pair_indices)
+
+    for idx_a, idx_b in pair_indices:
+        # Board = all sets except the two sacrificed ones.
+        remaining_board = [
+            ts for k, ts in enumerate(board_sets) if k != idx_a and k != idx_b
+        ]
+        if len(remaining_board) < 2:
+            continue
+
+        # Pick one tile at random from each sacrifice set.
+        tile_a = rng.choice(board_sets[idx_a].tiles)
+        tile_b = rng.choice(board_sets[idx_b].tiles)
+        rack = [tile_a, tile_b]
+
+        if not _any_trivial_extension(rack, remaining_board):
+            return remaining_board, rack
+
+    return board_sets, []  # no valid pair found; _attempt_generate will retry
 
 
 def _extract_custom(

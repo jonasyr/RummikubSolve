@@ -22,11 +22,12 @@ describe("PuzzleControls", () => {
     mockIsPuzzleLoading = false;
   });
 
-  it("renders Easy, Medium, Hard, and Custom difficulty buttons", () => {
+  it("renders Easy, Medium, Hard, Expert, and Custom difficulty buttons", () => {
     render(<PuzzleControls />);
     expect(screen.getByRole("button", { name: "easy" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "medium" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "hard" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "expert" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "custom" })).toBeInTheDocument();
   });
 
