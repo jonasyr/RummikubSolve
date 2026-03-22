@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from collections import Counter
-from typing import Literal, cast
+from typing import Literal
 
 import sentry_sdk
 import structlog
@@ -300,12 +300,11 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             return TileInput(joker=True)
         if tile.color is None or tile.number is None:
             raise ValueError(f"Non-joker tile has no color/number: {tile!r}")
-        color_lit = cast("Literal['blue','red','black','yellow']", tile.color.value)
-        return TileInput(color=color_lit, number=tile.number)
+        return TileInput(color=tile.color.value, number=tile.number)
 
     board_sets_input: list[BoardSetInput] = [
         BoardSetInput(
-            type=cast("Literal['run','group']", ts.type.value),
+            type=ts.type.value,
             tiles=[_tile_to_input(tile) for tile in ts.tiles],
         )
         for ts in result.board_sets
