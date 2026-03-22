@@ -110,14 +110,13 @@ async def health() -> dict[str, str]:
 
 from solver.config.rules import RulesConfig  # noqa: E402
 from solver.engine.solver import solve as _run_solver  # noqa: E402
-from solver.models.board_state import BoardState  # noqa: E402
-from solver.models.tile import Color, Tile  # noqa: E402
-from solver.models.tileset import SetType, TileSet  # noqa: E402
-
 from solver.generator.puzzle_generator import (  # noqa: E402
     PuzzleGenerationError,
     generate_puzzle,
 )
+from solver.models.board_state import BoardState  # noqa: E402
+from solver.models.tile import Color, Tile  # noqa: E402
+from solver.models.tileset import SetType, TileSet  # noqa: E402
 
 from .models import (  # noqa: E402  (import after app init is intentional)
     BoardSetInput,

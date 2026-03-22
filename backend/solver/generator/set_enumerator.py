@@ -227,14 +227,19 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
                     rlen = len(run_keys)
                     for p0, p1 in combinations(range(rlen), 2):
                         joker_pos = {p0, p1}
-                        remaining = [(c, v) for i, (c, v) in enumerate(run_keys) if i not in joker_pos]
+                        remaining = [
+                            (c, v) for i, (c, v) in enumerate(run_keys) if i not in joker_pos
+                        ]
                         if not all(avail[(c, v)] >= 1 for c, v in remaining):
                             continue
                         run3_tiles: list[Tile] = [
                             joker_ph if i in joker_pos else Tile(color=c, number=v, copy_id=0)
                             for i, (c, v) in enumerate(run_keys)
                         ]
-                        fp3 = (SetType.RUN, tuple((t.is_joker, t.color, t.number) for t in run3_tiles))
+                        fp3 = (
+                            SetType.RUN,
+                            tuple((t.is_joker, t.color, t.number) for t in run3_tiles),
+                        )
                         if fp3 not in seen_variants:
                             seen_variants.add(fp3)
                             variants.append(TileSet(type=SetType.RUN, tiles=run3_tiles))
@@ -248,14 +253,19 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
                     glen = len(grp_keys)
                     for p0, p1 in combinations(range(glen), 2):
                         joker_pos = {p0, p1}
-                        remaining = [(c, v) for i, (c, v) in enumerate(grp_keys) if i not in joker_pos]
+                        remaining = [
+                            (c, v) for i, (c, v) in enumerate(grp_keys) if i not in joker_pos
+                        ]
                         if not all(avail[(c, v)] >= 1 for c, v in remaining):
                             continue
                         grp3_tiles: list[Tile] = [
                             joker_ph if i in joker_pos else Tile(color=c, number=n, copy_id=0)
                             for i, (c, n) in enumerate(grp_keys)
                         ]
-                        fp3 = (SetType.GROUP, tuple((t.is_joker, t.color, t.number) for t in grp3_tiles))
+                        fp3 = (
+                            SetType.GROUP,
+                            tuple((t.is_joker, t.color, t.number) for t in grp3_tiles),
+                        )
                         if fp3 not in seen_variants:
                             seen_variants.add(fp3)
                             variants.append(TileSet(type=SetType.GROUP, tiles=grp3_tiles))

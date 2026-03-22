@@ -13,7 +13,6 @@ from solver.generator.puzzle_generator import (
 from solver.models.board_state import BoardState
 from solver.validator.rule_checker import is_valid_set
 
-
 # ---------------------------------------------------------------------------
 # Happy-path: one puzzle per difficulty
 # ---------------------------------------------------------------------------

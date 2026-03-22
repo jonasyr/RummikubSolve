@@ -176,7 +176,8 @@ def build_ilp_model(
             if slot_is_joker:
                 if joker_constraint_added:
                     continue  # combined constraint already added for this template
-                # One constraint covering ALL joker slots: Σ_jokers x[t][s] = joker_slot_count * y[s]
+                # One constraint covering ALL joker slots:
+                # Σ_jokers x[t][s] = joker_slot_count * y[s]
                 x_col = [x_vars[(t_idx, s)] for t_idx in slot_cands if (t_idx, s) in x_vars]
                 if not x_col:
                     highs.addRow(0.0, 0.0, 1, [y_vars[s]], [1.0])

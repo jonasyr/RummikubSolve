@@ -176,10 +176,14 @@ def _extract_easy(
     placeable by extending the shortened run.
     """
     # Only long runs (≥ 5) so we can safely remove 2 end tiles and keep ≥ 3.
-    long_runs = [i for i, ts in enumerate(board_sets) if ts.type == SetType.RUN and len(ts.tiles) >= 5]
+    long_runs = [
+        i for i, ts in enumerate(board_sets) if ts.type == SetType.RUN and len(ts.tiles) >= 5
+    ]
     if not long_runs:
         # Fallback: runs ≥ 4 so we can remove 1 tile and keep ≥ 3.
-        long_runs = [i for i, ts in enumerate(board_sets) if ts.type == SetType.RUN and len(ts.tiles) >= 4]
+        long_runs = [
+            i for i, ts in enumerate(board_sets) if ts.type == SetType.RUN and len(ts.tiles) >= 4
+        ]
     if not long_runs:
         return board_sets, []
 
