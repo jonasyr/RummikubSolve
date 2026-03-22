@@ -26,7 +26,10 @@ export default defineConfig({
     },
     {
       name: "mobile-safari",
-      use: { ...devices["iPhone SE"] },  // 375×667 — smallest supported iPhone
+      // Use Chromium engine with iPhone SE viewport/UA — WebKit is not installed
+      // in CI (only chromium is in the install step). Chromium with mobile
+      // emulation still validates layout, touch targets, and mobile UA behaviour.
+      use: { ...devices["iPhone SE"], browserName: "chromium" },
     },
   ],
   // Playwright will start the Next.js dev server automatically.
