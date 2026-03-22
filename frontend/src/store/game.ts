@@ -14,7 +14,7 @@ import { create } from "zustand";
 import { fetchPuzzle } from "../lib/api";
 import type {
   BoardSetInput,
-  Difficulty,
+  PuzzleRequest,
   SolveResponse,
   TileInput,
 } from "../types/api";
@@ -59,7 +59,7 @@ interface GameState {
   setIsBuildingSet: (v: boolean) => void;
 
   // Actions — puzzle
-  loadPuzzle: (difficulty: Difficulty, signal?: AbortSignal) => Promise<void>;
+  loadPuzzle: (request: PuzzleRequest, signal?: AbortSignal) => Promise<void>;
 
   // Actions — reset
   reset: () => void;
@@ -116,12 +116,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setIsBuildingSet: (v) => set({ isBuildingSet: v }),
 
-  loadPuzzle: async (difficulty, signal) => {
+  loadPuzzle: async (request, signal) => {
     // Guard against concurrent calls (e.g. rapid double-click before re-render).
     if (get().isPuzzleLoading) return;
     set({ isPuzzleLoading: true, error: null, solution: null });
     try {
-      const puzzle = await fetchPuzzle({ difficulty }, signal);
+      const puzzle = await fetchPuzzle(request, signal);
       set({
         boardSets: puzzle.board_sets,
         rack: puzzle.rack,

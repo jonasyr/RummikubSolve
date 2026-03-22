@@ -64,11 +64,13 @@ export interface MoveOutput {
   set_index: number | null;
 }
 
-export type Difficulty = "easy" | "medium" | "hard";
+export type Difficulty = "easy" | "medium" | "hard" | "custom";
 
 export interface PuzzleRequest {
   difficulty?: Difficulty;
   seed?: number;
+  /** Only used when difficulty == "custom". Range 1–5, default 3. */
+  sets_to_remove?: number;
 }
 
 export interface PuzzleResponse {

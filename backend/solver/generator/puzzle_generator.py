@@ -26,7 +26,7 @@ from ..models.tile import Color, Tile
 from ..models.tileset import SetType, TileSet
 from .set_enumerator import enumerate_groups, enumerate_runs
 
-Difficulty = Literal["easy", "medium", "hard"]
+Difficulty = Literal["easy", "medium", "hard", "custom"]
 
 
 class PuzzleGenerationError(Exception):
@@ -44,13 +44,16 @@ def generate_puzzle(
     difficulty: Difficulty = "medium",
     seed: int | None = None,
     max_attempts: int = 150,
+    sets_to_remove: int = 3,
 ) -> PuzzleResult:
     """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
 
     Args:
-        difficulty:   "easy", "medium", or "hard".
-        seed:         Optional RNG seed for reproducible puzzles.
-        max_attempts: How many boards to try before giving up.
+        difficulty:    "easy", "medium", "hard", or "custom".
+        seed:          Optional RNG seed for reproducible puzzles.
+        max_attempts:  How many boards to try before giving up.
+        sets_to_remove: Number of complete sets to remove (only used when
+                        difficulty == "custom"; valid range 1–5).
 
     Returns:
         A PuzzleResult whose rack the solver can fully place.
@@ -59,12 +62,14 @@ def generate_puzzle(
         ValueError:             If difficulty is not a known value.
         PuzzleGenerationError:  If no suitable puzzle is found.
     """
-    if difficulty not in ("easy", "medium", "hard"):
-        raise ValueError(f"Unknown difficulty {difficulty!r}. Use 'easy', 'medium', or 'hard'.")
+    if difficulty not in ("easy", "medium", "hard", "custom"):
+        raise ValueError(
+            f"Unknown difficulty {difficulty!r}. Use 'easy', 'medium', 'hard', or 'custom'."
+        )
 
     rng = random.Random(seed)
     for _ in range(max_attempts):
-        result = _attempt_generate(rng, difficulty)
+        result = _attempt_generate(rng, difficulty, sets_to_remove)
         if result is not None:
             return result
 
@@ -78,19 +83,27 @@ def generate_puzzle(
 # ---------------------------------------------------------------------------
 
 
-def _attempt_generate(rng: random.Random, difficulty: Difficulty) -> PuzzleResult | None:
+def _attempt_generate(
+    rng: random.Random, difficulty: Difficulty, sets_to_remove: int = 3
+) -> PuzzleResult | None:
     full_pool = _make_full_pool()
     all_sets = enumerate_runs(full_pool) + enumerate_groups(full_pool)
     rng.shuffle(all_sets)
 
-    n_target = rng.randint(5, 9)
+    # For custom difficulty, scale the board up so enough sets remain after removal.
+    if difficulty == "custom":
+        lo = max(5, sets_to_remove + 4)
+        hi = max(9, sets_to_remove + 7)
+        n_target = rng.randint(lo, hi)
+    else:
+        n_target = rng.randint(5, 9)
     board_sets = _pick_compatible_sets(all_sets, n_target)
     if len(board_sets) < 3:
         return None
 
     board_sets = _assign_copy_ids(board_sets)
 
-    input_board, rack = _extract_rack(board_sets, difficulty, rng)
+    input_board, rack = _extract_rack(board_sets, difficulty, rng, sets_to_remove)
     if len(rack) < 2:
         return None
 
@@ -154,11 +167,14 @@ def _extract_rack(
     board_sets: list[TileSet],
     difficulty: Difficulty,
     rng: random.Random,
+    sets_to_remove: int = 3,
 ) -> tuple[list[TileSet], list[Tile]]:
     if difficulty == "easy":
         return _extract_easy(board_sets, rng)
     if difficulty == "medium":
         return _extract_medium(board_sets, rng)
+    if difficulty == "custom":
+        return _extract_custom(board_sets, rng, sets_to_remove)
     return _extract_hard(board_sets, rng)
 
 
@@ -223,6 +239,22 @@ def _extract_hard(
     if len(board_sets) < 4:
         return board_sets, []
     indices = set(rng.sample(range(len(board_sets)), 2))
+    rack = [t for i, ts in enumerate(board_sets) if i in indices for t in ts.tiles]
+    remaining = [ts for i, ts in enumerate(board_sets) if i not in indices]
+    return remaining, rack
+
+
+def _extract_custom(
+    board_sets: list[TileSet], rng: random.Random, n: int
+) -> tuple[list[TileSet], list[Tile]]:
+    """Remove n complete sets. Rack = all tiles from the removed sets.
+
+    Requires at least n + 2 sets on the board so that at least 2 remain
+    after extraction (giving the solver something to work with).
+    """
+    if len(board_sets) < n + 2:
+        return board_sets, []
+    indices = set(rng.sample(range(len(board_sets)), n))
     rack = [t for i, ts in enumerate(board_sets) if i in indices for t in ts.tiles]
     remaining = [ts for i, ts in enumerate(board_sets) if i not in indices]
     return remaining, rack

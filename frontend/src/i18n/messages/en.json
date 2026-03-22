@@ -118,6 +118,8 @@
     "easy": "Easy",
     "medium": "Medium",
     "hard": "Hard",
+    "custom": "Custom",
+    "setsToRemove": "Sets to remove",
     "getButton": "Get Puzzle ▶",
     "loading": "Loading…",
     "error": "Could not load puzzle — please try again."

@@ -37,6 +37,26 @@ def test_hard_puzzle_generates() -> None:
     assert len(result.rack) >= 6
 
 
+def test_custom_puzzle_generates() -> None:
+    result = generate_puzzle(difficulty="custom", seed=4, sets_to_remove=3)
+    assert result.difficulty == "custom"
+    # 3 complete sets removed → at least 3 × 3 = 9 tiles.
+    assert len(result.rack) >= 9
+
+
+def test_custom_puzzle_scales_with_sets_removed() -> None:
+    result = generate_puzzle(difficulty="custom", seed=7, sets_to_remove=4)
+    # 4 complete sets removed → at least 4 × 3 = 12 tiles.
+    assert len(result.rack) >= 12
+
+
+def test_custom_puzzle_is_solvable() -> None:
+    result = generate_puzzle(difficulty="custom", seed=10, sets_to_remove=3)
+    state = BoardState(board_sets=result.board_sets, rack=result.rack)
+    solution = solve(state)
+    assert solution.tiles_placed == len(result.rack)
+
+
 # ---------------------------------------------------------------------------
 # Correctness invariants
 # ---------------------------------------------------------------------------
@@ -62,6 +82,16 @@ def test_rack_minimum_size() -> None:
             result = generate_puzzle(difficulty=difficulty, seed=seed)  # type: ignore[arg-type]
             assert len(result.rack) >= min_rack[difficulty], (
                 f"Rack too small for {difficulty} (seed={seed}): got {len(result.rack)}"
+            )
+
+
+def test_custom_rack_minimum_size() -> None:
+    """Custom with sets_to_remove=n always yields at least n×3 tiles (smallest set = 3)."""
+    for seed in range(3):
+        for n in (1, 2, 3):
+            result = generate_puzzle(difficulty="custom", seed=seed, sets_to_remove=n)
+            assert len(result.rack) >= n * 3, (
+                f"Custom rack too small for n={n} (seed={seed}): got {len(result.rack)}"
             )
 
 
@@ -92,6 +122,12 @@ def test_seeded_puzzle_is_deterministic() -> None:
 def test_invalid_difficulty_raises_value_error() -> None:
     with pytest.raises(ValueError, match="Unknown difficulty"):
         generate_puzzle(difficulty="extreme")  # type: ignore[arg-type]
+
+
+def test_custom_is_valid_difficulty() -> None:
+    """'custom' must not raise ValueError (regression guard)."""
+    result = generate_puzzle(difficulty="custom", seed=99, sets_to_remove=2)
+    assert result.difficulty == "custom"
 
 
 def test_zero_attempts_raises_generation_error() -> None:

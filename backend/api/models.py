@@ -105,8 +105,10 @@ class SolveResponse(BaseModel):
 
 
 class PuzzleRequest(BaseModel):
-    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    difficulty: Literal["easy", "medium", "hard", "custom"] = "medium"
     seed: int | None = None
+    # Only meaningful when difficulty == "custom"; ignored for other difficulties.
+    sets_to_remove: int = Field(3, ge=1, le=5)
 
 
 class PuzzleResponse(BaseModel):

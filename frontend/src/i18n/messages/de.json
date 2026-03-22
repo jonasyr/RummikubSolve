@@ -118,6 +118,8 @@
     "easy": "Leicht",
     "medium": "Mittel",
     "hard": "Schwer",
+    "custom": "Angepasst",
+    "setsToRemove": "Sätze entfernen",
     "getButton": "Rätsel laden ▶",
     "loading": "Wird geladen…",
     "error": "Rätsel konnte nicht geladen werden — bitte erneut versuchen."
