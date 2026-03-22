@@ -26,9 +26,12 @@ class RulesConfig:
         When True, a player may swap a face tile for a joker already
         placed on the board, freeing the joker for use elsewhere.
         Standard rules: True.
+        NOTE: accepted in config for forward-compatibility but not yet
+        implemented in the ILP formulation — setting it to False has no
+        effect on solver behaviour.
     """
 
     initial_meld_threshold: int = 30
     is_first_turn: bool = False
     allow_wrap_runs: bool = False
-    joker_retrieval: bool = True
+    joker_retrieval: bool = True  # TODO: implement in ILP formulation

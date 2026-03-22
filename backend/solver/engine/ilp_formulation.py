@@ -209,11 +209,7 @@ def build_ilp_model(
     BIG_M = 200.0
     for t_idx, h_col in h_vars.items():
         tile = all_tiles[t_idx]
-        tile_value = (
-            float(tile.number)
-            if (not tile.is_joker and tile.number is not None)
-            else 0.0
-        )
+        tile_value = float(tile.number) if (not tile.is_joker and tile.number is not None) else 0.0
         highs.changeColCost(h_col, 1.0 + tile_value / BIG_M)
 
     return ILPModel(

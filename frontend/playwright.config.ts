@@ -20,6 +20,17 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "mobile-chrome",
+      use: { ...devices["Pixel 5"] },    // 393×851 — mid-range Android phone
+    },
+    {
+      name: "mobile-safari",
+      // Use Chromium engine with iPhone SE viewport/UA — WebKit is not installed
+      // in CI (only chromium is in the install step). Chromium with mobile
+      // emulation still validates layout, touch targets, and mobile UA behaviour.
+      use: { ...devices["iPhone SE"], browserName: "chromium" },
+    },
   ],
   // Playwright will start the Next.js dev server automatically.
   // The backend must already be running on NEXT_PUBLIC_API_URL (default :8000).

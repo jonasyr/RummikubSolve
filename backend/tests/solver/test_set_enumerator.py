@@ -66,14 +66,18 @@ def test_enumerate_groups_full_pool_count(full_tile_pool: BoardState) -> None:
 
 def test_enumerate_valid_sets_full_pool_total(full_tile_pool: BoardState) -> None:
     total = enumerate_valid_sets(full_tile_pool)
-    assert len(total) == 329  # 264 runs + 65 groups
+    # Each of the 329 templates (264 runs + 65 groups) is duplicated once because
+    # the full pool contains 2 physical copies of every tile. The ILP needs N copies
+    # of a template to be able to assign distinct physical copies to each instance.
+    assert len(total) == 658  # 329 templates × 2 copies each
 
 
 def test_enumerate_valid_sets_is_union(full_tile_pool: BoardState) -> None:
     runs = enumerate_runs(full_tile_pool)
     groups = enumerate_groups(full_tile_pool)
     total = enumerate_valid_sets(full_tile_pool)
-    assert len(total) == len(runs) + len(groups)
+    # Full pool has 2 copies of every tile → each template appears twice.
+    assert len(total) == 2 * (len(runs) + len(groups))
 
 
 # ---------------------------------------------------------------------------

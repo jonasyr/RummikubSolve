@@ -90,6 +90,7 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
             # This should not happen with a valid board; fall back to no-move so we
             # never return a 422 error when the board itself is valid.
             import structlog as _sl
+
             _sl.get_logger().warning("solver.infeasible_fallback_non_first_turn")
             new_sets = list(state.board_sets)
             placed_tiles = []
@@ -102,6 +103,7 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
         new_set_tile_ids = {id(t) for ts in new_sets for t in ts.tiles}
         if board_tile_ids - new_set_tile_ids:
             import structlog as _sl
+
             _sl.get_logger().warning(
                 "solver.timeout_fallback",
                 missing_board_tiles=len(board_tile_ids - new_set_tile_ids),

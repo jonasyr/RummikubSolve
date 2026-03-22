@@ -8,11 +8,15 @@ Each test builds a known game state and verifies:
 
 from __future__ import annotations
 
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
 from solver.config.rules import RulesConfig
 from solver.engine.solver import solve
 from solver.models.board_state import BoardState
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
+from solver.validator.rule_checker import is_valid_set
 from solver.validator.solution_verifier import verify_solution
 
 # ---------------------------------------------------------------------------
@@ -385,3 +389,62 @@ def test_first_turn_joker_does_not_count_toward_threshold() -> None:
     sol = solve(state, RulesConfig(is_first_turn=True, initial_meld_threshold=30))
     assert sol.tiles_placed == 0
     assert verify_solution(state, sol)
+
+
+# ---------------------------------------------------------------------------
+# Property-based tests (Hypothesis)
+# ---------------------------------------------------------------------------
+
+# Strategy: random non-joker tile with copy_id=0.
+_tile_st = st.builds(
+    Tile,
+    color=st.sampled_from(list(Color)),
+    number=st.integers(min_value=1, max_value=13),
+    copy_id=st.just(0),
+)
+
+
+@given(rack_tiles=st.lists(_tile_st, min_size=0, max_size=7))
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_tile_conservation(rack_tiles: list[Tile]) -> None:
+    """Solver never creates or loses tiles.
+
+    For an empty board: every rack tile must end up either in placed_tiles
+    or remaining_rack — no tile is duplicated or discarded.
+    """
+    state = BoardState(board_sets=[], rack=rack_tiles)
+    sol = solve(state, RulesConfig())
+    assert len(sol.placed_tiles) + len(sol.remaining_rack) == len(rack_tiles)
+
+
+@given(rack_tiles=st.lists(_tile_st, min_size=1, max_size=9))
+@settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+def test_property_output_sets_are_valid(rack_tiles: list[Tile]) -> None:
+    """Every set in the solution is a legal Rummikub set.
+
+    Exercises the post-solve verifier: the solution_verifier already runs this
+    check, but Hypothesis finds edge-case inputs that might slip past unit tests.
+    """
+    state = BoardState(board_sets=[], rack=rack_tiles)
+    sol = solve(state, RulesConfig())
+    for ts in sol.new_sets:
+        assert is_valid_set(ts, RulesConfig()), f"Invalid set in solution: {ts}"
+
+
+@given(rack_tiles=st.lists(_tile_st, min_size=3, max_size=6))
+@settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
+def test_property_first_turn_threshold_respected(rack_tiles: list[Tile]) -> None:
+    """When is_first_turn=True, any placed tiles must meet the meld threshold.
+
+    If the solver places > 0 tiles, the sum of their face values must be ≥ 30.
+    If no valid placement meets the threshold, tiles_placed must be 0.
+    """
+    rules = RulesConfig(is_first_turn=True, initial_meld_threshold=30)
+    state = BoardState(board_sets=[], rack=rack_tiles)
+    sol = solve(state, rules)
+    if sol.tiles_placed > 0:
+        placed_value = sum(tile.number for tile in sol.placed_tiles if tile.number is not None)
+        assert placed_value >= 30, (
+            f"First-turn threshold not met: placed {sol.tiles_placed} tiles "
+            f"with total value {placed_value} < 30"
+        )

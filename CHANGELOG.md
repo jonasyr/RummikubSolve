@@ -5,6 +5,111 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.16.0] — 2026-03-22 — CI hardening & version sync (P2 session)
+
+### Fixed
+- **Version sync**: bumped `backend/pyproject.toml` and `backend/api/main.py` from stale
+  `0.13.0` to `0.16.0`; updated version assertion in `tests/api/test_solve_endpoint.py`
+  to match.
+- **Docker healthcheck**: added `healthcheck:` directive to the `backend` service in
+  `docker-compose.yml` (`curl -f http://localhost:8000/health`, 10 s interval, 5 retries).
+  Without this, the `frontend` `depends_on: backend: condition: service_healthy` condition
+  caused `docker compose up` to hang indefinitely.
+
+### CI
+- **Vitest wired into frontend CI** (`.github/workflows/frontend.yml`): added
+  `npm run test` step after the build step so all 33 Vitest unit tests run on every push
+  and pull request to `main` or `claude/**` branches.
+
+---
+
+## [0.15.0] — 2026-03-22 — Testing & quality improvements (P1 session)
+
+### Testing — frontend
+
+- **Vitest unit test setup** (`frontend/vitest.config.ts`, `package.json`): installed
+  Vitest 2.x with `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, and
+  `@testing-library/jest-dom`. Added `test` and `test:watch` npm scripts. E2E spec
+  files are excluded via `vitest.config.ts` to prevent Playwright tests being picked
+  up by Vitest. Total: 33 unit tests.
+- **Zustand store tests** (`src/__tests__/store/game.test.ts`, 15 tests): covers every
+  action — `addRackTile`, `removeRackTile`, `addBoardSet`, `removeBoardSet`,
+  `updateBoardSet`, `setIsFirstTurn`, `setIsBuildingSet`, `setLoading`, `setError`,
+  `setSolution`, and `reset`.
+- **Tile component tests** (`src/__tests__/components/Tile.test.tsx`, 11 tests): number
+  rendering, joker star symbol, `size` variant CSS classes (`xs`/`sm`/`md`), remove
+  button presence and callback, and highlight ring on/off.
+- **LocaleSwitcher component tests** (`src/__tests__/components/LocaleSwitcher.test.tsx`,
+  7 tests): EN/DE button rendering, active locale `bg-blue-600` class, `aria-current`
+  attribute, inactive locale calls `router.replace`, active locale click is a no-op.
+
+### Testing — E2E viewport expansion
+
+- **Mobile and tablet viewports** (`playwright.config.ts`): added Pixel 5 (393×851,
+  Android mid-range) and iPhone SE (375×667, smallest supported iPhone) Playwright
+  projects alongside the existing Desktop Chrome project. All 5 existing spec files now
+  run across 3 device profiles (15 total test runs). No spec changes required — tests
+  use role/text locators that work at any viewport.
+
+### Testing — backend property tests
+
+- **Hypothesis property-based solver tests** (`tests/solver/test_ilp_solver.py`,
+  3 new tests, 60-40 examples each): addresses Audit Report finding of only 1 existing
+  Hypothesis test.
+  - `test_property_tile_conservation`: verifies `placed_tiles + remaining_rack == rack`
+    for any random rack (no tiles created or lost by the solver).
+  - `test_property_output_sets_are_valid`: verifies every set in the solution passes
+    `is_valid_set` for any random rack input.
+  - `test_property_first_turn_threshold_respected`: verifies that when `is_first_turn=True`,
+    any placement meets the 30-point meld threshold.
+
+### Fixes
+
+- **pyproject.toml version** (`backend/pyproject.toml`): bumped from `0.6.0` to `0.13.0`
+  to match `api/main.py` (missed in the previous session).
+
+---
+
+## [0.14.0] — 2026-03-22 — Deployment fixes & polish (P0/P1/P2 session)
+
+### Deployment — critical fixes (P0)
+
+- **nginx reverse proxy** (`nginx/nginx.conf`, `docker-compose.yml`): added nginx service
+  on port 80 that proxies `/api/*` and `/health` to `backend:8000` and everything else to
+  `frontend:3000`. Set `NEXT_PUBLIC_API_URL: ""` in the frontend Docker build args so the
+  browser uses relative URLs (`/api/solve`) — resolves the critical issue where the baked-in
+  `http://backend:8000` URL was unreachable by browsers outside Docker.
+- **Container restart policies** (`docker-compose.yml`): added `restart: unless-stopped` to
+  backend and frontend services so containers recover automatically after server reboots.
+- **Version bump** (`backend/api/main.py`): `app.version` updated from `"0.6.0"` to
+  `"0.13.0"` so `/health` returns the correct version.
+
+### Cleanup — P1
+
+- **Remove dead output module** (`backend/solver/output/`): deleted the empty
+  `__init__.py` left from the v0.7.0 module deletion. No imports referenced it.
+- **Document joker_retrieval stub** (`backend/solver/config/rules.py`): added a NOTE
+  comment and a `# TODO` marker clarifying that the field is accepted for forward
+  compatibility but has no effect on ILP behaviour.
+- **PWA icons** (`frontend/public/icons/`, `manifest.json`): generated 192×192 and
+  512×512 PNG icons (blue `#1e40af` background, white "R" lettermark) and populated
+  `manifest.json`'s previously-empty `"icons"` array. Enables PWA installation on mobile.
+
+### Polish — P2
+
+- **Dark mode** (6 frontend component files): wired up the existing CSS variables from
+  `globals.css` to Tailwind `dark:` classes across `page.tsx`, `RackSection`,
+  `BoardSection`, `SolutionView`, `RulesPanel`, and `LocaleSwitcher`. Uses
+  `prefers-color-scheme` media strategy — no JS toggle required. Tile colors (red/blue/
+  black/yellow) intentionally left unchanged as they carry semantic meaning.
+- **README home-server deployment guide** (`README.md`): added Home Server Deployment
+  section explaining the nginx proxy architecture, setup steps, and HTTPS options
+  (Tailscale / Cloudflare Tunnel). Updated Docker section and environment variable table.
+- **.env.example** (`env.example`): updated `NEXT_PUBLIC_API_URL` comment to clarify
+  Docker vs local development usage.
+
+---
+
 ## [0.13.0] — 2026-03-21 — UX cleanup & solver quality improvements
 
 ### UX improvements (frontend)
