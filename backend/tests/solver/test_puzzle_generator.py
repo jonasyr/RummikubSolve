@@ -100,3 +100,30 @@ def test_invalid_difficulty_raises_value_error() -> None:
 def test_zero_attempts_raises_generation_error() -> None:
     with pytest.raises(PuzzleGenerationError):
         generate_puzzle(difficulty="medium", max_attempts=0)
+
+
+# ---------------------------------------------------------------------------
+# Tile-conservation invariants
+# ---------------------------------------------------------------------------
+
+
+def test_rack_tiles_not_in_board() -> None:
+    """No physical tile (color, number, copy_id) appears in both rack and board_sets."""
+    result = generate_puzzle(difficulty="medium", seed=10)
+    board_keys = {
+        (t.color, t.number, t.copy_id)
+        for ts in result.board_sets
+        for t in ts.tiles
+    }
+    rack_keys = {(t.color, t.number, t.copy_id) for t in result.rack}
+    assert board_keys.isdisjoint(rack_keys), (
+        f"Overlap between board and rack: {board_keys & rack_keys}"
+    )
+
+
+def test_copy_ids_valid() -> None:
+    """Every tile in a generated puzzle has copy_id in {0, 1}."""
+    result = generate_puzzle(difficulty="hard", seed=5)
+    all_tiles = [t for ts in result.board_sets for t in ts.tiles] + result.rack
+    invalid = [(t.color, t.number, t.copy_id) for t in all_tiles if t.copy_id not in (0, 1)]
+    assert invalid == [], f"Tiles with invalid copy_id: {invalid}"

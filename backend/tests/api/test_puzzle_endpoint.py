@@ -62,3 +62,20 @@ async def test_seeded_puzzle_is_deterministic(client: AsyncClient) -> None:
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r1.json() == r2.json()
+
+
+async def test_default_difficulty_uses_medium(client: AsyncClient) -> None:
+    """POST with empty body should use the default difficulty of 'medium'."""
+    r = await client.post("/api/puzzle", json={})
+    assert r.status_code == 200
+    assert r.json()["difficulty"] == "medium"
+
+
+async def test_board_set_min_tiles_count(client: AsyncClient) -> None:
+    """Every board_set in the response must have at least 3 tiles (Rummikub minimum)."""
+    r = await client.post("/api/puzzle", json={"difficulty": "hard", "seed": 7})
+    assert r.status_code == 200
+    for bs in r.json()["board_sets"]:
+        assert len(bs["tiles"]) >= 3, (
+            f"Board set has only {len(bs['tiles'])} tiles: {bs}"
+        )

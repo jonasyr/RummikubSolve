@@ -5,6 +5,54 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.19.0] — 2026-03-22 — Post-v0.18 audit fixes
+
+### Fixed — bugs
+
+- **`game.ts:loadPuzzle`**: `isBuildingSet` was not reset to `false` when a puzzle loaded
+  successfully, leaving the set-builder dialog open with the new board's data. Fixed by adding
+  `isBuildingSet: false` to the success-path `set({...})` call.
+
+- **`game.ts:loadPuzzle`**: race condition if called twice in rapid succession (possible in the
+  render-cycle window before the disabled button re-renders). Fixed by: (a) adding `get` to the
+  Zustand create callback and checking `get().isPuzzleLoading` at entry; (b) adding
+  `AbortSignal` support to `fetchPuzzle` in `lib/api.ts`; (c) managing an `abortRef` in
+  `PuzzleControls.tsx` that cancels any still-in-flight request before starting a new one
+  (mirrors the pattern already used for `/api/solve` in `page.tsx`).
+
+- **`api/main.py:_tile_to_input`**: used `assert` (disabled by `python -O`) instead of an
+  explicit `raise ValueError` for the non-joker nil-check. Also replaced two
+  `# type: ignore[arg-type]` comments on enum `.value` assignments with `cast()` calls, making
+  the mypy strict-mode suppression explicit and self-documenting.
+
+- **`set_enumerator.py`**: confusing `(c, _)` unpacking on line 256 in the Type-3 double-joker
+  group loop discarded the number from `grp_keys` and silently relied on the outer-scope
+  `number` variable. Renamed to `(c, n)` and used `n` directly — semantically identical but
+  no longer fragile under refactoring.
+
+### Added — tests
+
+- `test_puzzle_generator.py`: `test_rack_tiles_not_in_board` — verifies no `(color, number,
+  copy_id)` triple appears in both `board_sets` and `rack` (tile conservation invariant).
+- `test_puzzle_generator.py`: `test_copy_ids_valid` — verifies all tiles have `copy_id` in
+  `{0, 1}` (bounds guard for `_assign_copy_ids`).
+- `test_set_enumerator.py`: `test_double_joker_group_variants` — verifies Type-3 generation
+  produces valid double-joker group templates (not just runs).
+- `test_ilp_solver.py`: `test_two_jokers_placed_across_multiple_tile_sets` — verifies both
+  jokers are placed (not left in hand) when sufficient tiles exist; does not prescribe which
+  sets they land in.
+- `test_ilp_solver.py`: `test_group_with_two_jokers_from_rack` — verifies a 4-tile group
+  `[Blue5, Red5, Joker0, Joker1]` is fully placed (exercises group path of double-joker
+  constraint).
+- `test_puzzle_endpoint.py`: `test_default_difficulty_uses_medium` — verifies POST with empty
+  body returns `difficulty="medium"`.
+- `test_puzzle_endpoint.py`: `test_board_set_min_tiles_count` — verifies every board set in
+  the response has ≥ 3 tiles (Rummikub minimum).
+
+Total tests: 182 → **189 pass**.
+
+---
+
 ## [0.18.0] — 2026-03-22 — Puzzle Generator (Phase 6b)
 
 ### Added

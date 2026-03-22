@@ -266,3 +266,24 @@ def test_one_joker_no_double_joker_variants() -> None:
         if sum(1 for t in ts.tiles if t.is_joker) == 2
     ]
     assert double_joker_templates == [], "Expected no double-joker templates with only 1 joker"
+
+
+def test_double_joker_group_variants() -> None:
+    """Type-3 generation produces double-joker group templates, not just run templates."""
+    from solver.validator.rule_checker import is_valid_set as _valid
+
+    state = make_state(
+        Tile(Color.BLUE, 7, 0),
+        Tile(Color.RED, 7, 0),
+        Tile(Color.BLACK, 7, 0),
+        Tile.joker(copy_id=0),
+        Tile.joker(copy_id=1),
+    )
+    sets = enumerate_valid_sets(state)
+    dj_groups = [
+        ts for ts in sets
+        if ts.type == SetType.GROUP and sum(1 for t in ts.tiles if t.is_joker) == 2
+    ]
+    assert len(dj_groups) > 0, "Expected at least one double-joker group template"
+    for ts in dj_groups:
+        assert _valid(ts), f"Double-joker group template fails rule checker: {ts!r}"

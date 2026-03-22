@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from collections import Counter
-from typing import Literal
+from typing import Literal, cast
 
 import sentry_sdk
 import structlog
@@ -72,7 +72,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.18.0",
+    version="0.19.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -296,17 +296,22 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             detail="Could not generate a puzzle — please try again.",
         ) from exc
 
-    def _tile_to_input(t: Tile) -> TileInput:
-        if t.is_joker:
+    def _tile_to_input(tile: Tile) -> TileInput:
+        if tile.is_joker:
             return TileInput(joker=True)
-        assert t.color is not None and t.number is not None
-        return TileInput(color=t.color.value, number=t.number)  # type: ignore[arg-type]
+        if tile.color is None or tile.number is None:
+            raise ValueError(f"Non-joker tile has no color/number: {tile!r}")
+        color_lit = cast("Literal['blue','red','black','yellow']", tile.color.value)
+        return TileInput(color=color_lit, number=tile.number)
 
     board_sets_input: list[BoardSetInput] = [
-        BoardSetInput(type=ts.type.value, tiles=[_tile_to_input(t) for t in ts.tiles])  # type: ignore[arg-type]
+        BoardSetInput(
+            type=cast("Literal['run','group']", ts.type.value),
+            tiles=[_tile_to_input(tile) for tile in ts.tiles],
+        )
         for ts in result.board_sets
     ]
-    rack_input: list[TileInput] = [_tile_to_input(t) for t in result.rack]
+    rack_input: list[TileInput] = [_tile_to_input(tile) for tile in result.rack]
 
     return PuzzleResponse(
         board_sets=board_sets_input,

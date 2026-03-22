@@ -59,7 +59,7 @@ interface GameState {
   setIsBuildingSet: (v: boolean) => void;
 
   // Actions — puzzle
-  loadPuzzle: (difficulty: Difficulty) => Promise<void>;
+  loadPuzzle: (difficulty: Difficulty, signal?: AbortSignal) => Promise<void>;
 
   // Actions — reset
   reset: () => void;
@@ -84,7 +84,7 @@ const initialState = {
 // Store
 // ---------------------------------------------------------------------------
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   ...initialState,
 
   addBoardSet: (s) =>
@@ -116,17 +116,24 @@ export const useGameStore = create<GameState>((set) => ({
 
   setIsBuildingSet: (v) => set({ isBuildingSet: v }),
 
-  loadPuzzle: async (difficulty) => {
+  loadPuzzle: async (difficulty, signal) => {
+    // Guard against concurrent calls (e.g. rapid double-click before re-render).
+    if (get().isPuzzleLoading) return;
     set({ isPuzzleLoading: true, error: null, solution: null });
     try {
-      const puzzle = await fetchPuzzle({ difficulty });
+      const puzzle = await fetchPuzzle({ difficulty }, signal);
       set({
         boardSets: puzzle.board_sets,
         rack: puzzle.rack,
         isPuzzleLoading: false,
         isFirstTurn: false,
+        isBuildingSet: false,
       });
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        set({ isPuzzleLoading: false });
+        return;
+      }
       set({
         isPuzzleLoading: false,
         error: err instanceof Error ? err.message : "Unknown error",

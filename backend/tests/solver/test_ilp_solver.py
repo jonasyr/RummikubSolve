@@ -323,6 +323,37 @@ def test_two_jokers_on_board_with_rack_tile_placed() -> None:
     assert sol.is_optimal or sol.tiles_placed >= 0  # always true — guards against ValueError
 
 
+def test_two_jokers_placed_across_multiple_tile_sets() -> None:
+    """Two jokers from the rack are placed (together or separately) and all tiles go down."""
+    # Rack: Joker0, Red 4-5-6, Joker1, Blue 7-8-9.
+    # The solver may put both jokers in one run (e.g. [J0, R4, R5, R6, J1])
+    # or one joker each in two separate runs — both are valid optimal solutions.
+    state = BoardState(
+        board_sets=[],
+        rack=[
+            Tile.joker(copy_id=0), t(R, 4), t(R, 5), t(R, 6),
+            Tile.joker(copy_id=1), t(B, 7), t(B, 8), t(B, 9),
+        ],
+    )
+    sol = solve(state)
+    assert sol.tiles_placed == 8
+    assert verify_solution(state, sol)
+    # Both jokers must be placed (not left in hand).
+    placed_jokers = [tile for tile in sol.placed_tiles if tile.is_joker]
+    assert len(placed_jokers) == 2
+
+
+def test_group_with_two_jokers_from_rack() -> None:
+    """Four-tile group [Blue5, Red5, Joker0, Joker1] is fully placed."""
+    state = BoardState(
+        board_sets=[],
+        rack=[t(B, 5), t(R, 5), Tile.joker(copy_id=0), Tile.joker(copy_id=1)],
+    )
+    sol = solve(state)
+    assert sol.tiles_placed == 4
+    assert verify_solution(state, sol)
+
+
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------

@@ -252,8 +252,8 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
                         if not all(avail[(c, v)] >= 1 for c, v in remaining):
                             continue
                         grp3_tiles: list[Tile] = [
-                            joker_ph if i in joker_pos else Tile(color=c, number=number, copy_id=0)
-                            for i, (c, _) in enumerate(grp_keys)
+                            joker_ph if i in joker_pos else Tile(color=c, number=n, copy_id=0)
+                            for i, (c, n) in enumerate(grp_keys)
                         ]
                         fp3 = (SetType.GROUP, tuple((t.is_joker, t.color, t.number) for t in grp3_tiles))
                         if fp3 not in seen_variants:

@@ -29,11 +29,15 @@ export async function solvePuzzle(
   return res.json() as Promise<SolveResponse>;
 }
 
-export async function fetchPuzzle(request: PuzzleRequest = {}): Promise<PuzzleResponse> {
+export async function fetchPuzzle(
+  request: PuzzleRequest = {},
+  signal?: AbortSignal,
+): Promise<PuzzleResponse> {
   const res = await fetch(`${API_URL}/api/puzzle`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
+    signal,
   });
 
   if (!res.ok) {
