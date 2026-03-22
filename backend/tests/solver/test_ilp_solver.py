@@ -331,8 +331,14 @@ def test_two_jokers_placed_across_multiple_tile_sets() -> None:
     state = BoardState(
         board_sets=[],
         rack=[
-            Tile.joker(copy_id=0), t(R, 4), t(R, 5), t(R, 6),
-            Tile.joker(copy_id=1), t(B, 7), t(B, 8), t(B, 9),
+            Tile.joker(copy_id=0),
+            t(R, 4),
+            t(R, 5),
+            t(R, 6),
+            Tile.joker(copy_id=1),
+            t(B, 7),
+            t(B, 8),
+            t(B, 9),
         ],
     )
     sol = solve(state)

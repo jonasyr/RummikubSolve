@@ -73,12 +73,10 @@ def test_rack_minimum_size() -> None:
 def test_seeded_puzzle_is_deterministic() -> None:
     a = generate_puzzle(difficulty="medium", seed=42)
     b = generate_puzzle(difficulty="medium", seed=42)
+
     # Compare board_sets and rack by tile keys.
     def tiles_key(ts_list: list) -> list:  # type: ignore[type-arg]
-        return [
-            [(t.color, t.number, t.copy_id) for t in ts.tiles]
-            for ts in ts_list
-        ]
+        return [[(t.color, t.number, t.copy_id) for t in ts.tiles] for ts in ts_list]
 
     assert tiles_key(a.board_sets) == tiles_key(b.board_sets)
     assert [(t.color, t.number, t.copy_id) for t in a.rack] == [
@@ -109,11 +107,7 @@ def test_zero_attempts_raises_generation_error() -> None:
 def test_rack_tiles_not_in_board() -> None:
     """No physical tile (color, number, copy_id) appears in both rack and board_sets."""
     result = generate_puzzle(difficulty="medium", seed=10)
-    board_keys = {
-        (t.color, t.number, t.copy_id)
-        for ts in result.board_sets
-        for t in ts.tiles
-    }
+    board_keys = {(t.color, t.number, t.copy_id) for ts in result.board_sets for t in ts.tiles}
     rack_keys = {(t.color, t.number, t.copy_id) for t in result.rack}
     assert board_keys.isdisjoint(rack_keys), (
         f"Overlap between board and rack: {board_keys & rack_keys}"

@@ -105,12 +105,7 @@ def _attempt_generate(rng: random.Random, difficulty: Difficulty) -> PuzzleResul
 
 def _make_full_pool() -> BoardState:
     """104 non-joker tiles (4 colors × 13 numbers × 2 copies), no jokers."""
-    rack = [
-        Tile(color, n, copy_id)
-        for color in Color
-        for n in range(1, 14)
-        for copy_id in (0, 1)
-    ]
+    rack = [Tile(color, n, copy_id) for color in Color for n in range(1, 14) for copy_id in (0, 1)]
     return BoardState(board_sets=[], rack=rack)
 
 

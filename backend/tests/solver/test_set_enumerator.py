@@ -241,13 +241,11 @@ def test_two_jokers_generates_double_joker_variants() -> None:
         Tile.joker(copy_id=1),
     )
     sets = enumerate_valid_sets(state)
-    double_joker_templates = [
-        ts for ts in sets
-        if sum(1 for t in ts.tiles if t.is_joker) == 2
-    ]
+    double_joker_templates = [ts for ts in sets if sum(1 for t in ts.tiles if t.is_joker) == 2]
     assert len(double_joker_templates) > 0, "Expected at least one double-joker template"
     # All double-joker templates must pass the rule checker.
     from solver.validator.rule_checker import is_valid_set
+
     for ts in double_joker_templates:
         assert is_valid_set(ts), f"Invalid double-joker template: {ts!r}"
 
@@ -261,10 +259,7 @@ def test_one_joker_no_double_joker_variants() -> None:
         Tile.joker(copy_id=0),
     )
     sets = enumerate_valid_sets(state)
-    double_joker_templates = [
-        ts for ts in sets
-        if sum(1 for t in ts.tiles if t.is_joker) == 2
-    ]
+    double_joker_templates = [ts for ts in sets if sum(1 for t in ts.tiles if t.is_joker) == 2]
     assert double_joker_templates == [], "Expected no double-joker templates with only 1 joker"
 
 
@@ -281,7 +276,8 @@ def test_double_joker_group_variants() -> None:
     )
     sets = enumerate_valid_sets(state)
     dj_groups = [
-        ts for ts in sets
+        ts
+        for ts in sets
         if ts.type == SetType.GROUP and sum(1 for t in ts.tiles if t.is_joker) == 2
     ]
     assert len(dj_groups) > 0, "Expected at least one double-joker group template"

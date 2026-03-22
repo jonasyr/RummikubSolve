@@ -76,6 +76,4 @@ async def test_board_set_min_tiles_count(client: AsyncClient) -> None:
     r = await client.post("/api/puzzle", json={"difficulty": "hard", "seed": 7})
     assert r.status_code == 200
     for bs in r.json()["board_sets"]:
-        assert len(bs["tiles"]) >= 3, (
-            f"Board set has only {len(bs['tiles'])} tiles: {bs}"
-        )
+        assert len(bs["tiles"]) >= 3, f"Board set has only {len(bs['tiles'])} tiles: {bs}"
