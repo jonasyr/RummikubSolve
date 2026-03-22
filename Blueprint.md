@@ -1,5 +1,17 @@
 # Rummikub Solver — Complete Project Blueprint
 
+> **Documentation note (added v0.20.0):**
+> This document captures the *original design intent* for the project. Several sections now
+> diverge from the actual implementation — see `CHANGELOG.md` for what was built and when.
+> Known divergences:
+> - §4.2 solve timeout: Blueprint says 2 s; actual is 30 s (raised in v0.12.1).
+> - §4.2 mentions a `/validate` endpoint that was never built.
+> - §3.1 `output/` module: `solution_formatter.py`, `diff_calculator.py`, and `explanation.py`
+>   were deleted in v0.7.0; logic was inlined in `api/main.py`.
+> - §4.4 deployment: Blueprint describes Vercel + Fly.io; actual deployment is Docker +
+>   nginx on a home server (added in v0.14.0).
+> - §9.1 puzzle generator: described as future work; implemented in v0.18.0.
+
 -----
 
 ## 1. Problem Framing

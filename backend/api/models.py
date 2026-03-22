@@ -49,6 +49,9 @@ class RulesInput(BaseModel):
     initial_meld_threshold: int = 30
     is_first_turn: bool = False
     allow_wrap_runs: bool = False
+    # joker_retrieval is intentionally omitted from this API model until the
+    # ILP formulation implements it (see solver/config/rules.py TODO).
+    # Any extra field sent by clients is silently ignored by Pydantic.
 
 
 class SolveRequest(BaseModel):
@@ -63,14 +66,14 @@ class SolveRequest(BaseModel):
 
 
 class TileOutput(BaseModel):
-    color: str | None
+    color: Literal["blue", "red", "black", "yellow"] | None
     number: int | None
     joker: bool
     copy_id: int
 
 
 class BoardSetOutput(BaseModel):
-    type: str
+    type: Literal["run", "group"]
     tiles: list[TileOutput]
     new_tile_indices: list[int] = []  # 0-based positions of newly placed tiles
     is_unchanged: bool = False  # True when set is identical to an existing board set
@@ -83,7 +86,9 @@ class MoveOutput(BaseModel):
 
 
 class SolveResponse(BaseModel):
-    status: Literal["solved", "no_solution", "error"]
+    # "error" is intentionally absent: errors are raised as HTTPException (422/503)
+    # and never returned in the response body.
+    status: Literal["solved", "no_solution"]
     tiles_placed: int
     tiles_remaining: int
     solve_time_ms: float

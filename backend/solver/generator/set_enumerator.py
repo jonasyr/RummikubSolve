@@ -33,6 +33,14 @@ def enumerate_runs(state: BoardState) -> list[TileSet]:
     A run template is included only if at least one physical copy of each
     required (color, number) tile exists in state.all_tiles.
 
+    NOTE — allow_wrap_runs not implemented here:
+      This function always generates standard (non-wrap) runs (start 1–11).
+      Wrap-around templates like 12-13-1 are never produced, so the ILP
+      cannot find or place wrap runs even when rules.allow_wrap_runs=True.
+      The rule_checker.py validator does accept wrap runs when the flag is
+      set, but the solver will not discover them. To implement wrap-run
+      solving, pass the RulesConfig here and add a wrap-template loop.
+
     Args:
         state: The current board + rack state.
 
