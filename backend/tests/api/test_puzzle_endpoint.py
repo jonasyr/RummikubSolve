@@ -1,0 +1,79 @@
+"""FastAPI integration tests for POST /api/puzzle."""
+
+from __future__ import annotations
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from api.main import app
+
+
+@pytest.fixture
+async def client() -> AsyncClient:  # type: ignore[misc]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+
+
+async def test_easy_puzzle_200(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["difficulty"] == "easy"
+    assert len(data["rack"]) >= 2
+    assert len(data["board_sets"]) >= 2
+
+
+async def test_medium_puzzle_200(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 2})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["difficulty"] == "medium"
+    assert len(data["rack"]) >= 3
+    assert len(data["board_sets"]) >= 2
+
+
+async def test_hard_puzzle_200(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "hard", "seed": 3})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["difficulty"] == "hard"
+    assert len(data["rack"]) >= 6
+
+
+async def test_invalid_difficulty_422(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "extreme"})
+    assert r.status_code == 422
+
+
+async def test_response_fields_present(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 10})
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data["board_sets"], list)
+    assert isinstance(data["rack"], list)
+    assert isinstance(data["difficulty"], str)
+    assert isinstance(data["tile_count"], int)
+    assert data["tile_count"] == len(data["rack"])
+
+
+async def test_seeded_puzzle_is_deterministic(client: AsyncClient) -> None:
+    r1 = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 42})
+    r2 = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 42})
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json() == r2.json()
+
+
+async def test_default_difficulty_uses_medium(client: AsyncClient) -> None:
+    """POST with empty body should use the default difficulty of 'medium'."""
+    r = await client.post("/api/puzzle", json={})
+    assert r.status_code == 200
+    assert r.json()["difficulty"] == "medium"
+
+
+async def test_board_set_min_tiles_count(client: AsyncClient) -> None:
+    """Every board_set in the response must have at least 3 tiles (Rummikub minimum)."""
+    r = await client.post("/api/puzzle", json={"difficulty": "hard", "seed": 7})
+    assert r.status_code == 200
+    for bs in r.json()["board_sets"]:
+        assert len(bs["tiles"]) >= 3, f"Board set has only {len(bs['tiles'])} tiles: {bs}"

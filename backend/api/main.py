@@ -72,7 +72,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.16.0",
+    version="0.19.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -110,13 +110,20 @@ async def health() -> dict[str, str]:
 
 from solver.config.rules import RulesConfig  # noqa: E402
 from solver.engine.solver import solve as _run_solver  # noqa: E402
+from solver.generator.puzzle_generator import (  # noqa: E402
+    PuzzleGenerationError,
+    generate_puzzle,
+)
 from solver.models.board_state import BoardState  # noqa: E402
 from solver.models.tile import Color, Tile  # noqa: E402
 from solver.models.tileset import SetType, TileSet  # noqa: E402
 
 from .models import (  # noqa: E402  (import after app init is intentional)
+    BoardSetInput,
     BoardSetOutput,
     MoveOutput,
+    PuzzleRequest,
+    PuzzleResponse,
     SolveRequest,
     SolveResponse,
     TileInput,
@@ -261,4 +268,52 @@ def solve_endpoint(request: SolveRequest) -> SolveResponse:
             MoveOutput(action=m.action, description=m.description, set_index=m.set_index)
             for m in solution.moves
         ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# /api/puzzle
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/puzzle", response_model=PuzzleResponse, tags=["solver"])
+def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
+    """Generate a random, pre-verified Rummikub practice puzzle.
+
+    Returns a board state and a rack of tiles that can always be fully placed.
+    Difficulty controls how many tiles are in the rack and how complex the
+    required placement is.
+    """
+    logger.info("puzzle_request", difficulty=request.difficulty, seed=request.seed)
+
+    try:
+        result = generate_puzzle(difficulty=request.difficulty, seed=request.seed)
+    except PuzzleGenerationError as exc:
+        logger.warning("puzzle_generation_failed", error=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail="Could not generate a puzzle — please try again.",
+        ) from exc
+
+    def _tile_to_input(tile: Tile) -> TileInput:
+        if tile.is_joker:
+            return TileInput(joker=True)
+        if tile.color is None or tile.number is None:
+            raise ValueError(f"Non-joker tile has no color/number: {tile!r}")
+        return TileInput(color=tile.color.value, number=tile.number)
+
+    board_sets_input: list[BoardSetInput] = [
+        BoardSetInput(
+            type=ts.type.value,
+            tiles=[_tile_to_input(tile) for tile in ts.tiles],
+        )
+        for ts in result.board_sets
+    ]
+    rack_input: list[TileInput] = [_tile_to_input(tile) for tile in result.rack]
+
+    return PuzzleResponse(
+        board_sets=board_sets_input,
+        rack=rack_input,
+        difficulty=result.difficulty,
+        tile_count=len(result.rack),
     )

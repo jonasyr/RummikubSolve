@@ -94,18 +94,17 @@ def enumerate_groups(state: BoardState) -> list[TileSet]:
 def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
     """Return all valid set templates constructable from state.all_tiles.
 
-    Combines run and group templates, plus single-joker expansion variants
-    when at least one joker is available in the pool.
+    Combines run and group templates, plus joker expansion variants when
+    jokers are available in the pool.
 
-    Two types of joker variants are generated:
+    Three types of joker variants are generated:
       Type 1 — substitute: joker replaces an *available* tile in a base
         template, freeing that tile for use in another set.
       Type 2 — fill-missing: joker fills a slot whose non-joker tile is
         *absent* from the pool, enabling templates that could not otherwise
         be formed.
-
-    Only single-joker variants are generated; the ILP selects at most one
-    joker per template via tile conservation constraints.
+      Type 3 — double-substitute: two jokers replace any two tiles in a base
+        template. Only generated when at least 2 jokers are available.
 
     Args:
         state: The current board + rack state.
@@ -114,7 +113,7 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
         A list of TileSet objects — the candidate sets for the ILP.
         Typically 200–400 entries without jokers; up to ~2000 with jokers.
     """
-    base = enumerate_runs(state) + enumerate_groups(state)
+    base_templates = enumerate_runs(state) + enumerate_groups(state)
 
     # Count physical copies of each (color, number) tile in the pool.
     # Rummikub has 2 copies of every tile, so the board can contain two
@@ -128,7 +127,7 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
         if not t.is_joker and t.color is not None and t.number is not None
     )
     expanded: list[TileSet] = []
-    for tmpl in base:
+    for tmpl in base_templates:
         required = [
             (t.color, t.number)
             for t in tmpl.tiles
@@ -157,7 +156,9 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
     # added twice (e.g. when type 1 and type 2 would produce the same variant).
     seen_variants: set[tuple[Any, ...]] = set()
 
-    for tmpl in base:
+    # Iterate base_templates (not expanded) so we generate one variant per
+    # unique template shape, not per copy.
+    for tmpl in base_templates:
         for p in range(len(tmpl.tiles)):
             slot = tmpl.tiles[p]
             if slot.color is None or slot.number is None:
@@ -208,5 +209,65 @@ def enumerate_valid_sets(state: BoardState) -> list[TileSet]:
                 if fp2 not in seen_variants:
                     seen_variants.add(fp2)
                     variants.append(TileSet(type=SetType.GROUP, tiles=grp_tiles))
+
+    # Type 3: two jokers occupy any 2 positions in a run or group.
+    # Only generated when at least 2 jokers are available.
+    # Covers three sub-cases in a single direct enumeration pass:
+    #   (a) Both non-joker tiles are available — jokers free them for other sets.
+    #   (b) Both non-joker tiles are missing — jokers fill the absent slots.
+    #   (c) One tile is missing, one is available — one joker fills, one substitutes.
+    # Condition for inclusion: all remaining NON-joker positions must have
+    # at least one physical copy available in the pool.
+    if joker_count >= 2:
+        # Runs:
+        for color in Color:
+            for start in range(1, 12):
+                for end in range(start + 2, 14):
+                    run_keys = [(color, n) for n in range(start, end + 1)]
+                    rlen = len(run_keys)
+                    for p0, p1 in combinations(range(rlen), 2):
+                        joker_pos = {p0, p1}
+                        remaining = [
+                            (c, v) for i, (c, v) in enumerate(run_keys) if i not in joker_pos
+                        ]
+                        if not all(avail[(c, v)] >= 1 for c, v in remaining):
+                            continue
+                        run3_tiles: list[Tile] = [
+                            joker_ph if i in joker_pos else Tile(color=c, number=v, copy_id=0)
+                            for i, (c, v) in enumerate(run_keys)
+                        ]
+                        fp3 = (
+                            SetType.RUN,
+                            tuple((t.is_joker, t.color, t.number) for t in run3_tiles),
+                        )
+                        if fp3 not in seen_variants:
+                            seen_variants.add(fp3)
+                            variants.append(TileSet(type=SetType.RUN, tiles=run3_tiles))
+
+        # Groups:
+        colors_list = list(Color)
+        for number in range(1, 14):
+            for size in (3, 4):
+                for color_combo in combinations(colors_list, size):
+                    grp_keys = [(c, number) for c in color_combo]
+                    glen = len(grp_keys)
+                    for p0, p1 in combinations(range(glen), 2):
+                        joker_pos = {p0, p1}
+                        remaining = [
+                            (c, v) for i, (c, v) in enumerate(grp_keys) if i not in joker_pos
+                        ]
+                        if not all(avail[(c, v)] >= 1 for c, v in remaining):
+                            continue
+                        grp3_tiles: list[Tile] = [
+                            joker_ph if i in joker_pos else Tile(color=c, number=n, copy_id=0)
+                            for i, (c, n) in enumerate(grp_keys)
+                        ]
+                        fp3 = (
+                            SetType.GROUP,
+                            tuple((t.is_joker, t.color, t.number) for t in grp3_tiles),
+                        )
+                        if fp3 not in seen_variants:
+                            seen_variants.add(fp3)
+                            variants.append(TileSet(type=SetType.GROUP, tiles=grp3_tiles))
 
     return base + variants
