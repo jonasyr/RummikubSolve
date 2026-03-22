@@ -5,6 +5,38 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.17.0] — 2026-03-22 — Double-joker solver fix (Phase 6a)
+
+### Fixed — solver correctness
+
+- **Type-3 double-joker template generation** (`solver/generator/set_enumerator.py`):
+  `enumerate_valid_sets` now generates variants where 2 jokers occupy any 2 positions in a
+  run or group, when at least 2 physical jokers are available. Uses a direct enumeration
+  approach (like the existing Type-2 fill-missing) covering all sub-cases: both slots
+  available, both missing, or one of each. Enables sets like `[Joker, Red5, Joker]` (run
+  4-5-6 with both jokers) that were previously silently unreachable.
+
+- **Slot satisfaction fix for multi-joker templates** (`solver/engine/ilp_formulation.py`):
+  The slot-satisfaction loop previously added the constraint `Σ_jokers x[t][s] = y[s]` once
+  per joker slot, which is redundant for double-joker templates — one physical joker could
+  satisfy both copies and the template could activate with only 1 joker. Replaced with a
+  single combined constraint `Σ_jokers x[t][s] = (num_joker_slots) * y[s]` per template,
+  requiring exactly as many physical jokers as there are joker slots. Fully backward-
+  compatible: single-joker templates produce the same constraint as before (coefficient=1).
+
+### Tests
+
+- `test_two_jokers_from_rack_placed_in_one_set` — rack `[Joker, Red5, Joker]` → all 3 placed.
+- `test_two_jokers_on_board_preserved` — board `[Joker, Red5, Joker]`, empty rack → no crash,
+  board intact, solution valid.
+- `test_two_jokers_on_board_with_rack_tile_placed` — board has double-joker set + rack tile →
+  solver does not crash, solution passes verification.
+- `test_two_jokers_generates_double_joker_variants` — Type-3 templates generated when 2 jokers
+  in pool; all pass rule checker.
+- `test_one_joker_no_double_joker_variants` — no double-joker templates with only 1 joker.
+
+---
+
 ## [0.16.0] — 2026-03-22 — CI hardening & version sync (P2 session)
 
 ### Fixed

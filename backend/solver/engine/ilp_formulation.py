@@ -158,18 +158,42 @@ def build_ilp_model(
             highs.addRow(1.0, 1.0, 0, [], [])
 
     # Constraint 2 — Slot satisfaction.
-    # For each set s and each slot p:  Σ_{t ∈ candidates(s,p)} x[t][s] = y[s]
-    # Rearranged:  Σ x[t][s] - y[s] = 0
+    # For each non-joker slot p:    Σ_{t matching slot} x[t][s] = y[s]
+    # For all joker slots combined: Σ_{t ∈ jokers} x[t][s] = (joker_slot_count) * y[s]
+    #
+    # The combined joker constraint is critical for double-joker templates:
+    # if two slots both require a joker, both must be filled by distinct physical
+    # jokers when the template is active. Adding the constraint once per slot
+    # (redundantly) would allow one joker to satisfy both, which is incorrect.
     for s in range(n_sets):
-        for slot_cands in template_slot_candidates[s]:
-            x_col = [x_vars[(t_idx, s)] for t_idx in slot_cands if (t_idx, s) in x_vars]
-            if not x_col:
-                # No physical tile can fill this slot → force y[s] = 0.
-                highs.addRow(0.0, 0.0, 1, [y_vars[s]], [1.0])
-                continue
-            cols = x_col + [y_vars[s]]
-            cf = [1.0] * len(x_col) + [-1.0]
-            highs.addRow(0.0, 0.0, len(cols), cols, cf)
+        tmpl = candidate_sets[s]
+        joker_slot_count = sum(1 for t in tmpl.tiles if t.is_joker)
+        joker_constraint_added = False
+
+        for p, slot_cands in enumerate(template_slot_candidates[s]):
+            slot_is_joker = tmpl.tiles[p].is_joker
+
+            if slot_is_joker:
+                if joker_constraint_added:
+                    continue  # combined constraint already added for this template
+                # One constraint covering ALL joker slots: Σ_jokers x[t][s] = joker_slot_count * y[s]
+                x_col = [x_vars[(t_idx, s)] for t_idx in slot_cands if (t_idx, s) in x_vars]
+                if not x_col:
+                    highs.addRow(0.0, 0.0, 1, [y_vars[s]], [1.0])
+                else:
+                    cols = x_col + [y_vars[s]]
+                    cf = [1.0] * len(x_col) + [-float(joker_slot_count)]
+                    highs.addRow(0.0, 0.0, len(cols), cols, cf)
+                joker_constraint_added = True
+            else:
+                # Normal slot: Σ_{t matching slot} x[t][s] = y[s]
+                x_col = [x_vars[(t_idx, s)] for t_idx in slot_cands if (t_idx, s) in x_vars]
+                if not x_col:
+                    highs.addRow(0.0, 0.0, 1, [y_vars[s]], [1.0])
+                    continue
+                cols = x_col + [y_vars[s]]
+                cf = [1.0] * len(x_col) + [-1.0]
+                highs.addRow(0.0, 0.0, len(cols), cols, cf)
 
     # Constraint 3 — First-turn meld threshold (when rules.is_first_turn).
     # On the first turn, the player may not rearrange the board (handled by

@@ -220,3 +220,49 @@ def test_all_enumerated_sets_are_valid(full_tile_pool: BoardState) -> None:
 
     for ts in enumerate_valid_sets(full_tile_pool):
         assert is_valid_set(ts), f"Invalid template: {ts!r}"
+
+
+# ---------------------------------------------------------------------------
+# Double-joker (Type-3) variant generation
+# ---------------------------------------------------------------------------
+
+
+def test_two_jokers_generates_double_joker_variants() -> None:
+    """With 2 jokers in the pool, Type-3 double-joker templates are generated."""
+    # Pool: Red 4, Red 5, Red 6 + 2 jokers → base run [R4,R5,R6] exists.
+    # Type-3 variants should include [Joker,R5,Joker], [Joker,R4,Joker]? No —
+    # [Joker,R4,Joker] would need positions 0 and 2 from [R4,R5,R6] replaced:
+    # resulting in [Joker,R5,Joker]. Let's verify at least one double-joker template.
+    state = make_state(
+        Tile(Color.RED, 4, 0),
+        Tile(Color.RED, 5, 0),
+        Tile(Color.RED, 6, 0),
+        Tile.joker(copy_id=0),
+        Tile.joker(copy_id=1),
+    )
+    sets = enumerate_valid_sets(state)
+    double_joker_templates = [
+        ts for ts in sets
+        if sum(1 for t in ts.tiles if t.is_joker) == 2
+    ]
+    assert len(double_joker_templates) > 0, "Expected at least one double-joker template"
+    # All double-joker templates must pass the rule checker.
+    from solver.validator.rule_checker import is_valid_set
+    for ts in double_joker_templates:
+        assert is_valid_set(ts), f"Invalid double-joker template: {ts!r}"
+
+
+def test_one_joker_no_double_joker_variants() -> None:
+    """With only 1 joker in the pool, no double-joker templates are generated."""
+    state = make_state(
+        Tile(Color.RED, 4, 0),
+        Tile(Color.RED, 5, 0),
+        Tile(Color.RED, 6, 0),
+        Tile.joker(copy_id=0),
+    )
+    sets = enumerate_valid_sets(state)
+    double_joker_templates = [
+        ts for ts in sets
+        if sum(1 for t in ts.tiles if t.is_joker) == 2
+    ]
+    assert double_joker_templates == [], "Expected no double-joker templates with only 1 joker"
