@@ -78,7 +78,7 @@ export interface PuzzleResponse {
   tile_count: number;
 }
 
-export type SolveStatus = "solved" | "no_solution" | "error";
+export type SolveStatus = "solved" | "no_solution";
 
 export interface SolveResponse {
   status: SolveStatus;
