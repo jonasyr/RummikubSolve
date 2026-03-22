@@ -5,6 +5,24 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.16.0] — 2026-03-22 — CI hardening & version sync (P2 session)
+
+### Fixed
+- **Version sync**: bumped `backend/pyproject.toml` and `backend/api/main.py` from stale
+  `0.13.0` to `0.16.0`; updated version assertion in `tests/api/test_solve_endpoint.py`
+  to match.
+- **Docker healthcheck**: added `healthcheck:` directive to the `backend` service in
+  `docker-compose.yml` (`curl -f http://localhost:8000/health`, 10 s interval, 5 retries).
+  Without this, the `frontend` `depends_on: backend: condition: service_healthy` condition
+  caused `docker compose up` to hang indefinitely.
+
+### CI
+- **Vitest wired into frontend CI** (`.github/workflows/frontend.yml`): added
+  `npm run test` step after the build step so all 33 Vitest unit tests run on every push
+  and pull request to `main` or `claude/**` branches.
+
+---
+
 ## [0.15.0] — 2026-03-22 — Testing & quality improvements (P1 session)
 
 ### Testing — frontend
