@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useGameStore } from "../../store/game";
 import { solvePuzzle } from "../../lib/api";
@@ -30,6 +30,13 @@ export default function Home() {
 
   // Abort any in-flight request when a new solve is triggered.
   const abortRef = useRef<AbortController | null>(null);
+  const solutionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (solution && solutionRef.current) {
+      solutionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [solution]);
 
   async function handleSolve() {
     if (rack.length === 0) return;
@@ -124,9 +131,11 @@ export default function Home() {
 
       {/* Solution */}
       {solution && (
-        <TranslatedErrorBoundary>
-          <SolutionView solution={solution} />
-        </TranslatedErrorBoundary>
+        <div ref={solutionRef}>
+          <TranslatedErrorBoundary>
+            <SolutionView solution={solution} originalBoard={boardSets} />
+          </TranslatedErrorBoundary>
+        </div>
       )}
     </main>
   );

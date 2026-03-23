@@ -48,7 +48,7 @@ _RACK_SIZES: dict[str, tuple[int, int]] = {
     "easy": (2, 3),
     "medium": (3, 4),
     "hard": (4, 5),
-    "expert": (2, 6),  # wild — unpredictability is part of Expert
+    "expert": (4, 6),  # min raised from 2; Expert always forces meaningful placement
 }
 
 # Number of complete board sets sacrificed (removed entirely) per difficulty.
@@ -56,7 +56,7 @@ _SACRIFICE_COUNTS: dict[str, int] = {
     "easy": 1,
     "medium": 2,
     "hard": 3,
-    "expert": 4,
+    "expert": 5,  # was 4; one extra sacrifice drives more rearrangement
 }
 
 # Disruption band: (min_inclusive, max_inclusive).
@@ -68,7 +68,7 @@ _DISRUPTION_BANDS: dict[str, tuple[int, int | None]] = {
     "easy": (2, 10),
     "medium": (9, 18),
     "hard": (16, 28),
-    "expert": (26, None),
+    "expert": (29, None),  # was 26; strictly above Hard's ceiling (28); ~30% of candidates pass
 }
 
 # Board size range (number of sets, BEFORE sacrifice) per difficulty.
@@ -77,7 +77,7 @@ _BOARD_SIZES: dict[str, tuple[int, int]] = {
     "easy": (5, 9),
     "medium": (7, 11),
     "hard": (9, 13),
-    "expert": (11, 15),
+    "expert": (13, 18),  # was (11, 15); larger table = more disruption potential
 }
 
 # Max tile-sample attempts inside _extract_by_sacrifice before giving up

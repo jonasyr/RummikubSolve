@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { useGameStore } from "../store/game";
@@ -13,8 +13,19 @@ export default function PuzzleControls() {
   const [selected, setSelected] = useState<Difficulty>("medium");
   const [setsToRemove, setSetsToRemove] = useState(3);
   const isPuzzleLoading = useGameStore((s) => s.isPuzzleLoading);
+  const puzzleError = useGameStore((s) => s.error);
   const loadPuzzle = useGameStore((s) => s.loadPuzzle);
   const abortRef = useRef<AbortController | null>(null);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const wasLoadingRef = useRef(false);
+
+  useEffect(() => {
+    // Only collapse on successful load (not on error — user needs to see the error and retry).
+    if (wasLoadingRef.current && !isPuzzleLoading && !puzzleError) {
+      if (detailsRef.current) detailsRef.current.open = false;
+    }
+    wasLoadingRef.current = isPuzzleLoading;
+  }, [isPuzzleLoading, puzzleError]);
 
   function handleGetPuzzle() {
     // Cancel any still-in-flight request before starting a new one.
@@ -29,7 +40,7 @@ export default function PuzzleControls() {
   }
 
   return (
-    <details className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-sm">
+    <details ref={detailsRef} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-sm">
       <summary className="px-4 py-2 cursor-pointer font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 select-none list-none flex items-center gap-2">
         <span className="text-base">🎯</span> {t("title")}
       </summary>

@@ -85,6 +85,11 @@
     "moveCreate": "{count, plural, one {# neuer Satz} other {# neue Sätze}}",
     "moveExtend": "{count, plural, one {# Erweiterung} other {# Erweiterungen}}",
     "moveRearrange": "{count, plural, one {# Umstellung} other {# Umstellungen}}",
+    "stepOf": "Schritt {step} von {total}",
+    "prev": "Zurück",
+    "next": "Weiter",
+    "before": "Vorher",
+    "after": "Nachher",
     "badge": {
       "new": "NEU",
       "extended": "+",
@@ -111,7 +116,12 @@
       "rearrangeFrom": "Von Satz {n} nehmen und als {type} neu legen: {tiles}",
       "rearrange": "Als {type} neu legen: {tiles}",
       "rearrangeWith": "Umstellen mit {tiles}: {allTiles}"
-    }
+    },
+    "rackThisStep": "Hand-Steine",
+    "boardRearrangeOnly": "Brett-Umstellung — keine Hand-Steine in diesem Schritt",
+    "rackProgress": "Hand-Fortschritt",
+    "showUnchanged": "Alle {n} Sätze zeigen",
+    "hideUnchanged": "Unveränderte ausblenden"
   },
   "puzzle": {
     "title": "Übungsrätsel",
