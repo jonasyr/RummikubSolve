@@ -116,3 +116,4 @@ class PuzzleResponse(BaseModel):
     rack: list[TileInput]
     difficulty: str
     tile_count: int
+    disruption_score: int

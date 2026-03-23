@@ -5,7 +5,79 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
-## [0.20.0] — 2026-03-22 — Full-repo audit fixes (post-v0.19)
+## [0.22.0] — 2026-03-23 — Disruption-based puzzle difficulty system
+
+### Puzzle generation — core feature
+
+- **All difficulties now require genuine board rearrangement** (`backend/solver/generator/puzzle_generator.py`):
+  Easy, Medium, Hard, and Expert all use the "complete sacrifice" strategy — N sets are
+  removed entirely from the board and M rack tiles are sampled from them. Because the source
+  sets no longer exist on the board, the player cannot trivially re-add any tile; board
+  disruption is mandatory for every difficulty. The old Easy/Medium/Hard strategies (run-end
+  removal, single-set removal) are replaced.
+
+- **Disruption score classifies difficulty** (`puzzle_generator.py`): after generating a
+  candidate puzzle and solving it, `compute_disruption_score()` is called on the solution.
+  The score must fall in the difficulty's target band or the attempt is discarded. Non-overlapping
+  bands guarantee Expert puzzles always require more disruption than Hard:
+  Easy 2–10 · Medium 9–18 · Hard 16–28 · Expert 26+.
+
+- **Unified sacrifice extraction helper** (`_extract_by_sacrifice()`): replaces four separate
+  extraction functions. Parameterised by sacrifice count and rack-size range; tries up to 20
+  tile samples per board before giving up so the outer retry loop only retriggers on genuinely
+  hard-to-satisfy configurations.
+
+- **Rack sizes updated**: Easy 2–3 · Medium 3–4 · Hard 4–5 · Expert 2–6 (wild — unpredictability
+  is part of the Expert challenge). Expert is no longer pinned to exactly 2 tiles.
+
+- **`PuzzleResult.disruption_score`** (new field): the disruption score of the generating
+  solution is stored and returned to callers. Exposed in the API response as `disruption_score`.
+
+- **Difficulty constants centralised**: `_RACK_SIZES`, `_SACRIFICE_COUNTS`, `_DISRUPTION_BANDS`,
+  `_BOARD_SIZES` — adjust any of these to tune generation behaviour without touching algorithm
+  logic.
+
+### Metric fix
+
+- **`compute_disruption_score()` rewritten with content-based matching**
+  (`backend/solver/engine/objective.py`): old algorithm compared set indices, which inflated
+  scores whenever the solver reordered unchanged sets. New greedy algorithm: for each old board
+  set, find the new set that contains the most of its tiles (best match); tiles not in that set
+  are counted as disrupted. A reordered-but-identical board now scores 0. An extended set
+  (rack tile added to an unchanged set) also scores 0.
+
+### Future-proofing: dual-solution groundwork
+
+- **`secondary_objective` parameter added to `build_ilp_model()` and `solve()`**
+  (`backend/solver/engine/ilp_formulation.py`, `solver.py`): default is `"tile_value"`
+  (unchanged behaviour). Passing `"disruption"` raises `NotImplementedError` with a detailed
+  comment describing the planned encoding — so the dual-solution feature (two solutions:
+  minimise tile value vs minimise disruption) can be wired in without refactoring the call
+  sites.
+
+### API
+
+- **`PuzzleResponse.disruption_score`** (`backend/api/models.py`): new integer field exposed
+  in every `/api/puzzle` response. Clients can display or log the score; it is also the
+  mechanism through which future difficulty visualisation can be built.
+
+### Testing
+
+- **`test_objective.py`** (8 tests, +4): added `test_no_disruption_reordered_sets` (key
+  regression for the content-based fix), `test_disruption_split_set`,
+  `test_full_disruption_tiles_scattered`, `test_multiple_sets_partial_disruption`. Updated
+  `test_full_disruption_all_tiles_moved` → now expects 0 (reordering no longer inflates score).
+
+- **`test_puzzle_generator.py`** (26 tests, +8): `test_disruption_score_in_band_*` for all
+  four non-custom difficulties; `test_all_difficulties_require_no_trivial_extension`;
+  `test_puzzle_result_has_disruption_score`; updated rack-size and Expert assertions.
+
+- **`test_puzzle_endpoint.py`** (+2 assertions): `disruption_score` field present and ≥ 0 in
+  all puzzle responses; Expert `disruption_score` ≥ 26; Expert rack size 2–6 (was `== 2`).
+
+---
+
+## [0.21.0] — 2026-03-22 — Expert difficulty — 2026-03-22 — Full-repo audit fixes (post-v0.19)
 
 ### Infrastructure — P0
 

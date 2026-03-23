@@ -19,6 +19,7 @@ Blueprint §4.2 — Solver Engine:
 from __future__ import annotations
 
 import time
+from typing import Literal
 
 from ..config.rules import RulesConfig
 from ..generator.move_generator import generate_moves
@@ -30,7 +31,11 @@ from .ilp_formulation import build_ilp_model, extract_solution
 _SOLVE_TIMEOUT_SECONDS = 30.0
 
 
-def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
+def solve(
+    state: BoardState,
+    rules: RulesConfig | None = None,
+    secondary_objective: Literal["tile_value", "disruption"] = "tile_value",
+) -> Solution:
     """Solve a Rummikub board state optimally.
 
     Returns the Solution that places the maximum number of rack tiles.
@@ -38,8 +43,13 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
     returning. Raises ValueError if the board state is structurally invalid.
 
     Args:
-        state: The current board + rack state.
-        rules: Rule variant configuration. Uses defaults if None.
+        state:               The current board + rack state.
+        rules:               Rule variant configuration. Uses defaults if None.
+        secondary_objective: Tiebreaker when multiple solutions place the same
+                             number of tiles. "tile_value" (default) minimises
+                             remaining tile face value. "disruption" is reserved
+                             for the planned dual-solution feature and raises
+                             NotImplementedError until implemented in the ILP.
 
     Returns:
         A Solution — is_optimal=True if the solver proved optimality within
@@ -63,7 +73,7 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
     candidate_sets = enumerate_valid_sets(solve_state)
 
     # 2. Build the ILP model.
-    model = build_ilp_model(solve_state, candidate_sets, rules)
+    model = build_ilp_model(solve_state, candidate_sets, rules, secondary_objective)
 
     # 3. Set solver options and run.
     model.highs.setOptionValue("time_limit", _SOLVE_TIMEOUT_SECONDS)

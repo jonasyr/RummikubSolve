@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from solver.config.rules import RulesConfig
 from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
     PuzzleGenerationError,
     PuzzleResult,
+    _DISRUPTION_BANDS,  # type: ignore[attr-defined]
+    _RACK_SIZES,  # type: ignore[attr-defined]
     _any_trivial_extension,
     generate_puzzle,
 )
@@ -30,13 +31,13 @@ def test_easy_puzzle_generates() -> None:
 def test_medium_puzzle_generates() -> None:
     result = generate_puzzle(difficulty="medium", seed=2)
     assert result.difficulty == "medium"
-    assert len(result.rack) >= 3
+    assert 3 <= len(result.rack) <= 4
 
 
 def test_hard_puzzle_generates() -> None:
     result = generate_puzzle(difficulty="hard", seed=3)
     assert result.difficulty == "hard"
-    assert len(result.rack) >= 6
+    assert 4 <= len(result.rack) <= 5
 
 
 def test_custom_puzzle_generates() -> None:
@@ -62,7 +63,7 @@ def test_custom_puzzle_is_solvable() -> None:
 def test_expert_puzzle_generates() -> None:
     result = generate_puzzle(difficulty="expert", seed=20)
     assert result.difficulty == "expert"
-    assert len(result.rack) == 2
+    assert 2 <= len(result.rack) <= 6
 
 
 def test_expert_rack_has_no_trivial_extension() -> None:
@@ -81,25 +82,71 @@ def test_expert_puzzle_is_solvable() -> None:
     assert solution.tiles_placed == len(result.rack)
 
 
-def test_expert_puzzle_requires_board_interaction() -> None:
-    """2 rack tiles can never form a valid set → is_first_turn solve always places 0.
-
-    This is a mathematical guarantee: a valid set requires ≥3 tiles, so a
-    2-tile rack can never satisfy the first-turn rack-only constraint.
-    Board interaction is therefore mandatory for any expert puzzle.
-    """
-    result = generate_puzzle(difficulty="expert", seed=20)
-    state = BoardState(board_sets=result.board_sets, rack=result.rack)
-    first_turn_sol = solve(state, RulesConfig(is_first_turn=True))
-    assert first_turn_sol.tiles_placed == 0, (
-        f"Expected 0 tiles placed in rack-only mode, got {first_turn_sol.tiles_placed}"
-    )
-
-
 def test_expert_is_valid_difficulty() -> None:
     """'expert' must not raise ValueError (regression guard)."""
     result = generate_puzzle(difficulty="expert", seed=99)
     assert result.difficulty == "expert"
+
+
+# ---------------------------------------------------------------------------
+# Disruption score invariants
+# ---------------------------------------------------------------------------
+
+
+def test_puzzle_result_has_disruption_score() -> None:
+    """PuzzleResult always includes a disruption_score field."""
+    result = generate_puzzle(difficulty="medium", seed=1)
+    assert isinstance(result.disruption_score, int)
+    assert result.disruption_score >= 0
+
+
+def test_disruption_score_in_band_easy() -> None:
+    lo, hi = _DISRUPTION_BANDS["easy"]
+    for seed in range(3):
+        result = generate_puzzle(difficulty="easy", seed=seed)
+        score = result.disruption_score
+        assert score >= lo, f"Easy disruption {score} below floor {lo} (seed={seed})"
+        if hi is not None:
+            assert score <= hi, f"Easy disruption {score} above ceiling {hi} (seed={seed})"
+
+
+def test_disruption_score_in_band_medium() -> None:
+    lo, hi = _DISRUPTION_BANDS["medium"]
+    for seed in range(3):
+        result = generate_puzzle(difficulty="medium", seed=seed)
+        score = result.disruption_score
+        assert score >= lo, f"Medium disruption {score} below floor {lo} (seed={seed})"
+        if hi is not None:
+            assert score <= hi, f"Medium disruption {score} above ceiling {hi} (seed={seed})"
+
+
+def test_disruption_score_in_band_hard() -> None:
+    lo, hi = _DISRUPTION_BANDS["hard"]
+    for seed in range(3):
+        result = generate_puzzle(difficulty="hard", seed=seed)
+        score = result.disruption_score
+        assert score >= lo, f"Hard disruption {score} below floor {lo} (seed={seed})"
+        if hi is not None:
+            assert score <= hi, f"Hard disruption {score} above ceiling {hi} (seed={seed})"
+
+
+def test_disruption_score_in_band_expert() -> None:
+    lo, hi = _DISRUPTION_BANDS["expert"]
+    for seed in range(3):
+        result = generate_puzzle(difficulty="expert", seed=seed)
+        score = result.disruption_score
+        assert score >= lo, f"Expert disruption {score} below floor {lo} (seed={seed})"
+        if hi is not None:
+            assert score <= hi, f"Expert disruption {score} above ceiling {hi} (seed={seed})"
+
+
+def test_all_difficulties_require_no_trivial_extension() -> None:
+    """Every non-custom difficulty must reject trivially-extensible racks."""
+    for difficulty in ("easy", "medium", "hard", "expert"):
+        result = generate_puzzle(difficulty=difficulty, seed=42)  # type: ignore[arg-type]
+        assert not _any_trivial_extension(result.rack, result.board_sets), (
+            f"{difficulty} puzzle (seed=42) has a trivially-extensible rack tile"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -121,12 +168,13 @@ def test_puzzle_is_fully_solvable() -> None:
 
 
 def test_rack_minimum_size() -> None:
-    min_rack = {"easy": 2, "medium": 3, "hard": 6}
+    """Rack size stays within the configured range for each difficulty."""
+    rack_ranges = {"easy": (2, 3), "medium": (3, 4), "hard": (4, 5)}
     for seed in range(5):
-        for difficulty in ("easy", "medium", "hard"):
+        for difficulty, (lo, hi) in rack_ranges.items():
             result = generate_puzzle(difficulty=difficulty, seed=seed)  # type: ignore[arg-type]
-            assert len(result.rack) >= min_rack[difficulty], (
-                f"Rack too small for {difficulty} (seed={seed}): got {len(result.rack)}"
+            assert lo <= len(result.rack) <= hi, (
+                f"Rack size out of range for {difficulty} (seed={seed}): got {len(result.rack)}"
             )
 
 
@@ -149,7 +197,6 @@ def test_seeded_puzzle_is_deterministic() -> None:
     a = generate_puzzle(difficulty="medium", seed=42)
     b = generate_puzzle(difficulty="medium", seed=42)
 
-    # Compare board_sets and rack by tile keys.
     def tiles_key(ts_list: list) -> list:  # type: ignore[type-arg]
         return [[(t.color, t.number, t.copy_id) for t in ts.tiles] for ts in ts_list]
 

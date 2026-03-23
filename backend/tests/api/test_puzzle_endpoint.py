@@ -37,7 +37,7 @@ async def test_hard_puzzle_200(client: AsyncClient) -> None:
     assert r.status_code == 200
     data = r.json()
     assert data["difficulty"] == "hard"
-    assert len(data["rack"]) >= 6
+    assert 4 <= len(data["rack"]) <= 5
 
 
 async def test_invalid_difficulty_422(client: AsyncClient) -> None:
@@ -54,6 +54,8 @@ async def test_response_fields_present(client: AsyncClient) -> None:
     assert isinstance(data["difficulty"], str)
     assert isinstance(data["tile_count"], int)
     assert data["tile_count"] == len(data["rack"])
+    assert isinstance(data["disruption_score"], int)
+    assert data["disruption_score"] >= 0
 
 
 async def test_seeded_puzzle_is_deterministic(client: AsyncClient) -> None:
@@ -106,5 +108,6 @@ async def test_expert_puzzle_200(client: AsyncClient) -> None:
     assert r.status_code == 200
     data = r.json()
     assert data["difficulty"] == "expert"
-    assert len(data["rack"]) == 2
+    assert 2 <= len(data["rack"]) <= 6
     assert len(data["board_sets"]) >= 2
+    assert data["disruption_score"] >= 26  # Expert floor

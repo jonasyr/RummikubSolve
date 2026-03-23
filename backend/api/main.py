@@ -325,4 +325,5 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
         rack=rack_input,
         difficulty=result.difficulty,
         tile_count=len(result.rack),
+        disruption_score=result.disruption_score,
     )

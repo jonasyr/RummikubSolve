@@ -4,15 +4,22 @@ Blueprint §9.1 — Puzzle Generation:
   Generate a random valid board, remove a subset of tiles to form the
   rack, solve to verify the rack can be placed, and classify difficulty.
 
-Difficulty is defined by rack size and the kind of placement needed:
-  easy:   2–3 tiles, all from run ends (simple extensions)
-  medium: 3–6 tiles, from one complete set (player must recreate a set)
-  hard:   6–12 tiles, from two complete sets (player must create multiple sets)
-  expert: 2 tiles from different board sets, no trivial placement exists —
-          player must rearrange the board to find any valid placement
+All non-custom difficulties use the "complete sacrifice" strategy:
+  N sets are removed entirely from the board. M tiles sampled from the
+  removed sets become the rack. Because the source sets no longer exist
+  on the board, the player must genuinely rearrange the remaining board
+  to place any rack tile — trivial extensions are explicitly rejected.
 
-Solvability is guaranteed by construction (all extracted tiles can be
-re-placed by the solver). Joker-free in v1.
+Difficulty is controlled by three levers:
+  1. Number of sacrificed sets  → how many "homes" disappear
+  2. Rack size                  → how many tiles need placing
+  3. Disruption band            → minimum board rearrangement required
+
+Disruption score (compute_disruption_score) measures how many board tiles
+were moved to a different set group in the solver's solution. A higher
+score means more rearrangement was required — a harder puzzle.
+
+Solvability is guaranteed by construction. Joker-free in v1.
 """
 
 from __future__ import annotations
@@ -22,6 +29,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Literal
 
+from ..engine.objective import compute_disruption_score
 from ..engine.solver import solve
 from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
@@ -30,6 +38,51 @@ from ..validator.rule_checker import is_valid_set
 from .set_enumerator import enumerate_groups, enumerate_runs
 
 Difficulty = Literal["easy", "medium", "hard", "expert", "custom"]
+
+# ---------------------------------------------------------------------------
+# Difficulty configuration constants
+# ---------------------------------------------------------------------------
+
+# Rack size range (min, max) tiles per difficulty.
+_RACK_SIZES: dict[str, tuple[int, int]] = {
+    "easy": (2, 3),
+    "medium": (3, 4),
+    "hard": (4, 5),
+    "expert": (2, 6),  # wild — unpredictability is part of Expert
+}
+
+# Number of complete board sets sacrificed (removed entirely) per difficulty.
+_SACRIFICE_COUNTS: dict[str, int] = {
+    "easy": 1,
+    "medium": 2,
+    "hard": 3,
+    "expert": 4,
+}
+
+# Disruption band: (min_inclusive, max_inclusive).
+# None as max means no upper bound.
+# Bands are non-overlapping to guarantee Expert > Hard > Medium > Easy.
+# These are calibrated for the content-based compute_disruption_score metric.
+# Adjust after running empirical samples if generation rate is too low.
+_DISRUPTION_BANDS: dict[str, tuple[int, int | None]] = {
+    "easy": (2, 10),
+    "medium": (9, 18),
+    "hard": (16, 28),
+    "expert": (26, None),
+}
+
+# Board size range (number of sets, BEFORE sacrifice) per difficulty.
+# Larger boards give the sacrifice strategy more candidates to work with.
+_BOARD_SIZES: dict[str, tuple[int, int]] = {
+    "easy": (5, 9),
+    "medium": (7, 11),
+    "hard": (9, 13),
+    "expert": (11, 15),
+}
+
+# Max tile-sample attempts inside _extract_by_sacrifice before giving up
+# on a board and letting the outer loop retry with a fresh board.
+_MAX_SAMPLE_ATTEMPTS = 20
 
 
 class PuzzleGenerationError(Exception):
@@ -41,6 +94,7 @@ class PuzzleResult:
     board_sets: list[TileSet]
     rack: list[Tile]
     difficulty: Difficulty
+    disruption_score: int
 
 
 def generate_puzzle(
@@ -52,14 +106,15 @@ def generate_puzzle(
     """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
 
     Args:
-        difficulty:    "easy", "medium", "hard", or "custom".
+        difficulty:    "easy", "medium", "hard", "expert", or "custom".
         seed:          Optional RNG seed for reproducible puzzles.
         max_attempts:  How many boards to try before giving up.
         sets_to_remove: Number of complete sets to remove (only used when
                         difficulty == "custom"; valid range 1–5).
 
     Returns:
-        A PuzzleResult whose rack the solver can fully place.
+        A PuzzleResult whose rack the solver can fully place, with a
+        disruption_score in the target band for the given difficulty.
 
     Raises:
         ValueError:             If difficulty is not a known value.
@@ -94,16 +149,14 @@ def _attempt_generate(
     all_sets = enumerate_runs(full_pool) + enumerate_groups(full_pool)
     rng.shuffle(all_sets)
 
-    # Scale the board target for difficulties that need more sets to work with.
+    # Scale the board target per difficulty so there are enough sets to sacrifice.
     if difficulty == "custom":
         lo = max(5, sets_to_remove + 4)
         hi = max(9, sets_to_remove + 7)
-        n_target = rng.randint(lo, hi)
-    elif difficulty == "expert":
-        # Larger board gives more candidate sets for the extraction pairing search.
-        n_target = rng.randint(8, 12)
     else:
-        n_target = rng.randint(5, 9)
+        lo, hi = _BOARD_SIZES[difficulty]
+    n_target = rng.randint(lo, hi)
+
     board_sets = _pick_compatible_sets(all_sets, n_target)
     if len(board_sets) < 3:
         return None
@@ -120,7 +173,21 @@ def _attempt_generate(
     if solution.tiles_placed < len(rack):
         return None
 
-    return PuzzleResult(board_sets=input_board, rack=rack, difficulty=difficulty)
+    # Compute disruption score and validate against the difficulty band.
+    score = compute_disruption_score(input_board, solution.new_sets)
+    if difficulty != "custom":
+        lo_d, hi_d = _DISRUPTION_BANDS[difficulty]
+        if score < lo_d:
+            return None
+        if hi_d is not None and score > hi_d:
+            return None
+
+    return PuzzleResult(
+        board_sets=input_board,
+        rack=rack,
+        difficulty=difficulty,
+        disruption_score=score,
+    )
 
 
 def _make_full_pool() -> BoardState:
@@ -176,140 +243,72 @@ def _extract_rack(
     rng: random.Random,
     sets_to_remove: int = 3,
 ) -> tuple[list[TileSet], list[Tile]]:
-    if difficulty == "easy":
-        return _extract_easy(board_sets, rng)
-    if difficulty == "medium":
-        return _extract_medium(board_sets, rng)
-    if difficulty == "expert":
-        return _extract_expert(board_sets, rng)
     if difficulty == "custom":
         return _extract_custom(board_sets, rng, sets_to_remove)
-    return _extract_hard(board_sets, rng)
+    n_sacrifice = _SACRIFICE_COUNTS[difficulty]
+    rack_size_range = _RACK_SIZES[difficulty]
+    return _extract_by_sacrifice(board_sets, rng, n_sacrifice, rack_size_range)
 
 
-def _extract_easy(
-    board_sets: list[TileSet], rng: random.Random
+def _extract_by_sacrifice(
+    board_sets: list[TileSet],
+    rng: random.Random,
+    num_sacrifice: int,
+    rack_size_range: tuple[int, int],
 ) -> tuple[list[TileSet], list[Tile]]:
-    """Remove 2–3 tiles from the ends of long runs (≥ 5 tiles).
+    """Sacrifice num_sacrifice complete sets; sample rack tiles from them.
 
-    Remaining run is always ≥ 3 tiles valid. Rack tiles are trivially
-    placeable by extending the shortened run.
+    Selects num_sacrifice sets to remove entirely from the board. Those sets'
+    tiles are the candidate pool; rack_size tiles are sampled from them.
+    Because the source sets no longer appear on the board, the player cannot
+    trivially re-add any rack tile — they must rearrange the remaining board.
+
+    Tries up to _MAX_SAMPLE_ATTEMPTS different tile samples per board before
+    returning failure (the outer loop will then retry with a fresh board).
+
+    Args:
+        board_sets:       Current board before extraction.
+        rng:              Seeded random instance.
+        num_sacrifice:    Number of sets to remove entirely.
+        rack_size_range:  (min, max) rack tile count.
+
+    Returns:
+        (remaining_board, rack) on success, or (board_sets, []) on failure.
     """
-    # Only long runs (≥ 5) so we can safely remove 2 end tiles and keep ≥ 3.
-    long_runs = [
-        i for i, ts in enumerate(board_sets) if ts.type == SetType.RUN and len(ts.tiles) >= 5
-    ]
-    if not long_runs:
-        # Fallback: runs ≥ 4 so we can remove 1 tile and keep ≥ 3.
-        long_runs = [
-            i for i, ts in enumerate(board_sets) if ts.type == SetType.RUN and len(ts.tiles) >= 4
-        ]
-    if not long_runs:
+    if len(board_sets) < num_sacrifice + 2:
         return board_sets, []
 
-    board = list(board_sets)
-    rack: list[Tile] = []
-    n_to_remove = rng.randint(2, min(3, len(long_runs) * 2))
+    # Pick which sets to sacrifice (try a random selection).
+    sacrifice_indices = set(rng.sample(range(len(board_sets)), num_sacrifice))
+    remaining = [ts for i, ts in enumerate(board_sets) if i not in sacrifice_indices]
+    sacrifice_tiles = [t for i, ts in enumerate(board_sets) if i in sacrifice_indices for t in ts.tiles]
 
-    for _ in range(n_to_remove):
-        eligible = [i for i in long_runs if len(board[i].tiles) >= 4]
-        if not eligible:
-            break
-        idx = rng.choice(eligible)
-        # Remove from start or end (whichever keeps the run valid ≥ 3).
-        if rng.random() < 0.5:
-            rack.append(board[idx].tiles[0])
-            board[idx] = TileSet(type=SetType.RUN, tiles=list(board[idx].tiles[1:]))
-        else:
-            rack.append(board[idx].tiles[-1])
-            board[idx] = TileSet(type=SetType.RUN, tiles=list(board[idx].tiles[:-1]))
-
-    return board, rack
-
-
-def _extract_medium(
-    board_sets: list[TileSet], rng: random.Random
-) -> tuple[list[TileSet], list[Tile]]:
-    """Remove 1 complete set (3–5 tiles). Rack = all its tiles."""
-    if not board_sets:
+    rack_min, rack_max = rack_size_range
+    rack_size = rng.randint(rack_min, min(rack_max, len(sacrifice_tiles)))
+    if rack_size < 2:
         return board_sets, []
-    idx = rng.randrange(len(board_sets))
-    rack = list(board_sets[idx].tiles)
-    remaining = [ts for i, ts in enumerate(board_sets) if i != idx]
-    if len(remaining) < 2:
-        return board_sets, []
-    return remaining, rack
 
+    # Try multiple tile samples until we find one with no trivial extension.
+    for _ in range(_MAX_SAMPLE_ATTEMPTS):
+        rack = rng.sample(sacrifice_tiles, rack_size)
+        if not _any_trivial_extension(rack, remaining):
+            return remaining, rack
 
-def _extract_hard(
-    board_sets: list[TileSet], rng: random.Random
-) -> tuple[list[TileSet], list[Tile]]:
-    """Remove 2 complete sets. Rack = all tiles from both sets."""
-    if len(board_sets) < 4:
-        return board_sets, []
-    indices = set(rng.sample(range(len(board_sets)), 2))
-    rack = [t for i, ts in enumerate(board_sets) if i in indices for t in ts.tiles]
-    remaining = [ts for i, ts in enumerate(board_sets) if i not in indices]
-    return remaining, rack
+    return board_sets, []  # no valid sample found; caller retries with new board
 
 
 def _any_trivial_extension(rack: list[Tile], board_sets: list[TileSet]) -> bool:
     """Return True if any rack tile can be directly appended to any board set.
 
     Uses the same rule_checker as the solver, so the check is authoritative.
-    A puzzle is disqualified as "expert" if this returns True — the player
-    would have an obvious move without needing to rearrange anything.
+    A puzzle is rejected if this returns True — the player would have an
+    obvious move without needing to rearrange anything.
     """
     for tile in rack:
         for ts in board_sets:
             if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
                 return True
     return False
-
-
-def _extract_expert(
-    board_sets: list[TileSet], rng: random.Random
-) -> tuple[list[TileSet], list[Tile]]:
-    """Extract 2 rack tiles by completely sacrificing 2 board sets.
-
-    Selects 2 "sacrifice" sets S1 and S2, picks 1 tile from each as a rack
-    tile, then drops S1 and S2 entirely from the board (their remaining tiles
-    go to the bag — unused in the puzzle). The player's board only contains
-    the other sets.
-
-    Why "complete sacrifice" instead of "shorten a set":
-        If we merely removed a tile from the end of a run, the shortened run
-        would still accept that tile back as a trivial extension. By removing
-        the source set entirely, there is no "obvious home" left on the board.
-        The tile can only be placed by rearranging other board sets, which is
-        the hallmark of expert-level Rummikub play.
-
-    Tries all set-pairs shuffled randomly; returns the first pair where
-    neither rack tile can be directly appended to any remaining board set.
-    Requires ≥ 4 board sets (2 to sacrifice, ≥ 2 left on the board).
-    """
-    if len(board_sets) < 4:
-        return board_sets, []
-
-    n = len(board_sets)
-    pair_indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
-    rng.shuffle(pair_indices)
-
-    for idx_a, idx_b in pair_indices:
-        # Board = all sets except the two sacrificed ones.
-        remaining_board = [ts for k, ts in enumerate(board_sets) if k != idx_a and k != idx_b]
-        if len(remaining_board) < 2:
-            continue
-
-        # Pick one tile at random from each sacrifice set.
-        tile_a = rng.choice(board_sets[idx_a].tiles)
-        tile_b = rng.choice(board_sets[idx_b].tiles)
-        rack = [tile_a, tile_b]
-
-        if not _any_trivial_extension(rack, remaining_board):
-            return remaining_board, rack
-
-    return board_sets, []  # no valid pair found; _attempt_generate will retry
 
 
 def _extract_custom(

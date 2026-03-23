@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from ..config.rules import RulesConfig
 from ..models.board_state import BoardState
@@ -54,18 +54,35 @@ def build_ilp_model(
     state: BoardState,
     candidate_sets: list[TileSet],
     rules: RulesConfig,
+    secondary_objective: Literal["tile_value", "disruption"] = "tile_value",
 ) -> ILPModel:
     """Build and configure the HiGHS ILP model.
 
     Args:
-        state:          Current board + rack state.
-        candidate_sets: Pre-enumerated valid set templates (from set_enumerator).
-        rules:          Rule variant configuration.
+        state:               Current board + rack state.
+        candidate_sets:      Pre-enumerated valid set templates (from set_enumerator).
+        rules:               Rule variant configuration.
+        secondary_objective: Tiebreaker among equal-placement solutions.
+                             "tile_value" (default) minimises the face value of
+                             tiles left in hand. "disruption" is reserved for the
+                             planned dual-solution feature (see objective.py) and
+                             raises NotImplementedError until implemented.
 
     Returns:
         An ILPModel wrapping a configured highspy.Highs instance.
         Call model.highs.run() to solve, then extract_solution(model) for results.
     """
+    if secondary_objective == "disruption":
+        raise NotImplementedError(
+            "secondary_objective='disruption' is not yet implemented in the ILP. "
+            "Planned encoding: for each board tile t originally in set B_i, find "
+            "the candidate set index c_i whose tiles exactly match B_i, then add a "
+            "small cost (1.0 / (n_board_tiles * BIG_M2)) to x_vars[(t_idx, s)] for "
+            "every s != c_i. This ensures the ILP prefers solutions that leave "
+            "unchanged sets intact. When implemented, call solve() with "
+            "secondary_objective='disruption' to get the minimum-disruption solution "
+            "for the dual-solution feature."
+        )
     import highspy
 
     highs = highspy.Highs()
