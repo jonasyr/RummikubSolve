@@ -159,9 +159,12 @@ export default function SolutionView({ solution, originalBoard }: Props) {
       {/* ── Step-by-step navigator (shown first so it's always visible) ── */}
       {totalSteps > 0 && currentMove && currentChangedSet && (
         <div className="space-y-3">
-          {/* Header row: step counter + prev/next */}
+          {/* Section heading + step counter + prev/next */}
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-semibold">
+            {t("moveInstructions")}
+          </p>
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-semibold">
+            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               {t("stepOf", { step: step + 1, total: totalSteps })}
             </p>
             <div className="flex gap-1">

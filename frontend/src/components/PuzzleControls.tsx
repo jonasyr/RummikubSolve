@@ -13,17 +13,19 @@ export default function PuzzleControls() {
   const [selected, setSelected] = useState<Difficulty>("medium");
   const [setsToRemove, setSetsToRemove] = useState(3);
   const isPuzzleLoading = useGameStore((s) => s.isPuzzleLoading);
+  const puzzleError = useGameStore((s) => s.error);
   const loadPuzzle = useGameStore((s) => s.loadPuzzle);
   const abortRef = useRef<AbortController | null>(null);
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const wasLoadingRef = useRef(false);
 
   useEffect(() => {
-    if (wasLoadingRef.current && !isPuzzleLoading) {
+    // Only collapse on successful load (not on error — user needs to see the error and retry).
+    if (wasLoadingRef.current && !isPuzzleLoading && !puzzleError) {
       if (detailsRef.current) detailsRef.current.open = false;
     }
     wasLoadingRef.current = isPuzzleLoading;
-  }, [isPuzzleLoading]);
+  }, [isPuzzleLoading, puzzleError]);
 
   function handleGetPuzzle() {
     // Cancel any still-in-flight request before starting a new one.
