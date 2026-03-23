@@ -35,7 +35,7 @@ jobs:
         run: ruff check . --fix
 
       - name: Format check and fix (ruff)
-        run: ruff format . --fix
+        run: ruff format .
 
       - name: Type check (mypy)
         run: mypy solver/ api/
