@@ -5,6 +5,51 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.23.0] — 2026-03-23 — SolutionView UX refinement & navigation improvements
+
+### Frontend — SolutionView restructure (`frontend/src/components/SolutionView.tsx`)
+
+- **Step navigator moved above board list**: the Prev/Next buttons, Before→After panel,
+  and progress dots now render immediately below the summary bar — no scrolling required
+  to reach the tutorial controls, even on Expert puzzles with 13-18 board sets.
+
+- **"Rack tiles this step" row added to Before→After panel**: each step card now shows
+  a labelled row with the exact rack tiles being placed in that step (highlighted in yellow).
+  For pure board-rearrangement steps (no rack tiles), an italic fallback message is shown
+  ("Board rearrangement — no rack tiles this step").
+
+- **Rack progress tracker**: a mini strip below the Before→After panel displays every rack
+  tile placed across all steps. Tiles from already-completed steps are dimmed (`opacity-40`),
+  the current step's tiles are highlighted with a yellow ring, future-step tiles are slightly
+  faded (`opacity-60`), and unplaced tiles (remaining_rack) appear at the end without a ring.
+  The tracker is only rendered when there are tiles to show.
+
+- **Unchanged sets collapsed by default**: the board overview now hides unchanged (gray)
+  sets by default, reducing visual clutter on complex boards. A toggle link ("Show all N sets" /
+  "Hide unchanged") lets the user expand them. State resets to collapsed on each new solution.
+  The step-highlight logic is preserved because the filter runs after index-mapping
+  (`.map((set, si) => ({ set, si })).filter(…).map(({ set, si }) => …)`), keeping `si`
+  aligned to the original `new_board` indices.
+
+### Frontend — Auto-scroll to solution (`frontend/src/app/[locale]/page.tsx`)
+
+- **Smooth scroll on solve**: after a successful solve, the page automatically scrolls to
+  the solution section (`scrollIntoView({ behavior: "smooth", block: "start" })`). Users
+  no longer have to manually scroll past the entire board input to find the result.
+
+### Frontend — PuzzleControls auto-close (`frontend/src/components/PuzzleControls.tsx`)
+
+- **Panel collapses after puzzle loads**: the `<details>` element is programmatically closed
+  when `isPuzzleLoading` transitions from `true` to `false`, reclaiming screen space after
+  a puzzle is loaded. A `wasLoadingRef` guard prevents premature closing on initial page render.
+
+### Frontend — Translations (`frontend/src/i18n/messages/en.json`, `de.json`)
+
+- Added 5 new keys under `"solution"`: `rackThisStep`, `boardRearrangeOnly`, `rackProgress`,
+  `showUnchanged`, `hideUnchanged` — both English and German.
+
+---
+
 ## [0.22.0] — 2026-03-23 — Disruption-based puzzle difficulty system
 
 ### Puzzle generation — core feature

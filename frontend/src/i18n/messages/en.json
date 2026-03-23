@@ -116,7 +116,12 @@
       "rearrangeFrom": "Take from set {n}, reform as {type}: {tiles}",
       "rearrange": "Reform as {type}: {tiles}",
       "rearrangeWith": "Rearrange with {tiles}: {allTiles}"
-    }
+    },
+    "rackThisStep": "Rack tiles",
+    "boardRearrangeOnly": "Board rearrangement — no rack tiles this step",
+    "rackProgress": "Rack progress",
+    "showUnchanged": "Show all {n} sets",
+    "hideUnchanged": "Hide unchanged"
   },
   "puzzle": {
     "title": "Practice Puzzle",
