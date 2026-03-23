@@ -80,7 +80,9 @@ async def test_board_set_min_tiles_count(client: AsyncClient) -> None:
 
 
 async def test_custom_puzzle_200(client: AsyncClient) -> None:
-    r = await client.post("/api/puzzle", json={"difficulty": "custom", "seed": 4, "sets_to_remove": 3})
+    r = await client.post(
+        "/api/puzzle", json={"difficulty": "custom", "seed": 4, "sets_to_remove": 3}
+    )
     assert r.status_code == 200
     data = r.json()
     assert data["difficulty"] == "custom"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from solver.config.rules import RulesConfig
 from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
     PuzzleGenerationError,
@@ -12,7 +13,6 @@ from solver.generator.puzzle_generator import (
     generate_puzzle,
 )
 from solver.models.board_state import BoardState
-from solver.config.rules import RulesConfig
 from solver.validator.rule_checker import is_valid_set
 
 # ---------------------------------------------------------------------------

@@ -297,9 +297,7 @@ def _extract_expert(
 
     for idx_a, idx_b in pair_indices:
         # Board = all sets except the two sacrificed ones.
-        remaining_board = [
-            ts for k, ts in enumerate(board_sets) if k != idx_a and k != idx_b
-        ]
+        remaining_board = [ts for k, ts in enumerate(board_sets) if k != idx_a and k != idx_b]
         if len(remaining_board) < 2:
             continue
 
