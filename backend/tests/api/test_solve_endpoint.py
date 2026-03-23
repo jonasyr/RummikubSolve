@@ -22,7 +22,7 @@ async def test_health(client: AsyncClient) -> None:
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "ok"
-    assert data["version"] == "0.19.0"
+    assert data["version"] == "0.20.0"
 
 
 async def test_solve_valid_run(client: AsyncClient) -> None:
@@ -338,3 +338,20 @@ async def test_joker_with_number_returns_422(client: AsyncClient) -> None:
 
     # Assert
     assert r.status_code == 422
+
+
+async def test_empty_rack_returns_no_solution(client: AsyncClient) -> None:
+    """An empty rack is a valid request that returns no_solution with 0 tiles placed.
+
+    SolveRequest.rack has no min_length, so an empty rack is schema-valid.
+    The frontend guards against this (disables Solve when rack is empty), but
+    the API must handle it gracefully.
+    """
+    r = await client.post("/api/solve", json={"board": [], "rack": []})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "no_solution"
+    assert data["tiles_placed"] == 0
+    assert data["tiles_remaining"] == 0
+    assert data["new_board"] == []
+    assert data["remaining_rack"] == []

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from solver.config.rules import RulesConfig
 from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
     PuzzleGenerationError,
     PuzzleResult,
+    _any_trivial_extension,
     generate_puzzle,
 )
 from solver.models.board_state import BoardState
@@ -35,6 +37,69 @@ def test_hard_puzzle_generates() -> None:
     result = generate_puzzle(difficulty="hard", seed=3)
     assert result.difficulty == "hard"
     assert len(result.rack) >= 6
+
+
+def test_custom_puzzle_generates() -> None:
+    result = generate_puzzle(difficulty="custom", seed=4, sets_to_remove=3)
+    assert result.difficulty == "custom"
+    # 3 complete sets removed → at least 3 × 3 = 9 tiles.
+    assert len(result.rack) >= 9
+
+
+def test_custom_puzzle_scales_with_sets_removed() -> None:
+    result = generate_puzzle(difficulty="custom", seed=7, sets_to_remove=4)
+    # 4 complete sets removed → at least 4 × 3 = 12 tiles.
+    assert len(result.rack) >= 12
+
+
+def test_custom_puzzle_is_solvable() -> None:
+    result = generate_puzzle(difficulty="custom", seed=10, sets_to_remove=3)
+    state = BoardState(board_sets=result.board_sets, rack=result.rack)
+    solution = solve(state)
+    assert solution.tiles_placed == len(result.rack)
+
+
+def test_expert_puzzle_generates() -> None:
+    result = generate_puzzle(difficulty="expert", seed=20)
+    assert result.difficulty == "expert"
+    assert len(result.rack) == 2
+
+
+def test_expert_rack_has_no_trivial_extension() -> None:
+    """Neither rack tile can be directly appended to any remaining board set."""
+    result = generate_puzzle(difficulty="expert", seed=20)
+    assert not _any_trivial_extension(result.rack, result.board_sets), (
+        "Expert puzzle has a trivially-extensible tile — board disruption is not required"
+    )
+
+
+def test_expert_puzzle_is_solvable() -> None:
+    """Full solve must place all rack tiles (requiring board rearrangement)."""
+    result = generate_puzzle(difficulty="expert", seed=20)
+    state = BoardState(board_sets=result.board_sets, rack=result.rack)
+    solution = solve(state)
+    assert solution.tiles_placed == len(result.rack)
+
+
+def test_expert_puzzle_requires_board_interaction() -> None:
+    """2 rack tiles can never form a valid set → is_first_turn solve always places 0.
+
+    This is a mathematical guarantee: a valid set requires ≥3 tiles, so a
+    2-tile rack can never satisfy the first-turn rack-only constraint.
+    Board interaction is therefore mandatory for any expert puzzle.
+    """
+    result = generate_puzzle(difficulty="expert", seed=20)
+    state = BoardState(board_sets=result.board_sets, rack=result.rack)
+    first_turn_sol = solve(state, RulesConfig(is_first_turn=True))
+    assert first_turn_sol.tiles_placed == 0, (
+        f"Expected 0 tiles placed in rack-only mode, got {first_turn_sol.tiles_placed}"
+    )
+
+
+def test_expert_is_valid_difficulty() -> None:
+    """'expert' must not raise ValueError (regression guard)."""
+    result = generate_puzzle(difficulty="expert", seed=99)
+    assert result.difficulty == "expert"
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +130,16 @@ def test_rack_minimum_size() -> None:
             )
 
 
+def test_custom_rack_minimum_size() -> None:
+    """Custom with sets_to_remove=n always yields at least n×3 tiles (smallest set = 3)."""
+    for seed in range(3):
+        for n in (1, 2, 3):
+            result = generate_puzzle(difficulty="custom", seed=seed, sets_to_remove=n)
+            assert len(result.rack) >= n * 3, (
+                f"Custom rack too small for n={n} (seed={seed}): got {len(result.rack)}"
+            )
+
+
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
@@ -92,6 +167,12 @@ def test_seeded_puzzle_is_deterministic() -> None:
 def test_invalid_difficulty_raises_value_error() -> None:
     with pytest.raises(ValueError, match="Unknown difficulty"):
         generate_puzzle(difficulty="extreme")  # type: ignore[arg-type]
+
+
+def test_custom_is_valid_difficulty() -> None:
+    """'custom' must not raise ValueError (regression guard)."""
+    result = generate_puzzle(difficulty="custom", seed=99, sets_to_remove=2)
+    assert result.difficulty == "custom"
 
 
 def test_zero_attempts_raises_generation_error() -> None:

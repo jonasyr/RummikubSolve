@@ -1,9 +1,22 @@
-"""Objective function composition for the ILP model.
+"""Objective function utilities for the ILP model.
 
 Blueprint §1.3 — Two-tier objective:
   Primary:   maximise tiles placed from rack
-  Secondary: minimise edit distance between old board and new board
-             (tiebreaker — prefer solutions that disrupt fewer sets)
+  Secondary: tiebreaker among equal-placement solutions
+
+Current ILP secondary objective (v0.13.0, in ilp_formulation.py):
+  Minimise the sum of face values of tiles left in hand.
+
+Planned dual-solution feature:
+  The solver will eventually expose *two* solutions to the user:
+    (A) Minimise remaining tile value  — current behaviour
+    (B) Minimise board disruption      — fewer physical tile moves required
+  `compute_disruption_score()` below is the post-solve metric for option B.
+  It is not yet wired into the ILP objective or the API response; it is kept
+  here (not deleted) so the logic is available when the feature is built.
+
+NOTE: `compute_disruption_score()` is not called anywhere in production code.
+`test_objective.py` provides regression coverage for its correctness.
 """
 
 from __future__ import annotations

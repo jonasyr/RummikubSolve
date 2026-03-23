@@ -77,3 +77,34 @@ async def test_board_set_min_tiles_count(client: AsyncClient) -> None:
     assert r.status_code == 200
     for bs in r.json()["board_sets"]:
         assert len(bs["tiles"]) >= 3, f"Board set has only {len(bs['tiles'])} tiles: {bs}"
+
+
+async def test_custom_puzzle_200(client: AsyncClient) -> None:
+    r = await client.post(
+        "/api/puzzle", json={"difficulty": "custom", "seed": 4, "sets_to_remove": 3}
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["difficulty"] == "custom"
+    # 3 sets removed → at least 9 tiles in rack.
+    assert len(data["rack"]) >= 9
+    assert len(data["board_sets"]) >= 2
+
+
+async def test_custom_sets_to_remove_zero_422(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "custom", "sets_to_remove": 0})
+    assert r.status_code == 422
+
+
+async def test_custom_sets_to_remove_six_422(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "custom", "sets_to_remove": 6})
+    assert r.status_code == 422
+
+
+async def test_expert_puzzle_200(client: AsyncClient) -> None:
+    r = await client.post("/api/puzzle", json={"difficulty": "expert", "seed": 20})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["difficulty"] == "expert"
+    assert len(data["rack"]) == 2
+    assert len(data["board_sets"]) >= 2

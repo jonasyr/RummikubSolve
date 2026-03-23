@@ -532,3 +532,35 @@ def test_property_first_turn_threshold_respected(rack_tiles: list[Tile]) -> None
             f"First-turn threshold not met: placed {sol.tiles_placed} tiles "
             f"with total value {placed_value} < 30"
         )
+
+
+# ---------------------------------------------------------------------------
+# allow_wrap_runs gap documentation test
+# ---------------------------------------------------------------------------
+
+
+def test_allow_wrap_runs_does_not_produce_wrap_templates() -> None:
+    """Document known gap: wrap-around runs are not solved even when allowed.
+
+    set_enumerator.enumerate_runs() only generates standard runs (start 1–11,
+    no wrap). Even with allow_wrap_runs=True, the ILP cannot discover or place
+    a wrap run such as [Red 12, Red 13, Red 1]. This test documents that
+    limitation so it is not mistaken for a bug and is easy to update once
+    wrap-run template generation lands.
+
+    The validator (rule_checker.is_valid_set) does accept wrap runs — only the
+    ILP enumeration is missing them.
+    """
+    # Rack-only scenario: Red 12, 13, 1 can form the wrap run 12-13-1 when
+    # allow_wrap_runs=True. A complete implementation would place all 3 tiles.
+    # Currently the enumerator never generates this template, so no tiles are placed.
+    state = BoardState(board_sets=[], rack=[t(R, 12), t(R, 13), t(R, 1)])
+    rules = RulesConfig(allow_wrap_runs=True)
+    sol = solve(state, rules)
+
+    # Documents the *current* (incomplete) behaviour.
+    # When wrap-run solving is implemented, update this to assert tiles_placed == 3.
+    assert sol.tiles_placed == 0, (
+        "Wrap-run solving is now working — update this assertion to "
+        "tiles_placed == 3 and remove the 'known gap' note."
+    )

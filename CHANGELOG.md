@@ -5,6 +5,75 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.20.0] — 2026-03-22 — Full-repo audit fixes (post-v0.19)
+
+### Infrastructure — P0
+
+- **Backend port 8000 no longer exposed on host** (`docker-compose.yml`): removed
+  `ports: - "8000:8000"` from the backend service. Backend is reachable only through
+  the nginx proxy on port 80, preventing direct LAN access that bypassed CORS headers.
+  Same treatment applied to frontend port 3000.
+- **Frontend healthcheck + nginx startup sequencing** (`docker-compose.yml`): added a
+  `healthcheck` to the frontend service (`curl -f http://localhost:3000`, 15 s start period)
+  and updated nginx `depends_on` to use `condition: service_healthy` for both backend and
+  frontend. Eliminates 502 errors during cold-start when Next.js was still initialising.
+- **Removed deprecated `version: "3.9"` field** (`docker-compose.yml`): Docker Compose v2+
+  ignores this field and emits deprecation warnings.
+
+### Infrastructure — P1
+
+- **nginx `X-Forwarded-Proto` header** (`nginx/nginx.conf`): added
+  `proxy_set_header X-Forwarded-Proto $scheme` to all three proxy locations. Needed for
+  future TLS setups (Tailscale, Cloudflare Tunnel) so the backend knows the original scheme.
+- **nginx `client_max_body_size 1m`** (`nginx/nginx.conf`): explicit request-body limit
+  replacing the implicit nginx default. Prevents confusion if tile payloads ever grow.
+
+### API contract — P1
+
+- **`SolveResponse.status` narrowed** (`backend/api/models.py`): removed unused `"error"`
+  literal from the status type. The endpoint never returns `"error"` — errors are raised as
+  `HTTPException`. TypeScript clients now get the accurate `"solved" | "no_solution"` union.
+- **`BoardSetOutput.type` and `TileOutput.color` tightened** (`backend/api/models.py`):
+  changed from plain `str`/`str | None` to `Literal["run","group"]` and
+  `Literal["blue","red","black","yellow"] | None`. Frontend TypeScript clients now receive
+  the same specific types as they send.
+- **`RulesInput` comment on `joker_retrieval`** (`backend/api/models.py`): added inline
+  comment explaining the field is intentionally absent from the API model until the ILP
+  formulation implements it.
+
+### Documentation — P1 / P2
+
+- **`solver.py` docstring timeout** (`backend/solver/engine/solver.py`): corrected stale
+  "2 s hard cap" to "30 s" (raised in v0.12.1). Added note that Blueprint §4.2 is outdated.
+- **`solver.py` `id()` comment** (`backend/solver/engine/solver.py`): added inline comment
+  on the `id()`-based board-tile tracking explaining why it is safe and pointing to the
+  key-tuple alternative used in `solution_verifier.py`.
+- **`set_enumerator.py` wrap-run gap** (`backend/solver/generator/set_enumerator.py`):
+  added NOTE to `enumerate_runs()` docstring documenting that `allow_wrap_runs=True` affects
+  the validator but not the ILP template generation.
+- **`objective.py` dual-solution comment** (`backend/solver/engine/objective.py`): updated
+  module docstring to explain `compute_disruption_score()` is not currently called but is
+  preserved for a planned dual-solution feature (disruption-minimising vs value-minimising).
+- **`Blueprint.md` drift disclaimer** (`Blueprint.md`): added a header note listing known
+  divergences between the Blueprint and the actual implementation (timeout, deleted modules,
+  deployment target, puzzle generator status).
+
+### Testing — P3
+
+- **`PuzzleControls.test.tsx`** (new, 7 Vitest tests): covers difficulty button rendering,
+  active-selection class, disabled state while loading, and `loadPuzzle` called with correct
+  difficulty and an `AbortSignal`. Total Vitest tests: 33 → **40**.
+- **`test_ilp_solver.py`** (+1 test): `test_allow_wrap_runs_does_not_produce_wrap_templates`
+  documents the known gap where `allow_wrap_runs=True` affects validation but the ILP
+  enumerator never generates wrap templates.
+- **`test_solve_endpoint.py`** (+1 test): `test_empty_rack_returns_no_solution` verifies
+  that an empty rack (`{"board": [], "rack": []}`) returns a 200 with `status="no_solution"`
+  and `tiles_placed=0`. Protects the no-min-length schema contract.
+
+Total backend tests: 189 → **191 pass**.
+
+---
+
 ## [0.19.0] — 2026-03-22 — Post-v0.18 audit fixes
 
 ### Fixed — bugs

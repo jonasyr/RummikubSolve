@@ -72,7 +72,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.19.0",
+    version="0.20.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -284,10 +284,19 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
     Difficulty controls how many tiles are in the rack and how complex the
     required placement is.
     """
-    logger.info("puzzle_request", difficulty=request.difficulty, seed=request.seed)
+    logger.info(
+        "puzzle_request",
+        difficulty=request.difficulty,
+        seed=request.seed,
+        sets_to_remove=request.sets_to_remove,
+    )
 
     try:
-        result = generate_puzzle(difficulty=request.difficulty, seed=request.seed)
+        result = generate_puzzle(
+            difficulty=request.difficulty,
+            seed=request.seed,
+            sets_to_remove=request.sets_to_remove,
+        )
     except PuzzleGenerationError as exc:
         logger.warning("puzzle_generation_failed", error=str(exc))
         raise HTTPException(

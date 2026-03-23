@@ -11,7 +11,9 @@ Internally it orchestrates:
 Blueprint §4.2 — Solver Engine:
   Runs in-process within the FastAPI worker (no IPC overhead).
   Stateless — each request is fully independent.
-  Timeout: 2 s hard cap enforced via HiGHS time_limit option.
+  Timeout: 30 s hard cap enforced via HiGHS time_limit option.
+  (Blueprint §4.2 originally specified 2 s; raised to 30 s in v0.12.1 to
+  accommodate complex joker boards that require more search time.)
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
 
     Returns:
         A Solution — is_optimal=True if the solver proved optimality within
-        the 2-second time limit.
+        the 30-second time limit.
 
     Raises:
         ValueError: If the state is invalid or the solver returns an
@@ -99,6 +101,11 @@ def solve(state: BoardState, rules: RulesConfig | None = None) -> Solution:
         # Detect timeout-without-solution: every board tile must appear in new_sets.
         # If any are missing, HiGHS timed out before finding a feasible integer
         # solution. Fall back to no-move (board unchanged, all rack tiles in hand).
+        # id() is safe here because Tile objects are frozen dataclasses that
+        # are created once per request and never copied within the solve path.
+        # If a refactor ever creates new Tile instances with the same values,
+        # switch to a key-tuple set: {(t.color, t.number, t.copy_id, t.is_joker)
+        # for ts in ... for t in ts.tiles} — as used in solution_verifier.py.
         board_tile_ids = {id(t) for ts in solve_state.board_sets for t in ts.tiles}
         new_set_tile_ids = {id(t) for ts in new_sets for t in ts.tiles}
         if board_tile_ids - new_set_tile_ids:

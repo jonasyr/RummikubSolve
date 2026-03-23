@@ -68,19 +68,6 @@ function buildDescription(
 export default function SolutionView({ solution }: Props) {
   const t = useTranslations("solution");
 
-  if (solution.status === "error") {
-    return (
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          {t("heading")}
-        </h2>
-        <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
-          {t("error")}
-        </div>
-      </section>
-    );
-  }
-
   if (solution.status === "no_solution") {
     const reason = solution.is_first_turn
       ? t("noSolutionFirstTurn")
