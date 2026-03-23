@@ -281,7 +281,9 @@ def _extract_by_sacrifice(
     # Pick which sets to sacrifice (try a random selection).
     sacrifice_indices = set(rng.sample(range(len(board_sets)), num_sacrifice))
     remaining = [ts for i, ts in enumerate(board_sets) if i not in sacrifice_indices]
-    sacrifice_tiles = [t for i, ts in enumerate(board_sets) if i in sacrifice_indices for t in ts.tiles]
+    sacrifice_tiles = [
+        t for i, ts in enumerate(board_sets) if i in sacrifice_indices for t in ts.tiles
+    ]
 
     rack_min, rack_max = rack_size_range
     rack_size = rng.randint(rack_min, min(rack_max, len(sacrifice_tiles)))
