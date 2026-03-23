@@ -33,7 +33,7 @@ from ..engine.objective import compute_disruption_score
 from ..engine.solver import solve
 from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
-from ..models.tileset import SetType, TileSet
+from ..models.tileset import TileSet
 from ..validator.rule_checker import is_valid_set
 from .set_enumerator import enumerate_groups, enumerate_runs
 

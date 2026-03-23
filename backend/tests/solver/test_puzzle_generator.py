@@ -6,10 +6,9 @@ import pytest
 
 from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
+    _DISRUPTION_BANDS,  # type: ignore[attr-defined]
     PuzzleGenerationError,
     PuzzleResult,
-    _DISRUPTION_BANDS,  # type: ignore[attr-defined]
-    _RACK_SIZES,  # type: ignore[attr-defined]
     _any_trivial_extension,
     generate_puzzle,
 )
