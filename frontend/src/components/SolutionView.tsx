@@ -70,10 +70,12 @@ function buildDescription(
 export default function SolutionView({ solution, originalBoard }: Props) {
   const t = useTranslations("solution");
   const [step, setStep] = useState(0);
+  const [showUnchanged, setShowUnchanged] = useState(false);
 
-  // Reset to step 0 whenever a new solution arrives.
+  // Reset to step 0 and collapse unchanged sets whenever a new solution arrives.
   useEffect(() => {
     setStep(0);
+    setShowUnchanged(false);
   }, [solution]);
 
   if (solution.status === "no_solution") {
@@ -100,9 +102,20 @@ export default function SolutionView({ solution, originalBoard }: Props) {
     .filter(({ s }) => !s.is_unchanged)
     .map(({ i }) => i);
 
+  const unchangedCount = (solution.new_board ?? []).filter((s) => s.is_unchanged).length;
+
   const totalSteps = solution.moves?.length ?? 0;
   const currentMove: MoveOutput | undefined = solution.moves?.[step];
   const currentChangedSet: BoardSetOutput | undefined = changedSets[step];
+
+  // Rack tiles placed at each step — index = step number, value = tiles from rack.
+  const rackTilesPerStep: TileOutput[][] = changedSets.map((cs) =>
+    (cs.new_tile_indices ?? []).map((idx) => cs.tiles[idx]).filter(Boolean),
+  );
+
+  const hasRackProgress =
+    rackTilesPerStep.some((s) => s.length > 0) ||
+    (solution.remaining_rack?.length ?? 0) > 0;
 
   // Badge style per action type.
   const badgeCls: Record<string, string> = {
@@ -143,86 +156,15 @@ export default function SolutionView({ solution, originalBoard }: Props) {
         )}
       </div>
 
-      {/* New board sets — changed set for current step is highlighted */}
-      <div className="space-y-2">
-        {(solution.new_board ?? []).map((set, si) => {
-          const isUnchanged  = set.is_unchanged ?? false;
-          const newCount     = (set.new_tile_indices ?? []).length;
-          const isNew        = !isUnchanged && newCount === set.tiles.length;
-          const isExtended   = !isUnchanged && newCount > 0 && !isNew;
-          const isRearranged = !isUnchanged && newCount === 0;
-          const isCurrentStep = si === changedIndices[step];
-
-          const borderBg = isCurrentStep
-            ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 ring-2 ring-indigo-400/30"
-            : isNew        ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/30"
-            : isExtended   ? "border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800"
-            : isRearranged ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30"
-            :                "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 opacity-60";
-
-          const badge = isNew
-            ? <span title={t("badge.newTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 shrink-0 cursor-help">{t("badge.new")}</span>
-            : isExtended
-            ? <span title={t("badge.extendedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 shrink-0 cursor-help">{t("badge.extended")}</span>
-            : isRearranged
-            ? <span title={t("badge.rearrangedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 shrink-0 cursor-help">{t("badge.rearranged")}</span>
-            : <span title={t("badge.unchangedTitle")} className="text-xs text-gray-400 dark:text-gray-500 italic shrink-0 pt-1 cursor-help">{t("badge.unchanged")}</span>;
-
-          // Sort tiles by number within runs; preserve original indices for highlighting.
-          const sortedEntries = set.tiles
-            .map((tile, ti) => ({ tile, ti }))
-            .sort((a, b) =>
-              set.type === "run" ? (a.tile.number ?? 0) - (b.tile.number ?? 0) : 0,
-            );
-
-          return (
-            <div key={si} className={`flex items-start gap-2 p-2 rounded border transition-all ${borderBg}`}>
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 w-6 shrink-0 pt-1">{si + 1}.</span>
-              <span className="text-xs text-gray-400 dark:text-gray-500 uppercase w-8 shrink-0 pt-1">{set.type}</span>
-              <div className="flex flex-wrap gap-1 flex-1">
-                {sortedEntries.map(({ tile, ti }) => (
-                  <Tile
-                    key={ti}
-                    color={tile.color}
-                    number={tile.number}
-                    isJoker={tile.joker}
-                    highlighted={(set.new_tile_indices ?? []).includes(ti)}
-                    size="sm"
-                  />
-                ))}
-              </div>
-              {badge}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Remaining rack */}
-      {(solution.remaining_rack?.length ?? 0) > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            {t("remainingHand")}
-          </p>
-          <div className="flex flex-wrap gap-1">
-            {(solution.remaining_rack ?? []).map((tile, i) => (
-              <Tile
-                key={i}
-                color={tile.color}
-                number={tile.number}
-                isJoker={tile.joker}
-                size="sm"
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Step-by-step navigator */}
+      {/* ── Step-by-step navigator (shown first so it's always visible) ── */}
       {totalSteps > 0 && currentMove && currentChangedSet && (
         <div className="space-y-3">
-          {/* Header row: step counter + prev/next */}
+          {/* Section heading + step counter + prev/next */}
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-semibold">
+            {t("moveInstructions")}
+          </p>
           <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-semibold">
+            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               {t("stepOf", { step: step + 1, total: totalSteps })}
             </p>
             <div className="flex gap-1">
@@ -298,11 +240,76 @@ export default function SolutionView({ solution, originalBoard }: Props) {
               </div>
             </div>
 
+            {/* Rack tiles this step */}
+            <div className="flex items-start gap-2">
+              <span className="text-xs text-gray-400 dark:text-gray-500 w-14 shrink-0 pt-1">
+                {t("rackThisStep")}
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {(rackTilesPerStep[step]?.length ?? 0) > 0 ? (
+                  rackTilesPerStep[step].map((tile, i) => (
+                    <Tile
+                      key={i}
+                      color={tile.color}
+                      number={tile.number}
+                      isJoker={tile.joker}
+                      highlighted
+                      size="sm"
+                    />
+                  ))
+                ) : (
+                  <span className="text-xs text-gray-400 dark:text-gray-500 italic pt-1">
+                    {t("boardRearrangeOnly")}
+                  </span>
+                )}
+              </div>
+            </div>
+
             {/* Caption */}
             <p className="text-sm text-gray-700 dark:text-gray-300 pt-0.5">
               {buildDescription(currentMove, currentChangedSet, t)}
             </p>
           </div>
+
+          {/* Rack progress tracker */}
+          {hasRackProgress && (
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                {t("rackProgress")}
+              </p>
+              <div className="flex flex-wrap gap-1 items-center">
+                {rackTilesPerStep.map((stepTiles, si) => (
+                  <span
+                    key={`grp-${si}`}
+                    className={`flex gap-1 ${
+                      si < step ? "opacity-40" : si > step ? "opacity-60" : ""
+                    }`}
+                  >
+                    {stepTiles.map((tile, ti) => (
+                      <Tile
+                        key={ti}
+                        color={tile.color}
+                        number={tile.number}
+                        isJoker={tile.joker}
+                        highlighted={si === step}
+                        size="xs"
+                      />
+                    ))}
+                  </span>
+                ))}
+                {/* Unplaced tiles always shown at the end without a ring */}
+                {(solution.remaining_rack ?? []).map((tile, i) => (
+                  <Tile
+                    key={`rem-${i}`}
+                    color={tile.color}
+                    number={tile.number}
+                    isJoker={tile.joker}
+                    size="xs"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Progress dots — click to jump directly to a step */}
           <div className="flex gap-1.5 justify-center flex-wrap">
@@ -316,6 +323,94 @@ export default function SolutionView({ solution, originalBoard }: Props) {
                     ? (dotActiveCls[m.action] ?? "bg-gray-500") + " scale-125"
                     : "bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500"
                 }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Board overview (below navigator to keep it out of the way) ── */}
+      <div className="space-y-2">
+        {unchangedCount > 0 && (
+          <button
+            onClick={() => setShowUnchanged((v) => !v)}
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            {showUnchanged
+              ? t("hideUnchanged")
+              : t("showUnchanged", { n: unchangedCount })}
+          </button>
+        )}
+
+        {(solution.new_board ?? [])
+          .map((set, si) => ({ set, si }))
+          .filter(({ set }) => showUnchanged || !set.is_unchanged)
+          .map(({ set, si }) => {
+            const isUnchanged  = set.is_unchanged ?? false;
+            const newCount     = (set.new_tile_indices ?? []).length;
+            const isNew        = !isUnchanged && newCount === set.tiles.length;
+            const isExtended   = !isUnchanged && newCount > 0 && !isNew;
+            const isRearranged = !isUnchanged && newCount === 0;
+            const isCurrentStep = si === changedIndices[step];
+
+            const borderBg = isCurrentStep
+              ? "border-indigo-400 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 ring-2 ring-indigo-400/30"
+              : isNew        ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/30"
+              : isExtended   ? "border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800"
+              : isRearranged ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30"
+              :                "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 opacity-60";
+
+            const badge = isNew
+              ? <span title={t("badge.newTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 shrink-0 cursor-help">{t("badge.new")}</span>
+              : isExtended
+              ? <span title={t("badge.extendedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 shrink-0 cursor-help">{t("badge.extended")}</span>
+              : isRearranged
+              ? <span title={t("badge.rearrangedTitle")} className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 shrink-0 cursor-help">{t("badge.rearranged")}</span>
+              : <span title={t("badge.unchangedTitle")} className="text-xs text-gray-400 dark:text-gray-500 italic shrink-0 pt-1 cursor-help">{t("badge.unchanged")}</span>;
+
+            // Sort tiles by number within runs; preserve original indices for highlighting.
+            const sortedEntries = set.tiles
+              .map((tile, ti) => ({ tile, ti }))
+              .sort((a, b) =>
+                set.type === "run" ? (a.tile.number ?? 0) - (b.tile.number ?? 0) : 0,
+              );
+
+            return (
+              <div key={si} className={`flex items-start gap-2 p-2 rounded border transition-all ${borderBg}`}>
+                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 w-6 shrink-0 pt-1">{si + 1}.</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 uppercase w-8 shrink-0 pt-1">{set.type}</span>
+                <div className="flex flex-wrap gap-1 flex-1">
+                  {sortedEntries.map(({ tile, ti }) => (
+                    <Tile
+                      key={ti}
+                      color={tile.color}
+                      number={tile.number}
+                      isJoker={tile.joker}
+                      highlighted={(set.new_tile_indices ?? []).includes(ti)}
+                      size="sm"
+                    />
+                  ))}
+                </div>
+                {badge}
+              </div>
+            );
+          })}
+      </div>
+
+      {/* Remaining rack */}
+      {(solution.remaining_rack?.length ?? 0) > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+            {t("remainingHand")}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {(solution.remaining_rack ?? []).map((tile, i) => (
+              <Tile
+                key={i}
+                color={tile.color}
+                number={tile.number}
+                isJoker={tile.joker}
+                size="sm"
               />
             ))}
           </div>

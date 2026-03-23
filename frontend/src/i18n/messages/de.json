@@ -116,7 +116,12 @@
       "rearrangeFrom": "Von Satz {n} nehmen und als {type} neu legen: {tiles}",
       "rearrange": "Als {type} neu legen: {tiles}",
       "rearrangeWith": "Umstellen mit {tiles}: {allTiles}"
-    }
+    },
+    "rackThisStep": "Hand-Steine",
+    "boardRearrangeOnly": "Brett-Umstellung — keine Hand-Steine in diesem Schritt",
+    "rackProgress": "Hand-Fortschritt",
+    "showUnchanged": "Alle {n} Sätze zeigen",
+    "hideUnchanged": "Unveränderte ausblenden"
   },
   "puzzle": {
     "title": "Übungsrätsel",
