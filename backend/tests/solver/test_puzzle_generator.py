@@ -131,6 +131,8 @@ def test_disruption_score_in_band_hard() -> None:
 
 def test_disruption_score_in_band_expert() -> None:
     lo, hi = _DISRUPTION_BANDS["expert"]
+    # Expert floor (29) is strictly above Hard's ceiling (28).
+    assert lo > 28, "Expert disruption floor must exceed Hard's ceiling of 28"
     for seed in range(3):
         result = generate_puzzle(difficulty="expert", seed=seed)
         score = result.disruption_score

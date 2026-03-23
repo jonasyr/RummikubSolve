@@ -68,7 +68,7 @@ _DISRUPTION_BANDS: dict[str, tuple[int, int | None]] = {
     "easy": (2, 10),
     "medium": (9, 18),
     "hard": (16, 28),
-    "expert": (35, None),  # was 26; clear gap above Hard's ceiling of 28
+    "expert": (29, None),  # was 26; strictly above Hard's ceiling (28); ~30% of candidates pass
 }
 
 # Board size range (number of sets, BEFORE sacrifice) per difficulty.
