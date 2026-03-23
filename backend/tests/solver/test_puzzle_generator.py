@@ -62,7 +62,7 @@ def test_custom_puzzle_is_solvable() -> None:
 def test_expert_puzzle_generates() -> None:
     result = generate_puzzle(difficulty="expert", seed=20)
     assert result.difficulty == "expert"
-    assert 2 <= len(result.rack) <= 6
+    assert 4 <= len(result.rack) <= 6
 
 
 def test_expert_rack_has_no_trivial_extension() -> None:
@@ -168,7 +168,7 @@ def test_puzzle_is_fully_solvable() -> None:
 
 def test_rack_minimum_size() -> None:
     """Rack size stays within the configured range for each difficulty."""
-    rack_ranges = {"easy": (2, 3), "medium": (3, 4), "hard": (4, 5)}
+    rack_ranges = {"easy": (2, 3), "medium": (3, 4), "hard": (4, 5), "expert": (4, 6)}
     for seed in range(5):
         for difficulty, (lo, hi) in rack_ranges.items():
             result = generate_puzzle(difficulty=difficulty, seed=seed)  # type: ignore[arg-type]

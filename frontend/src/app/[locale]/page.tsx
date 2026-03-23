@@ -125,7 +125,7 @@ export default function Home() {
       {/* Solution */}
       {solution && (
         <TranslatedErrorBoundary>
-          <SolutionView solution={solution} />
+          <SolutionView solution={solution} originalBoard={boardSets} />
         </TranslatedErrorBoundary>
       )}
     </main>

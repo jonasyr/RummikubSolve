@@ -85,6 +85,11 @@
     "moveCreate": "{count, plural, one {# neuer Satz} other {# neue Sätze}}",
     "moveExtend": "{count, plural, one {# Erweiterung} other {# Erweiterungen}}",
     "moveRearrange": "{count, plural, one {# Umstellung} other {# Umstellungen}}",
+    "stepOf": "Schritt {step} von {total}",
+    "prev": "Zurück",
+    "next": "Weiter",
+    "before": "Vorher",
+    "after": "Nachher",
     "badge": {
       "new": "NEU",
       "extended": "+",
