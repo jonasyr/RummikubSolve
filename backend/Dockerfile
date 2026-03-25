@@ -7,7 +7,7 @@ RUN groupadd --system app && useradd --system --gid app app
 
 # Install dependencies first (layer-cached unless pyproject.toml changes)
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir hatchling && pip install --no-cache-dir .
 
 # Copy application source
 COPY solver/ ./solver/
