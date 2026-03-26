@@ -5,6 +5,46 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.24.0] — 2026-03-26 — iOS Home Screen icon & version display
+
+### Frontend — iOS PWA icon (`frontend/public/`)
+
+- **Proper apple-touch-icon added** (`apple-touch-icon.png`, 180×180 RGB PNG): replaces
+  the missing icon that iOS Safari would fall back to a screenshot for. No transparency —
+  iOS requirement. Icon shows 4 Rummikub tiles in a 2×2 grid in the game's four colors
+  (red, blue, black, orange) on the app's blue theme background.
+
+- **Manifest icons regenerated**: `icon-192.png` (192×192) and `icon-512.png` (512×512)
+  replaced — previous placeholders were only ~2 KB, rendering as a blurry smear at any
+  size. New icons use the same tile design, safe-zone compliant for maskable use.
+
+- **manifest.json updated**: 180×180 entry added to the `icons` array.
+
+### Frontend — iOS Home Screen title (`frontend/src/app/[locale]/layout.tsx`)
+
+- **`apple-mobile-web-app-title` fixed to `"RummiSolve"`** (10 characters): "RummikubSolve"
+  at 13 characters sits right at the iOS truncation boundary and shows "..." on some
+  devices. 10 characters fits every iPhone grid size without truncation.
+
+- **`<link rel="apple-touch-icon">` added** via Next.js `icons.apple` metadata field —
+  ensures iOS Safari picks up the 180×180 icon rather than guessing.
+
+### Frontend — Version display (`frontend/src/app/[locale]/page.tsx`, `next.config.ts`)
+
+- **Subtle version footer**: `v0.24.0` renders as a single xs-sized muted line at the
+  bottom of the main column. Visible but unobtrusive.
+
+- **Version sourced from `package.json`** via `NEXT_PUBLIC_APP_VERSION` env var injected
+  in `next.config.ts` — single source of truth; bumping `package.json` version
+  automatically updates the displayed string on next build.
+
+### Version sync (`frontend/package.json`)
+
+- `"version"` field corrected from `"0.1.0"` to `"0.24.0"` to match the real changelog
+  state; was left at the project-scaffold default and never updated.
+
+---
+
 ## [0.23.0] — 2026-03-23 — SolutionView UX refinement & navigation improvements
 
 ### Frontend — SolutionView restructure (`frontend/src/components/SolutionView.tsx`)
