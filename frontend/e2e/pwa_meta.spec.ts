@@ -31,6 +31,6 @@ test.describe("PWA / iOS Home Screen", () => {
     page,
   }) => {
     await page.goto("/");
-    await expect(page.getByRole("contentinfo")).toContainText(`v${version}`);
+    await expect(page.locator("footer")).toContainText(`v${version}`);
   });
 });
