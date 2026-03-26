@@ -78,11 +78,11 @@ export default function Home() {
   return (
     <main className="max-w-xl mx-auto px-4 py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-y-2">
         <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">RummikubSolve</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <LocaleSwitcher />
-          <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer whitespace-nowrap">
             <input
               type="checkbox"
               checked={isFirstTurn}
@@ -93,7 +93,7 @@ export default function Home() {
           </label>
           <button
             onClick={handleReset}
-            className="text-sm px-2 py-1 rounded text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="text-sm px-2 py-1 rounded text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 whitespace-nowrap"
           >
             {t("reset")}
           </button>
