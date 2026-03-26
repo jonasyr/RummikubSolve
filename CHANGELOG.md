@@ -5,6 +5,22 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.24.1] — 2026-03-26 — Mobile header overflow fix
+
+### Frontend — Header (`frontend/src/app/[locale]/page.tsx`)
+
+- **Header wraps gracefully on narrow screens**: added `flex-wrap gap-y-2` to the outer
+  header div so title and controls stack to two rows on viewports where they don't fit
+  side-by-side (e.g. 375px iPhones in German locale where "Zurücksetzen" is ~96px wide).
+
+- **`whitespace-nowrap` on checkbox label and reset button**: prevents "Erster Zug"
+  wrapping mid-label and "Zurücksetzen" clipping at the edge of the screen.
+
+- **Controls gap reduced from `gap-3` → `gap-2`** (saves 4px per gap, no visual impact on
+  desktop); controls row right-aligns (`justify-end`) when it wraps to a second line.
+
+---
+
 ## [0.24.0] — 2026-03-26 — iOS Home Screen icon & version display
 
 ### Frontend — iOS PWA icon (`frontend/public/`)
