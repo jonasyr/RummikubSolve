@@ -137,6 +137,10 @@ export default function Home() {
           </TranslatedErrorBoundary>
         </div>
       )}
+
+      <footer className="text-center text-xs text-gray-400 dark:text-gray-600 pt-2 pb-1">
+        v{process.env.NEXT_PUBLIC_APP_VERSION}
+      </footer>
     </main>
   );
 }
