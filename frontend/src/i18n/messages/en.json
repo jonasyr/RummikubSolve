@@ -131,9 +131,12 @@
     "expert": "Expert",
     "custom": "Custom",
     "setsToRemove": "Sets to remove",
+    "nightmare": "Nightmare",
     "getButton": "Get Puzzle ▶",
     "loading": "Loading…",
-    "error": "Could not load puzzle — please try again."
+    "error": "Could not load puzzle — please try again.",
+    "chainDepth": "Chain depth: {depth}",
+    "uniqueSolution": "Unique solution"
   },
   "errorBoundary": {
     "heading": "Something went wrong displaying the result.",

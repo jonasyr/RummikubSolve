@@ -5,6 +5,35 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.30.0] — 2026-03-29 — Frontend integration (puzzle rework phase 6)
+
+### Frontend — Puzzle controls (`frontend/src/components/PuzzleControls.tsx`)
+- **Nightmare difficulty button** added to the difficulty selector row.
+  Players can now request Nightmare-tier puzzles directly from the UI.
+- **Metadata badge** displayed below the difficulty buttons after a puzzle loads.
+  Shows chain depth (e.g. "Chain depth: 3") and, for Expert/Nightmare puzzles with a
+  verified unique solution, a green "✓ Unique solution" indicator.
+
+### Frontend — Game store (`frontend/src/store/game.ts`)
+- **`lastPuzzleMeta`** field (`chainDepth`, `isUnique`, `difficulty`) added to `GameState`.
+  Populated by `loadPuzzle` after each successful puzzle fetch; cleared by `reset()`.
+  Chain depth defaults to `0` and `isUnique` to `false` when the API omits those fields.
+
+### Frontend — i18n (`frontend/src/i18n/messages/en.json` + `de.json`)
+- Added `puzzle.nightmare`, `puzzle.chainDepth`, `puzzle.uniqueSolution` translation keys.
+  EN: "Nightmare", "Chain depth: {depth}", "Unique solution".
+  DE: "Albtraum", "Kettenfolge: {depth}", "Einzige Lösung".
+
+### Frontend — Tests
+- **`PuzzleControls.test.tsx`**: updated to assert Nightmare button is present; 6 new tests
+  covering nightmare selection, nightmare puzzle request, and stats badge visibility (null,
+  chain depth shown, unique indicator shown/hidden).
+- **`game.test.ts`**: 4 new tests verifying `lastPuzzleMeta` initial value, population from
+  `loadPuzzle`, default values for missing response fields, and clearance on `reset()`.
+  Added `vi.mock("../../lib/api")` so `loadPuzzle` runs without real HTTP calls.
+
+---
+
 ## [0.29.0] — 2026-03-29 — API pool integration (puzzle rework phase 5)
 
 ### Backend — API models (`backend/api/models.py`)

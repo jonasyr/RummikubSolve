@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useGameStore } from "../store/game";
 import type { Difficulty, PuzzleRequest } from "../types/api";
 
-const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard", "expert", "custom"];
+const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard", "expert", "nightmare", "custom"];
 
 export default function PuzzleControls() {
   const t = useTranslations("puzzle");
@@ -15,6 +15,7 @@ export default function PuzzleControls() {
   const isPuzzleLoading = useGameStore((s) => s.isPuzzleLoading);
   const puzzleError = useGameStore((s) => s.error);
   const loadPuzzle = useGameStore((s) => s.loadPuzzle);
+  const lastPuzzleMeta = useGameStore((s) => s.lastPuzzleMeta);
   const abortRef = useRef<AbortController | null>(null);
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const wasLoadingRef = useRef(false);
@@ -87,6 +88,16 @@ export default function PuzzleControls() {
             </div>
           )}
 
+          {lastPuzzleMeta && (
+            <div className="w-full mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <span>{t("chainDepth", { depth: lastPuzzleMeta.chainDepth })}</span>
+              {lastPuzzleMeta.isUnique && (
+                <span className="text-green-600 dark:text-green-400 font-medium">
+                  ✓ {t("uniqueSolution")}
+                </span>
+              )}
+            </div>
+          )}
           <button
             onClick={handleGetPuzzle}
             disabled={isPuzzleLoading}

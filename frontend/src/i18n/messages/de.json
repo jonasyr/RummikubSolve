@@ -131,9 +131,12 @@
     "expert": "Experte",
     "custom": "Angepasst",
     "setsToRemove": "Sätze entfernen",
+    "nightmare": "Albtraum",
     "getButton": "Rätsel laden ▶",
     "loading": "Wird geladen…",
-    "error": "Rätsel konnte nicht geladen werden — bitte erneut versuchen."
+    "error": "Rätsel konnte nicht geladen werden — bitte erneut versuchen.",
+    "chainDepth": "Kettenfolge: {depth}",
+    "uniqueSolution": "Einzige Lösung"
   },
   "errorBoundary": {
     "heading": "Beim Anzeigen des Ergebnisses ist ein Fehler aufgetreten.",

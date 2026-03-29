@@ -10,24 +10,35 @@ vi.mock("next-intl", () => ({
 // Allow tests to control these values before each render.
 const mockLoadPuzzle = vi.fn();
 let mockIsPuzzleLoading = false;
+let mockLastPuzzleMeta: {
+  chainDepth: number;
+  isUnique: boolean;
+  difficulty: string;
+} | null = null;
 
 vi.mock("../../store/game", () => ({
   useGameStore: (selector: (s: object) => unknown) =>
-    selector({ isPuzzleLoading: mockIsPuzzleLoading, loadPuzzle: mockLoadPuzzle }),
+    selector({
+      isPuzzleLoading: mockIsPuzzleLoading,
+      loadPuzzle: mockLoadPuzzle,
+      lastPuzzleMeta: mockLastPuzzleMeta,
+    }),
 }));
 
 describe("PuzzleControls", () => {
   beforeEach(() => {
     mockLoadPuzzle.mockReset();
     mockIsPuzzleLoading = false;
+    mockLastPuzzleMeta = null;
   });
 
-  it("renders Easy, Medium, Hard, Expert, and Custom difficulty buttons", () => {
+  it("renders Easy, Medium, Hard, Expert, Nightmare, and Custom difficulty buttons", () => {
     render(<PuzzleControls />);
     expect(screen.getByRole("button", { name: "easy" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "medium" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "hard" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "expert" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "nightmare" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "custom" })).toBeInTheDocument();
   });
 
@@ -132,5 +143,48 @@ describe("PuzzleControls", () => {
     await userEvent.click(inc); // 5
     expect(inc).toBeDisabled();
     expect(dec).not.toBeDisabled();
+  });
+
+  // Phase 6: Nightmare difficulty
+  it("clicking Nightmare selects it", async () => {
+    render(<PuzzleControls />);
+    await userEvent.click(screen.getByRole("button", { name: "nightmare" }));
+    expect(screen.getByRole("button", { name: "nightmare" }).className).toContain("bg-blue-600");
+    expect(screen.getByRole("button", { name: "medium" }).className).not.toContain("bg-blue-600");
+  });
+
+  it("clicking Nightmare then Get Puzzle calls loadPuzzle with nightmare difficulty", async () => {
+    render(<PuzzleControls />);
+    await userEvent.click(screen.getByRole("button", { name: "nightmare" }));
+    await userEvent.click(screen.getByRole("button", { name: "getButton" }));
+    expect(mockLoadPuzzle).toHaveBeenCalledWith(
+      { difficulty: "nightmare" },
+      expect.any(AbortSignal),
+    );
+  });
+
+  // Phase 6: Stats badge
+  it("stats badge is not shown when lastPuzzleMeta is null", () => {
+    render(<PuzzleControls />);
+    expect(screen.queryByText(/chainDepth/)).not.toBeInTheDocument();
+  });
+
+  it("stats badge shows chain depth when lastPuzzleMeta is set", () => {
+    mockLastPuzzleMeta = { chainDepth: 3, isUnique: false, difficulty: "expert" };
+    render(<PuzzleControls />);
+    // useTranslations mock returns the key, so "chainDepth" appears verbatim
+    expect(screen.getByText(/chainDepth/)).toBeInTheDocument();
+  });
+
+  it("stats badge shows uniqueSolution indicator when isUnique is true", () => {
+    mockLastPuzzleMeta = { chainDepth: 2, isUnique: true, difficulty: "nightmare" };
+    render(<PuzzleControls />);
+    expect(screen.getByText(/uniqueSolution/)).toBeInTheDocument();
+  });
+
+  it("stats badge does not show uniqueSolution when isUnique is false", () => {
+    mockLastPuzzleMeta = { chainDepth: 1, isUnique: false, difficulty: "hard" };
+    render(<PuzzleControls />);
+    expect(screen.queryByText(/uniqueSolution/)).not.toBeInTheDocument();
   });
 });

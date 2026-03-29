@@ -21,7 +21,14 @@ import type {
 
 // ---------------------------------------------------------------------------
 // Phase 5: seen-puzzle tracking (localStorage persistence)
+// Phase 6: last puzzle metadata (chain depth + uniqueness for stats badge)
 // ---------------------------------------------------------------------------
+
+interface PuzzleMeta {
+  chainDepth: number;
+  isUnique: boolean;
+  difficulty: string;
+}
 
 const _SEEN_KEY = "rummikub_seen_puzzles";
 const _SEEN_MAX = 500;
@@ -65,6 +72,9 @@ interface GameState {
   // Phase 5: accumulated IDs of puzzles already seen (persisted in localStorage)
   seenPuzzleIds: string[];
 
+  // Phase 6: metadata from the most recently loaded puzzle
+  lastPuzzleMeta: PuzzleMeta | null;
+
   // Actions — board
   addBoardSet: (set: BoardSetInput) => void;
   removeBoardSet: (index: number) => void;
@@ -106,6 +116,7 @@ const initialState = {
   error: null as string | null,
   isBuildingSet: false,
   seenPuzzleIds: [] as string[], // Phase 5: reset() clears in-memory list (localStorage retained)
+  lastPuzzleMeta: null as PuzzleMeta | null,
 };
 
 // ---------------------------------------------------------------------------
@@ -173,6 +184,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         isFirstTurn: false,
         isBuildingSet: false,
         seenPuzzleIds: updatedSeen,
+        lastPuzzleMeta: {           // Phase 6: expose metadata for stats badge
+          chainDepth: puzzle.chain_depth ?? 0,
+          isUnique: puzzle.is_unique ?? false,
+          difficulty: puzzle.difficulty,
+        },
       });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
