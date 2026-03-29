@@ -119,10 +119,11 @@ def compute_chain_depth(
     if not old_board_sets:
         return 0
 
-    placed_keys: set[tuple] = {_tile_key(t) for t in placed_tiles}
+    TileKey = tuple[Color | None, int | None, int, bool]
+    placed_keys: set[TileKey] = {_tile_key(t) for t in placed_tiles}
 
     # Step 1 — map each board tile key to its old set index.
-    old_membership: dict[tuple, int] = {}
+    old_membership: dict[TileKey, int] = {}
     for oi, ts in enumerate(old_board_sets):
         for tile in ts.tiles:
             old_membership[_tile_key(tile)] = oi
