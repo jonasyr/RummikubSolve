@@ -5,6 +5,91 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.26.0] — 2026-03-29 — Uniqueness check (puzzle rework phase 2)
+
+### Backend — ILP formulation (`backend/solver/engine/ilp_formulation.py`)
+
+- **`build_ilp_model()` gains `excluded_solutions: list[list[int]] | None = None`** parameter.
+  Each entry is a list of candidate-set indices (`active_set_indices`) from a prior solve.
+  For each entry the constraint `Σ_{s ∈ active} y[s] ≤ len(active) - 1` is added, forcing
+  HiGHS to find a structurally different arrangement on the next run.
+
+- **`extract_solution()` now returns a 5-tuple** `(new_sets, placed_tiles, remaining_rack,
+  is_optimal, active_set_indices)`. The new fifth element is the list of candidate-set
+  indices where `y[s] = 1` in the ILP solution — used by `check_uniqueness()` as input
+  to the next exclusion constraint.
+
+### Backend — Solution model (`backend/solver/models/board_state.py`)
+
+- **`active_set_indices: list[int] = []`** field added to `Solution` dataclass. Stores
+  the ILP `y[s] = 1` indices for the solved arrangement. Not exposed in the API response
+  (the API models map fields explicitly). Populated automatically by `solve()`.
+
+### Backend — Solver (`backend/solver/engine/solver.py`)
+
+- All three `extract_solution()` call sites in `solve()` updated to unpack the new 5-tuple.
+  Fallback / timeout paths use `active_set_indices = []`.
+- **`check_uniqueness(state, solution, rules) → bool`** added:
+  re-solves the ILP with the first solution's active sets excluded. Returns `True` if
+  the original solution is the only arrangement that places `solution.tiles_placed` tiles
+  (i.e. the re-solve is infeasible or places fewer tiles). Returns `False` if an
+  alternative arrangement exists. Designed for offline puzzle pre-generation where a
+  puzzle with two equally-valid solutions is too easy.
+- `_UNIQUENESS_TIMEOUT_SECONDS = 10.0` constant added (separate from the 30 s solve cap).
+
+### Backend — Tests
+
+- **`backend/tests/solver/test_ilp_solver.py`** — 10 new tests:
+  active-indices extraction, exclusion-constraint correctness, infeasibility when only
+  one solution exists, multiple-exclusion chaining, and integration with `solve()`.
+- **`backend/tests/solver/test_uniqueness.py`** — new file with 26 tests across 5 classes:
+  unique solutions (single run, joker with no ambiguity, rearrangement-forced uniqueness),
+  non-unique solutions (two equivalent groups, tile fits two runs, symmetric board,
+  joker ambiguity), rules integration (first-turn, meld threshold), and edge cases
+  (empty `active_set_indices`, determinism, zero-tile scenario).
+
+---
+
+## [0.25.0] — 2026-03-29 — Chain depth metric (puzzle rework phase 1)
+
+### Backend — Objective metrics (`backend/solver/engine/objective.py`)
+
+- **`compute_chain_depth(old_board_sets, new_board_sets, placed_tiles) → int`** added
+  alongside the existing `compute_disruption_score()`. Measures how many distinct
+  disrupted old sets feed tiles into the most complex new set in a solution:
+  - `0` = pure placement — no board rearrangement required
+  - `1` = simple rearrangement — one or more sets broken, each new set draws
+    from at most one disrupted source
+  - `2` = two-step convergence — one new set combines freed tiles from two
+    separately disrupted old sets (requires two breaking steps)
+  - `3+` = deep chains — N disruptions all feed into a single new set
+
+  This is the foundation metric for Expert/Nightmare difficulty tiers in the
+  forthcoming puzzle rework.
+
+### Backend — Solution model (`backend/solver/models/board_state.py`)
+
+- **`chain_depth: int = 0`** field added to `Solution` dataclass — every solve
+  result now carries its chain depth automatically, with no API changes needed.
+
+### Backend — Solver (`backend/solver/engine/solver.py`)
+
+- Imports and calls `compute_chain_depth()` after each solve and stores the result
+  in the returned `Solution`.
+
+### Backend — Tests (`backend/tests/solver/test_objective.py`)
+
+- 26 new unit tests covering `compute_chain_depth()`:
+  - Depth-0 cases: empty board, untouched sets, rack-only placement, reordering
+  - Depth-1 cases: simple splits, freed-tile + rack placement, independent parallel
+    disruptions, single tile migration between sets
+  - Depth-2 cases: two disrupted sets converging in one new set
+  - Depth-3+ cases: three-disruption convergence
+  - Edge cases: joker tiles, `copy_id` sensitivity, group sets, large boards
+  - Integration: parallel vs. chained disruptions, stable sets mixed with disrupted
+
+---
+
 ## [0.24.1] — 2026-03-26 — Mobile header overflow fix
 
 ### Frontend — Header (`frontend/src/app/[locale]/page.tsx`)
