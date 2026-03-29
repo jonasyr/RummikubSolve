@@ -161,7 +161,7 @@ class TestNonUniqueSolutions:
             board_sets=[],
             rack=[t(R, 7), t(B, 7), t(BL, 7), t(Y, 7)],
         )
-        sol = solve(state)
+        solve(state)
         # Solver places 4 tiles (all four in one group) — that IS unique.
         # To get non-uniqueness from a group, need exactly 4 tiles but multiple
         # ways to partition them into sets of equal total tile count.
@@ -208,8 +208,8 @@ class TestNonUniqueSolutions:
         # at EITHER end of two different board runs of the same length.
         # Use: board={R3,R4,R5} and {R5,R6,R7} — but they share R5 copy_id.
         # Use copy_id=1 for the second: R5c0 in set1, R5c1 in set2.
-        board1 = run_set(t(R, 3), t(R, 4), t(R, 5, 0))
-        board2 = run_set(t(R, 5, 1), t(R, 6), t(R, 7))
+        run_set(t(R, 3), t(R, 4), t(R, 5, 0))
+        run_set(t(R, 5, 1), t(R, 6), t(R, 7))
         # Rack tile R8 can extend board2; rack tile R2 can extend board1.
         # Use rack=[R2] → only extends board1. Still unique.
         # For non-unique: rack=[R8] fits only board2. Unique.

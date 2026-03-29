@@ -87,7 +87,9 @@ def solve(
     active_indices: list[int] = []
     if rules.is_first_turn:
         try:
-            new_sets, placed_tiles, remaining_rack, is_optimal, active_indices = extract_solution(model)
+            (
+                new_sets, placed_tiles, remaining_rack, is_optimal, active_indices
+            ) = extract_solution(model)
         except ValueError:
             # Can't reach the threshold → player must draw; board is unchanged.
             new_sets = list(state.board_sets)
@@ -99,7 +101,9 @@ def solve(
             new_sets = list(state.board_sets) + new_sets
     else:
         try:
-            new_sets, placed_tiles, remaining_rack, is_optimal, active_indices = extract_solution(model)
+            (
+                new_sets, placed_tiles, remaining_rack, is_optimal, active_indices
+            ) = extract_solution(model)
         except ValueError:
             # Infeasible — the board enumeration couldn't find a valid rearrangement.
             # This should not happen with a valid board; fall back to no-move so we
