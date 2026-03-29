@@ -80,3 +80,83 @@ def compute_disruption_score(
         disrupted += len(old_ts.tiles) - best_count
 
     return disrupted
+
+
+def compute_chain_depth(
+    old_board_sets: list[TileSet],
+    new_board_sets: list[TileSet],
+    placed_tiles: list[Tile],
+) -> int:
+    """Compute the longest dependency chain in a solution.
+
+    Chain depth measures how many distinct old-set disruptions a player
+    must mentally trace to construct the most complex new set.
+
+      0 = pure placement — no board rearrangement needed
+      1 = simple rearrangement — one or more sets broken, each new set
+          draws tiles from at most one disrupted source
+      2 = two-step convergence — one new set combines freed tiles from two
+          separately disrupted old sets (requires two breaking steps)
+      3+ = deep chains — N disruptions all feed into a single new set
+
+    Algorithm:
+      1. Map each board tile key → old set index.
+      2. For each old set, record which new sets received its tiles
+         (old_set_destinations).
+      3. An old set is *disrupted* if its tiles ended up in 2+ new sets.
+      4. For each new set, count how many distinct disrupted old sets
+         contributed board tiles to it.
+      5. Return the maximum such count (or 0 if no disruption occurred).
+
+    Args:
+        old_board_sets: Board sets before the move.
+        new_board_sets: Board sets after the move (solver output).
+        placed_tiles:   Tiles moved from the rack to the board.
+
+    Returns:
+        Chain depth (non-negative integer).
+    """
+    if not old_board_sets:
+        return 0
+
+    placed_keys: set[tuple] = {_tile_key(t) for t in placed_tiles}
+
+    # Step 1 — map each board tile key to its old set index.
+    old_membership: dict[tuple, int] = {}
+    for oi, ts in enumerate(old_board_sets):
+        for tile in ts.tiles:
+            old_membership[_tile_key(tile)] = oi
+
+    # Step 2 — for each old set, which new sets received its board tiles?
+    n_old = len(old_board_sets)
+    old_set_destinations: list[set[int]] = [set() for _ in range(n_old)]
+    for ni, ts in enumerate(new_board_sets):
+        for tile in ts.tiles:
+            key = _tile_key(tile)
+            if key in old_membership:
+                old_set_destinations[old_membership[key]].add(ni)
+
+    # Step 3 — disrupted old sets: tiles scattered across 2+ new sets.
+    disrupted_old: set[int] = {
+        oi for oi in range(n_old) if len(old_set_destinations[oi]) > 1
+    }
+
+    if not disrupted_old:
+        return 0
+
+    # Step 4 — for each new set, count distinct disrupted old sets
+    # that contributed board tiles (rack tiles don't count as "from" an old set).
+    max_depth = 0
+    for ts in new_board_sets:
+        contributing: set[int] = set()
+        for tile in ts.tiles:
+            key = _tile_key(tile)
+            if key not in placed_keys and key in old_membership:
+                oi = old_membership[key]
+                if oi in disrupted_old:
+                    contributing.add(oi)
+        if contributing:
+            max_depth = max(max_depth, len(contributing))
+
+    # Step 5 — at least depth 1 when any disruption occurred.
+    return max(1, max_depth)

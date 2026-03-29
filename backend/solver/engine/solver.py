@@ -27,6 +27,7 @@ from ..generator.set_enumerator import enumerate_valid_sets
 from ..models.board_state import BoardState, Solution
 from ..validator.solution_verifier import verify_solution
 from .ilp_formulation import build_ilp_model, extract_solution
+from .objective import compute_chain_depth
 
 _SOLVE_TIMEOUT_SECONDS = 30.0
 
@@ -135,6 +136,10 @@ def solve(
     # 5. Generate human-readable move instructions.
     moves = generate_moves(state, new_sets, placed_tiles)
 
+    # Compute chain depth using the original board state (not solve_state,
+    # which may be rack-only for first-turn solves).
+    chain_depth = compute_chain_depth(state.board_sets, new_sets, placed_tiles)
+
     solution = Solution(
         new_sets=new_sets,
         placed_tiles=placed_tiles,
@@ -142,6 +147,7 @@ def solve(
         moves=moves,
         is_optimal=is_optimal,
         solve_time_ms=solve_time_ms,
+        chain_depth=chain_depth,
     )
 
     # 6. Post-solve verification (defense-in-depth per Blueprint §10.4).
