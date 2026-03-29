@@ -71,6 +71,8 @@ export interface PuzzleRequest {
   seed?: number;
   /** Only used when difficulty == "custom". Range 1–5, default 3. */
   sets_to_remove?: number;
+  /** Phase 5: IDs of puzzles already seen; prevents duplicates when drawing from pool. */
+  seen_ids?: string[];
 }
 
 export interface PuzzleResponse {
@@ -81,6 +83,8 @@ export interface PuzzleResponse {
   disruption_score: number; // was missing from TS mirror (backend returns it since v0.22.0)
   chain_depth: number;      // Phase 3: longest rearrangement chain depth
   is_unique: boolean;       // Phase 3: solution uniqueness verified for Expert/Nightmare
+  /** Phase 5: UUID for pool-drawn puzzles; empty string for live-generated. */
+  puzzle_id: string;
 }
 
 export type SolveStatus = "solved" | "no_solution";

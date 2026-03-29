@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api.main import app
-from solver.generator.puzzle_generator import _MIN_CHAIN_DEPTHS  # type: ignore[attr-defined]
+from solver.generator.puzzle_generator import (
+    _MIN_CHAIN_DEPTHS,  # type: ignore[attr-defined]
+    generate_puzzle,
+)
 
 
 @pytest.fixture
@@ -155,3 +160,134 @@ class TestPuzzleResponseNewFields:
         assert 5 <= len(data["rack"]) <= 7
         assert isinstance(data["is_unique"], bool)  # informational; may be True or False
         assert data["chain_depth"] >= _MIN_CHAIN_DEPTHS["nightmare"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: seen_ids, puzzle_id, and pool integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def _pool_result():  # type: ignore[return]
+    """A medium PuzzleResult reused across Phase-5 pool mock tests."""
+    return generate_puzzle(difficulty="medium", seed=1)
+
+
+class TestSeenIdsValidation:
+    """seen_ids is accepted in PuzzleRequest and validated."""
+
+    async def test_seen_ids_absent_ok(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
+        assert r.status_code == 200
+
+    async def test_seen_ids_empty_list_ok(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/api/puzzle", json={"difficulty": "easy", "seed": 1, "seen_ids": []}
+        )
+        assert r.status_code == 200
+
+    async def test_seen_ids_with_strings(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/api/puzzle",
+            json={"difficulty": "easy", "seed": 1, "seen_ids": ["abc", "def"]},
+        )
+        assert r.status_code == 200
+
+    async def test_seen_ids_too_many_422(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/api/puzzle",
+            json={"difficulty": "easy", "seen_ids": [str(i) for i in range(501)]},
+        )
+        assert r.status_code == 422
+
+
+class TestPuzzleIdField:
+    """puzzle_id is present in all responses; empty for live-generated puzzles."""
+
+    async def test_puzzle_id_present_in_response(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
+        assert r.status_code == 200
+        assert "puzzle_id" in r.json()
+
+    async def test_easy_puzzle_id_is_empty(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
+        assert r.status_code == 200
+        assert r.json()["puzzle_id"] == ""
+
+    async def test_medium_puzzle_id_is_empty(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 2})
+        assert r.status_code == 200
+        assert r.json()["puzzle_id"] == ""
+
+    async def test_hard_puzzle_id_is_empty(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "hard", "seed": 3})
+        assert r.status_code == 200
+        assert r.json()["puzzle_id"] == ""
+
+
+class TestPoolIntegration:
+    """Pool draw / fallback logic via monkeypatched PuzzleStore."""
+
+    async def test_expert_draws_from_pool_when_available(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch, _pool_result: object
+    ) -> None:
+        """When store.draw() returns a result, response.puzzle_id is its UUID."""
+        fake_id = "aaaabbbb-1111-1111-1111-000000000001"
+        mock_store = MagicMock()
+        mock_store.draw.return_value = (_pool_result, fake_id)
+        monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
+
+        r = await client.post("/api/puzzle", json={"difficulty": "expert"})
+        assert r.status_code == 200
+        assert r.json()["puzzle_id"] == fake_id
+
+    async def test_expert_fallback_when_pool_empty(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When store.draw() returns None, live generation is used and puzzle_id is ''."""
+        mock_store = MagicMock()
+        mock_store.draw.return_value = None
+        monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
+
+        r = await client.post("/api/puzzle", json={"difficulty": "expert", "seed": 42})
+        assert r.status_code == 200
+        assert r.json()["puzzle_id"] == ""
+
+    async def test_seen_ids_forwarded_to_store(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch, _pool_result: object
+    ) -> None:
+        """seen_ids from the request are forwarded as exclude_ids to store.draw()."""
+        fake_id = "aaaabbbb-2222-2222-2222-000000000002"
+        seen = ["old-uuid-1", "old-uuid-2"]
+        mock_store = MagicMock()
+        mock_store.draw.return_value = (_pool_result, fake_id)
+        monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
+
+        r = await client.post(
+            "/api/puzzle", json={"difficulty": "expert", "seen_ids": seen}
+        )
+        assert r.status_code == 200
+        mock_store.draw.assert_called_once_with("expert", exclude_ids=seen)
+
+    async def test_nightmare_uses_pool(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch, _pool_result: object
+    ) -> None:
+        """Nightmare difficulty also goes through the pool path."""
+        mock_store = MagicMock()
+        mock_store.draw.return_value = (_pool_result, "some-uuid")
+        monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
+
+        r = await client.post("/api/puzzle", json={"difficulty": "nightmare"})
+        assert r.status_code == 200
+        assert r.json()["puzzle_id"] == "some-uuid"
+
+    async def test_easy_does_not_use_pool(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Easy difficulty bypasses the pool entirely — PuzzleStore is never instantiated."""
+        mock_store = MagicMock()
+        monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
+
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
+        assert r.status_code == 200
+        mock_store.draw.assert_not_called()

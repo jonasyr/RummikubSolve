@@ -5,6 +5,44 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.29.0] — 2026-03-29 — API pool integration (puzzle rework phase 5)
+
+### Backend — API models (`backend/api/models.py`)
+- **`PuzzleRequest`** gains `seen_ids: list[str]` (default `[]`, max 500 entries).
+  The client sends UUIDs of previously seen puzzles so the API can avoid returning
+  duplicates when drawing from the pre-generated pool.
+- **`PuzzleResponse`** gains `puzzle_id: str` (default `""`).
+  Set to the UUID assigned at pre-generation time for pool-drawn puzzles; empty string
+  for live-generated puzzles (Easy/Medium/Hard/Custom, or expert/nightmare fallback).
+
+### Backend — API endpoint (`backend/api/main.py`)
+- **Expert and Nightmare requests** now first attempt to draw from the pre-generated
+  SQLite pool (`PuzzleStore.draw(difficulty, exclude_ids=seen_ids)`).
+  If the pool is empty or all stored puzzles are excluded, the endpoint falls through
+  to live generation (same behaviour as v0.28.0 and earlier).
+- Easy, Medium, Hard, and Custom continue to use live generation exclusively.
+- Pool hits are logged as `puzzle_pool_hit`; exhausted pools as `puzzle_pool_empty`.
+
+### Backend — Tests
+- **`backend/tests/api/test_puzzle_endpoint.py`** — 13 new tests in 3 new classes:
+  - `TestSeenIdsValidation` (4): absent / empty / valid / too-many
+  - `TestPuzzleIdField` (4): presence and empty-string guarantee for non-pool tiers
+  - `TestPoolIntegration` (5): pool hit, pool empty (fallback), seen_ids forwarding,
+    nightmare pool, easy bypasses pool — all using `monkeypatch` + `MagicMock`
+
+### Frontend — Type definitions (`frontend/src/types/api.ts`)
+- `PuzzleRequest` gains optional `seen_ids?: string[]`.
+- `PuzzleResponse` gains `puzzle_id: string`.
+
+### Frontend — Game store (`frontend/src/store/game.ts`)
+- `GameState` gains `seenPuzzleIds: string[]`, hydrated from `localStorage` at startup.
+- `loadPuzzle()` automatically injects `seen_ids` into every request and accumulates
+  `puzzle_id` values returned by the API (non-empty only).
+- Seen IDs are persisted under `rummikub_seen_puzzles` in `localStorage` and capped
+  at 500 entries to bound storage growth.
+
+---
+
 ## [0.28.0] — 2026-03-29 — Pre-generation system (puzzle rework phase 4)
 
 ### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)

@@ -109,6 +109,9 @@ class PuzzleRequest(BaseModel):
     seed: int | None = None
     # Only meaningful when difficulty == "custom"; ignored for other difficulties.
     sets_to_remove: int = Field(3, ge=1, le=5)
+    # Phase 5: UUIDs of puzzles the client has already seen; used to avoid duplicates
+    # when drawing from the pre-generated pool.  Capped at 500 to bound request size.
+    seen_ids: list[str] = Field(default_factory=list, max_length=500)
 
 
 class PuzzleResponse(BaseModel):
@@ -119,3 +122,4 @@ class PuzzleResponse(BaseModel):
     disruption_score: int
     chain_depth: int = 0    # Phase 3: longest rearrangement chain depth
     is_unique: bool = True  # Phase 3: solution uniqueness verified for Expert/Nightmare
+    puzzle_id: str = ""     # Phase 5: UUID for pool-drawn puzzles; "" for live-generated

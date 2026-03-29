@@ -72,7 +72,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.28.0",
+    version="0.29.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -112,8 +112,10 @@ from solver.config.rules import RulesConfig  # noqa: E402
 from solver.engine.solver import solve as _run_solver  # noqa: E402
 from solver.generator.puzzle_generator import (  # noqa: E402
     PuzzleGenerationError,
+    PuzzleResult,
     generate_puzzle,
 )
+from solver.generator.puzzle_store import PuzzleStore  # noqa: E402
 from solver.models.board_state import BoardState  # noqa: E402
 from solver.models.tile import Color, Tile  # noqa: E402
 from solver.models.tileset import SetType, TileSet  # noqa: E402
@@ -289,7 +291,49 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
         difficulty=request.difficulty,
         seed=request.seed,
         sets_to_remove=request.sets_to_remove,
+        seen_ids=len(request.seen_ids),
     )
+
+    def _tile_to_input(tile: Tile) -> TileInput:
+        if tile.is_joker:
+            return TileInput(joker=True)
+        if tile.color is None or tile.number is None:
+            raise ValueError(f"Non-joker tile has no color/number: {tile!r}")
+        return TileInput(color=tile.color.value, number=tile.number)
+
+    def _result_to_response(result: PuzzleResult, puzzle_id: str = "") -> PuzzleResponse:
+        return PuzzleResponse(
+            board_sets=[
+                BoardSetInput(
+                    type=ts.type.value,
+                    tiles=[_tile_to_input(tile) for tile in ts.tiles],
+                )
+                for ts in result.board_sets
+            ],
+            rack=[_tile_to_input(tile) for tile in result.rack],
+            difficulty=result.difficulty,
+            tile_count=len(result.rack),
+            disruption_score=result.disruption_score,
+            chain_depth=result.chain_depth,
+            is_unique=result.is_unique,
+            puzzle_id=puzzle_id,
+        )
+
+    # Phase 5: for expert/nightmare try the pre-generated pool first.
+    if request.difficulty in ("expert", "nightmare"):
+        store = PuzzleStore()
+        drawn = store.draw(request.difficulty, exclude_ids=request.seen_ids)
+        store.close()
+        if drawn is not None:
+            result, puzzle_id = drawn
+            logger.info(
+                "puzzle_pool_hit",
+                difficulty=request.difficulty,
+                puzzle_id=puzzle_id,
+            )
+            return _result_to_response(result, puzzle_id)
+        logger.info("puzzle_pool_empty", difficulty=request.difficulty)
+        # Pool exhausted — fall through to live generation below.
 
     try:
         result = generate_puzzle(
@@ -304,28 +348,4 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             detail="Could not generate a puzzle — please try again.",
         ) from exc
 
-    def _tile_to_input(tile: Tile) -> TileInput:
-        if tile.is_joker:
-            return TileInput(joker=True)
-        if tile.color is None or tile.number is None:
-            raise ValueError(f"Non-joker tile has no color/number: {tile!r}")
-        return TileInput(color=tile.color.value, number=tile.number)
-
-    board_sets_input: list[BoardSetInput] = [
-        BoardSetInput(
-            type=ts.type.value,
-            tiles=[_tile_to_input(tile) for tile in ts.tiles],
-        )
-        for ts in result.board_sets
-    ]
-    rack_input: list[TileInput] = [_tile_to_input(tile) for tile in result.rack]
-
-    return PuzzleResponse(
-        board_sets=board_sets_input,
-        rack=rack_input,
-        difficulty=result.difficulty,
-        tile_count=len(result.rack),
-        disruption_score=result.disruption_score,
-        chain_depth=result.chain_depth,
-        is_unique=result.is_unique,
-    )
+    return _result_to_response(result)
