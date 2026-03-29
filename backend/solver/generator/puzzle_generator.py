@@ -140,6 +140,7 @@ class PuzzleResult:
     disruption_score: int
     chain_depth: int = 0    # Phase 3: longest rearrangement chain in the solution
     is_unique: bool = True  # Phase 3: True if uniqueness not required OR verified
+    joker_count: int = 0    # Phase 4: number of jokers in the tile pool (0 = joker-free)
 
 
 def generate_puzzle(

@@ -5,6 +5,44 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.28.0] — 2026-03-29 — Pre-generation system (puzzle rework phase 4)
+
+### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)
+- **`PuzzleResult`** gains `joker_count: int = 0`. Defaults to `0` for all current
+  puzzles (the generator is still joker-free). The field is present so `PuzzleStore`
+  can record it in the database and the schema stays stable when joker support lands.
+
+### Backend — Puzzle store (`backend/solver/generator/puzzle_store.py`) — new file
+- **`PuzzleStore`** class: SQLite-backed pool for pre-generated puzzles.
+  - `__init__(db_path)`: creates the file and schema on first use; parent directories
+    are created automatically.
+  - `store(result, seed?) → str`: persists a `PuzzleResult` and returns its UUID.
+  - `draw(difficulty, exclude_ids?) → (PuzzleResult, str) | None`: draws a random
+    unseen puzzle, skipping any IDs in `exclude_ids`. Returns `None` when the pool
+    is exhausted.
+  - `count(difficulty?) → int`: total stored puzzles, optionally filtered by difficulty.
+  - `close()`: closes the SQLite connection.
+- Schema: `puzzles(id, difficulty, board_json, rack_json, chain_depth, disruption,
+  rack_size, board_size, is_unique, joker_count, seed, created_at)` with an index
+  on `difficulty` for fast pool queries.
+- Default DB path: `data/puzzles.db`; overridable via `PUZZLE_DB_PATH` env var.
+
+### Backend — Pre-generation CLI (`backend/solver/generator/pregenerate.py`) — new file
+- `python -m solver.generator.pregenerate --difficulty nightmare --count 200` generates
+  N puzzles at the given difficulty and stores them in the SQLite pool.
+- `--all` generates for `hard`, `expert`, and `nightmare` in sequence.
+- `--stats` prints per-difficulty pool counts and exits.
+- Real-time progress: `[n/total] chain=N disrupt=N unique=T rack=N (rate/s)`.
+
+### Backend — Tests
+- **`backend/tests/solver/test_puzzle_store.py`** — 21 new tests in 4 classes:
+  `TestPuzzleStoreInit` (3), `TestStoreAndCount` (6), `TestDraw` (6), `TestRoundtrip` (6).
+  All use the pytest `tmp_path` fixture for isolated ephemeral SQLite files.
+  A module-scoped `_medium_result` fixture generates one `medium` puzzle once per
+  module to avoid repeated ILP calls.
+
+---
+
 ## [0.27.0] — 2026-03-29 — Puzzle generation integration (puzzle rework phase 3)
 
 ### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)

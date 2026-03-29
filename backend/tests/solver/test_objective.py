@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from solver.engine.objective import compute_chain_depth, compute_disruption_score
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet

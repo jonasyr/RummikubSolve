@@ -7,8 +7,6 @@ check_uniqueness(state, solution, rules) → bool
 
 from __future__ import annotations
 
-import pytest
-
 from solver.config.rules import RulesConfig
 from solver.engine.solver import check_uniqueness, solve
 from solver.models.board_state import BoardState
@@ -122,7 +120,6 @@ class TestUniqueSolutions:
     def test_active_set_indices_empty_returns_true(self) -> None:
         """Directly test the guard: Solution with empty active_set_indices → True."""
         from solver.models.board_state import Solution
-        from solver.models.tileset import TileSet
 
         sol = Solution(
             new_sets=[],
