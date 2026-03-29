@@ -64,7 +64,7 @@ export interface MoveOutput {
   set_index: number | null;
 }
 
-export type Difficulty = "easy" | "medium" | "hard" | "expert" | "custom";
+export type Difficulty = "easy" | "medium" | "hard" | "expert" | "nightmare" | "custom";
 
 export interface PuzzleRequest {
   difficulty?: Difficulty;
@@ -78,6 +78,9 @@ export interface PuzzleResponse {
   rack: TileInput[];
   difficulty: Difficulty;
   tile_count: number;
+  disruption_score: number; // was missing from TS mirror (backend returns it since v0.22.0)
+  chain_depth: number;      // Phase 3: longest rearrangement chain depth
+  is_unique: boolean;       // Phase 3: solution uniqueness verified for Expert/Nightmare
 }
 
 export type SolveStatus = "solved" | "no_solution";

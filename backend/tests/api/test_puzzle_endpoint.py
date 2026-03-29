@@ -6,6 +6,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from api.main import app
+from solver.generator.puzzle_generator import _MIN_CHAIN_DEPTHS  # type: ignore[attr-defined]
 
 
 @pytest.fixture
@@ -111,3 +112,46 @@ async def test_expert_puzzle_200(client: AsyncClient) -> None:
     assert 2 <= len(data["rack"]) <= 6
     assert len(data["board_sets"]) >= 2
     assert data["disruption_score"] >= 26  # Expert floor
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: new response fields (chain_depth, is_unique) + nightmare tier
+# ---------------------------------------------------------------------------
+
+
+class TestPuzzleResponseNewFields:
+    """chain_depth and is_unique are present in all /api/puzzle responses."""
+
+    async def test_easy_response_has_chain_depth(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
+        assert r.status_code == 200
+        data = r.json()
+        assert "chain_depth" in data
+        assert isinstance(data["chain_depth"], int)
+        assert data["chain_depth"] >= 0
+
+    async def test_easy_response_has_is_unique(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
+        assert r.status_code == 200
+        data = r.json()
+        assert "is_unique" in data
+        assert isinstance(data["is_unique"], bool)
+
+    async def test_expert_response_chain_depth_and_unique(
+        self, client: AsyncClient
+    ) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "expert", "seed": 42})
+        assert r.status_code == 200
+        data = r.json()
+        assert data["chain_depth"] >= _MIN_CHAIN_DEPTHS["expert"]
+        assert isinstance(data["is_unique"], bool)  # informational; may be True or False
+
+    async def test_nightmare_endpoint_all_fields(self, client: AsyncClient) -> None:
+        """One call covers: 200 status, difficulty, rack size, is_unique, chain_depth."""
+        r = await client.post("/api/puzzle", json={"difficulty": "nightmare", "seed": 99})
+        assert r.status_code == 200
+        data = r.json()
+        assert data["difficulty"] == "nightmare"
+        assert 5 <= len(data["rack"]) <= 7
+        assert isinstance(data["is_unique"], bool)  # informational; may be True or False
+        assert data["chain_depth"] >= _MIN_CHAIN_DEPTHS["nightmare"]

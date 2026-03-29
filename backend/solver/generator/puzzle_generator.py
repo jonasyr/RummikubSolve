@@ -30,14 +30,14 @@ from dataclasses import dataclass
 from typing import Literal
 
 from ..engine.objective import compute_disruption_score
-from ..engine.solver import solve
+from ..engine.solver import check_uniqueness, solve
 from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
 from ..models.tileset import TileSet
 from ..validator.rule_checker import is_valid_set
 from .set_enumerator import enumerate_groups, enumerate_runs
 
-Difficulty = Literal["easy", "medium", "hard", "expert", "custom"]
+Difficulty = Literal["easy", "medium", "hard", "expert", "nightmare", "custom"]
 
 # ---------------------------------------------------------------------------
 # Difficulty configuration constants
@@ -48,7 +48,8 @@ _RACK_SIZES: dict[str, tuple[int, int]] = {
     "easy": (2, 3),
     "medium": (3, 4),
     "hard": (4, 5),
-    "expert": (4, 6),  # min raised from 2; Expert always forces meaningful placement
+    "expert": (4, 6),    # min raised from 2; Expert always forces meaningful placement
+    "nightmare": (5, 7), # Phase 3: deep chains need more tiles to place
 }
 
 # Number of complete board sets sacrificed (removed entirely) per difficulty.
@@ -56,19 +57,21 @@ _SACRIFICE_COUNTS: dict[str, int] = {
     "easy": 1,
     "medium": 2,
     "hard": 3,
-    "expert": 5,  # was 4; one extra sacrifice drives more rearrangement
+    "expert": 5,     # was 4; one extra sacrifice drives more rearrangement
+    "nightmare": 6,  # Phase 3: maximum sacrifice → maximum rearrangement pressure
 }
 
 # Disruption band: (min_inclusive, max_inclusive).
 # None as max means no upper bound.
-# Bands are non-overlapping to guarantee Expert > Hard > Medium > Easy.
+# Bands are non-overlapping to guarantee Nightmare > Expert > Hard > Medium > Easy.
 # These are calibrated for the content-based compute_disruption_score metric.
 # Adjust after running empirical samples if generation rate is too low.
 _DISRUPTION_BANDS: dict[str, tuple[int, int | None]] = {
     "easy": (2, 10),
     "medium": (9, 18),
     "hard": (16, 28),
-    "expert": (29, None),  # was 26; strictly above Hard's ceiling (28); ~30% of candidates pass
+    "expert": (29, None),    # was 26; strictly above Hard's ceiling (28)
+    "nightmare": (38, None), # Phase 3: strictly above typical Expert floor
 }
 
 # Board size range (number of sets, BEFORE sacrifice) per difficulty.
@@ -77,12 +80,52 @@ _BOARD_SIZES: dict[str, tuple[int, int]] = {
     "easy": (5, 9),
     "medium": (7, 11),
     "hard": (9, 13),
-    "expert": (13, 18),  # was (11, 15); larger table = more disruption potential
+    "expert": (13, 18),    # was (11, 15); larger table = more disruption potential
+    "nightmare": (15, 20), # Phase 3: very large tables enable deep rearrangement chains
+}
+
+# Minimum chain_depth required per difficulty (Phase 3).
+# chain_depth measures the nesting depth of board rearrangements in the solution.
+# 0 = pure placement, 1 = simple rearrangement, 2 = two-step convergence, 3+ = deep chains.
+_MIN_CHAIN_DEPTHS: dict[str, int] = {
+    "easy": 0,
+    "medium": 0,
+    "hard": 1,
+    "expert": 1,    # Expert is differentiated primarily by uniqueness + disruption ≥ 29.
+    "nightmare": 2, # Nightmare requires genuine two-step convergence in the solution.
+}
+
+# Whether to compute uniqueness for this difficulty (Phase 3).
+# check_uniqueness() re-solves the ILP and is called once per returned puzzle
+# (not per candidate), so the overhead is small (~1-10 s per Expert/Nightmare puzzle).
+# The result is stored in PuzzleResult.is_unique for informational use.
+# NOTE: the complete-sacrifice strategy typically yields non-unique solutions
+# (many equivalent rearrangements exist on large boards); uniqueness gating is
+# reserved for a future puzzle generation strategy.
+_COMPUTES_UNIQUE: dict[str, bool] = {
+    "easy": False,
+    "medium": False,
+    "hard": False,
+    "expert": True,
+    "nightmare": True,
 }
 
 # Max tile-sample attempts inside _extract_by_sacrifice before giving up
 # on a board and letting the outer loop retry with a fresh board.
 _MAX_SAMPLE_ATTEMPTS = 20
+
+# Default max outer-loop attempts per difficulty (Phase 3).
+# Expert and Nightmare add chain_depth + uniqueness filters that lower the
+# acceptance rate significantly, so they need more attempts to reliably
+# produce a valid puzzle. Callers can override by passing max_attempts explicitly.
+_DEFAULT_MAX_ATTEMPTS: dict[str, int] = {
+    "easy": 150,
+    "medium": 150,
+    "hard": 200,
+    "expert": 400,
+    "nightmare": 600,
+    "custom": 150,
+}
 
 
 class PuzzleGenerationError(Exception):
@@ -95,20 +138,26 @@ class PuzzleResult:
     rack: list[Tile]
     difficulty: Difficulty
     disruption_score: int
+    chain_depth: int = 0    # Phase 3: longest rearrangement chain in the solution
+    is_unique: bool = True  # Phase 3: True if uniqueness not required OR verified
 
 
 def generate_puzzle(
     difficulty: Difficulty = "medium",
     seed: int | None = None,
-    max_attempts: int = 150,
+    max_attempts: int | None = None,
     sets_to_remove: int = 3,
 ) -> PuzzleResult:
     """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
 
     Args:
-        difficulty:    "easy", "medium", "hard", "expert", or "custom".
+        difficulty:    "easy", "medium", "hard", "expert", "nightmare", or "custom".
         seed:          Optional RNG seed for reproducible puzzles.
-        max_attempts:  How many boards to try before giving up.
+        max_attempts:  How many boards to try before giving up. Defaults to a
+                       per-difficulty value from _DEFAULT_MAX_ATTEMPTS (higher for
+                       Expert/Nightmare which have stricter acceptance filters).
+                       Pass 0 to raise PuzzleGenerationError immediately (useful
+                       for testing the error path).
         sets_to_remove: Number of complete sets to remove (only used when
                         difficulty == "custom"; valid range 1–5).
 
@@ -120,20 +169,23 @@ def generate_puzzle(
         ValueError:             If difficulty is not a known value.
         PuzzleGenerationError:  If no suitable puzzle is found.
     """
-    if difficulty not in ("easy", "medium", "hard", "expert", "custom"):
+    if difficulty not in ("easy", "medium", "hard", "expert", "nightmare", "custom"):
         raise ValueError(
             f"Unknown difficulty {difficulty!r}. "
-            f"Use 'easy', 'medium', 'hard', 'expert', or 'custom'."
+            f"Use 'easy', 'medium', 'hard', 'expert', 'nightmare', or 'custom'."
         )
 
+    n_attempts = max_attempts if max_attempts is not None else _DEFAULT_MAX_ATTEMPTS.get(
+        difficulty, 150
+    )
     rng = random.Random(seed)
-    for _ in range(max_attempts):
+    for _ in range(n_attempts):
         result = _attempt_generate(rng, difficulty, sets_to_remove)
         if result is not None:
             return result
 
     raise PuzzleGenerationError(
-        f"Could not generate a {difficulty!r} puzzle after {max_attempts} attempts."
+        f"Could not generate a {difficulty!r} puzzle after {n_attempts} attempts."
     )
 
 
@@ -182,11 +234,25 @@ def _attempt_generate(
         if hi_d is not None and score > hi_d:
             return None
 
+    # Filter by chain_depth minimum — free, already computed by solve() (Phase 3).
+    if difficulty != "custom" and solution.chain_depth < _MIN_CHAIN_DEPTHS.get(difficulty, 0):
+        return None
+
+    # Compute uniqueness for Expert / Nightmare (informational, not a gate).
+    # Called once per returned puzzle — not per candidate — so overhead is minimal.
+    # Complete-sacrifice puzzles are typically non-unique (large boards have many
+    # equivalent rearrangements), so this does not filter candidates (Phase 3).
+    is_unique = True
+    if difficulty != "custom" and _COMPUTES_UNIQUE.get(difficulty, False):
+        is_unique = check_uniqueness(state, solution)
+
     return PuzzleResult(
         board_sets=input_board,
         rack=rack,
         difficulty=difficulty,
         disruption_score=score,
+        chain_depth=solution.chain_depth,
+        is_unique=is_unique,
     )
 
 

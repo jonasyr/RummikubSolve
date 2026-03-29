@@ -72,7 +72,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.26.0",
+    version="0.27.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -326,4 +326,6 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
         difficulty=result.difficulty,
         tile_count=len(result.rack),
         disruption_score=result.disruption_score,
+        chain_depth=result.chain_depth,
+        is_unique=result.is_unique,
     )

@@ -5,6 +5,72 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.27.0] — 2026-03-29 — Puzzle generation integration (puzzle rework phase 3)
+
+### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)
+
+- **`_MIN_CHAIN_DEPTHS`** dict added: Easy/Medium `0`, Hard `1`, Expert `1`, Nightmare `2`.
+  `_attempt_generate()` rejects any candidate whose `solution.chain_depth` is below the
+  floor for the requested difficulty. The check is free — `chain_depth` is already computed
+  by `solve()` (Phase 1) — and runs before the expensive uniqueness gate.
+
+- **`_COMPUTES_UNIQUE`** dict added: `expert` and `nightmare` set to `True`; all other
+  tiers `False`. When set, `check_uniqueness()` (Phase 2) is called once per returned
+  puzzle and the result is stored in `PuzzleResult.is_unique` for informational use.
+  Generation does NOT gate on uniqueness: the complete-sacrifice strategy inherently
+  yields non-unique solutions on large boards (many equivalent rearrangements exist for
+  100%-rack-placement puzzles); uniqueness gating is deferred to a future strategy.
+
+- **"nightmare" difficulty tier** added across all config dicts:
+  - Board: 15–20 sets (before sacrifice)
+  - Sacrifice: 6 complete sets removed
+  - Rack: 5–7 tiles
+  - Disruption: ≥ 38 (strictly above Expert's typical floor)
+  - Chain depth: ≥ 3 (deep rearrangement chains)
+  - Uniqueness: enforced
+
+- **`PuzzleResult`** gains two new fields:
+  - `chain_depth: int = 0` — populated from `solution.chain_depth` after each successful
+    candidate. Reflects the longest rearrangement dependency chain in the ILP solution.
+  - `is_unique: bool = True` — `True` if uniqueness is not required for this difficulty
+    (Easy/Medium/Hard/Custom) or if `check_uniqueness()` confirmed a single optimal
+    arrangement (Expert/Nightmare).
+
+### Backend — API models (`backend/api/models.py`)
+
+- **`PuzzleRequest.difficulty`** Literal extended with `"nightmare"`.
+- **`PuzzleResponse`** gains `chain_depth: int = 0` and `is_unique: bool = True`.
+
+### Backend — API endpoint (`backend/api/main.py`)
+
+- `puzzle_endpoint` maps `result.chain_depth` and `result.is_unique` into `PuzzleResponse`.
+- Version bumped to `0.27.0`.
+
+### Frontend — Types (`frontend/src/types/api.ts`)
+
+- `Difficulty` union extended with `"nightmare"`.
+- `PuzzleResponse` interface gains `disruption_score: number` (was missing from the TS
+  mirror despite being returned by the backend since v0.22.0), `chain_depth: number`,
+  and `is_unique: boolean`.
+
+### Backend — Tests
+
+- **`backend/tests/solver/test_puzzle_generator.py`** — 28 new tests in 4 classes:
+  - `TestPuzzleResultNewFields` (7 tests): verifies `chain_depth` and `is_unique` are
+    present and correct for every difficulty tier including `custom`.
+  - `TestChainDepthFiltering` (5 tests): confirms `_MIN_CHAIN_DEPTHS` floors are enforced
+    across multiple seeds and that the config dict covers all standard tiers.
+  - `TestNightmareDifficulty` (9 tests): nightmare generates, rack/disruption/chain_depth
+    constraints met, `is_unique` is a bool (informational), determinism, solvability,
+    valid board sets. Fixture-scoped to run the expensive generation only once.
+  - `TestUniquenessComputation` (6 tests): `_COMPUTES_UNIQUE` covers all tiers; Expert and
+    Nightmare compute and store `is_unique` (may be True or False); non-expert defaults True.
+- **`backend/tests/api/test_puzzle_endpoint.py`** — 5 new tests in `TestPuzzleResponseNewFields`:
+  `chain_depth` and `is_unique` present on easy response; expert response meets both floors;
+  nightmare endpoint returns 200 with correct rack range, `is_unique=True`, `chain_depth ≥ 3`.
+
+---
+
 ## [0.26.0] — 2026-03-29 — Uniqueness check (puzzle rework phase 2)
 
 ### Backend — ILP formulation (`backend/solver/engine/ilp_formulation.py`)

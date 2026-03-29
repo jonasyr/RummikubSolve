@@ -105,7 +105,7 @@ class SolveResponse(BaseModel):
 
 
 class PuzzleRequest(BaseModel):
-    difficulty: Literal["easy", "medium", "hard", "expert", "custom"] = "medium"
+    difficulty: Literal["easy", "medium", "hard", "expert", "nightmare", "custom"] = "medium"
     seed: int | None = None
     # Only meaningful when difficulty == "custom"; ignored for other difficulties.
     sets_to_remove: int = Field(3, ge=1, le=5)
@@ -117,3 +117,5 @@ class PuzzleResponse(BaseModel):
     difficulty: str
     tile_count: int
     disruption_score: int
+    chain_depth: int = 0    # Phase 3: longest rearrangement chain depth
+    is_unique: bool = True  # Phase 3: solution uniqueness verified for Expert/Nightmare

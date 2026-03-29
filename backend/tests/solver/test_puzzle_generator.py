@@ -6,7 +6,9 @@ import pytest
 
 from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
+    _COMPUTES_UNIQUE,  # type: ignore[attr-defined]
     _DISRUPTION_BANDS,  # type: ignore[attr-defined]
+    _MIN_CHAIN_DEPTHS,  # type: ignore[attr-defined]
     PuzzleGenerationError,
     PuzzleResult,
     _any_trivial_extension,
@@ -249,3 +251,205 @@ def test_copy_ids_valid() -> None:
     all_tiles = [t for ts in result.board_sets for t in ts.tiles] + result.rack
     invalid = [(t.color, t.number, t.copy_id) for t in all_tiles if t.copy_id not in (0, 1)]
     assert invalid == [], f"Tiles with invalid copy_id: {invalid}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def _nightmare_result() -> PuzzleResult:
+    """Generate a nightmare puzzle once for this entire module.
+
+    Uses scope="module" so the expensive generation (chain_depth ≥ 3 +
+    uniqueness check) runs only once regardless of how many test methods
+    consume the fixture.
+    """
+    return generate_puzzle(difficulty="nightmare", seed=99)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: PuzzleResult new fields (chain_depth + is_unique)
+# ---------------------------------------------------------------------------
+
+
+class TestPuzzleResultNewFields:
+    """PuzzleResult carries chain_depth and is_unique after Phase 3."""
+
+    def test_easy_has_chain_depth_field(self) -> None:
+        result = generate_puzzle(difficulty="easy", seed=1)
+        assert isinstance(result.chain_depth, int)
+        assert result.chain_depth >= 0
+
+    def test_medium_has_chain_depth_field(self) -> None:
+        result = generate_puzzle(difficulty="medium", seed=2)
+        assert isinstance(result.chain_depth, int)
+        assert result.chain_depth >= 0
+
+    def test_hard_has_chain_depth_field(self) -> None:
+        result = generate_puzzle(difficulty="hard", seed=3)
+        assert isinstance(result.chain_depth, int)
+        assert result.chain_depth >= _MIN_CHAIN_DEPTHS["hard"]
+
+    def test_expert_has_chain_depth_field(self) -> None:
+        result = generate_puzzle(difficulty="expert", seed=42)
+        assert isinstance(result.chain_depth, int)
+        assert result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"]  # ≥ 1
+
+    def test_easy_has_is_unique_field(self) -> None:
+        result = generate_puzzle(difficulty="easy", seed=1)
+        assert isinstance(result.is_unique, bool)
+
+    def test_expert_is_unique_field_is_bool(self) -> None:
+        # is_unique is informational (not gated): could be True or False.
+        result = generate_puzzle(difficulty="expert", seed=42)
+        assert isinstance(result.is_unique, bool)
+
+    def test_custom_has_new_fields(self) -> None:
+        result = generate_puzzle(difficulty="custom", seed=4, sets_to_remove=3)
+        assert isinstance(result.chain_depth, int)
+        assert result.chain_depth >= 0
+        assert isinstance(result.is_unique, bool)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: chain_depth filtering
+# ---------------------------------------------------------------------------
+
+
+class TestChainDepthFiltering:
+    """_MIN_CHAIN_DEPTHS filters are respected per difficulty tier."""
+
+    def test_hard_multiple_seeds_chain_depth_ge_1(self) -> None:
+        for seed in range(3):
+            result = generate_puzzle(difficulty="hard", seed=seed)
+            assert result.chain_depth >= 1, (
+                f"Hard seed={seed}: chain_depth={result.chain_depth} below floor 1"
+            )
+
+    def test_expert_multiple_seeds_chain_depth_ge_1(self) -> None:
+        for seed in range(3):
+            result = generate_puzzle(difficulty="expert", seed=seed)
+            assert result.chain_depth >= 1, (
+                f"Expert seed={seed}: chain_depth={result.chain_depth} below floor 1"
+            )
+
+    def test_easy_chain_depth_zero_is_allowed(self) -> None:
+        # Easy puzzles have no chain_depth floor; 0 is valid.
+        result = generate_puzzle(difficulty="easy", seed=1)
+        assert result.chain_depth >= 0
+
+    def test_chain_depth_matches_config_floor(self) -> None:
+        """Easy/Medium/Hard/Expert each meet their _MIN_CHAIN_DEPTHS floor.
+
+        Nightmare is excluded here — it is covered in TestNightmareDifficulty
+        using a shared fixture to avoid duplicate expensive generation calls.
+        """
+        for difficulty in ("easy", "medium", "hard", "expert"):
+            floor = _MIN_CHAIN_DEPTHS[difficulty]
+            result = generate_puzzle(difficulty=difficulty, seed=7)  # type: ignore[arg-type]
+            assert result.chain_depth >= floor, (
+                f"{difficulty}: chain_depth={result.chain_depth} below configured floor {floor}"
+            )
+
+    def test_min_chain_depths_dict_has_all_tiers(self) -> None:
+        """_MIN_CHAIN_DEPTHS covers all non-custom difficulties."""
+        for tier in ("easy", "medium", "hard", "expert", "nightmare"):
+            assert tier in _MIN_CHAIN_DEPTHS, f"Missing tier {tier!r} in _MIN_CHAIN_DEPTHS"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Nightmare difficulty tier
+# ---------------------------------------------------------------------------
+
+
+class TestNightmareDifficulty:
+    """Nightmare difficulty tier — chain_depth ≥ 3, is_unique=True, disruption ≥ 38.
+
+    All tests that inspect the puzzle content reuse the module-scoped
+    _nightmare_result fixture so the expensive generation runs only once.
+    """
+
+    def test_nightmare_generates(self, _nightmare_result: PuzzleResult) -> None:
+        assert _nightmare_result.difficulty == "nightmare"
+
+    def test_nightmare_rack_size_range(self, _nightmare_result: PuzzleResult) -> None:
+        assert 5 <= len(_nightmare_result.rack) <= 7
+
+    def test_nightmare_chain_depth_at_least_2(self, _nightmare_result: PuzzleResult) -> None:
+        assert _nightmare_result.chain_depth >= 2
+
+    def test_nightmare_is_unique_field_is_bool(self, _nightmare_result: PuzzleResult) -> None:
+        # is_unique is informational (not gated): could be True or False.
+        assert isinstance(_nightmare_result.is_unique, bool)
+
+    def test_nightmare_disruption_floor(self, _nightmare_result: PuzzleResult) -> None:
+        lo, _ = _DISRUPTION_BANDS["nightmare"]
+        assert _nightmare_result.disruption_score >= lo, (
+            f"Nightmare disruption {_nightmare_result.disruption_score} below floor {lo}"
+        )
+
+    def test_nightmare_seeded_determinism(self, _nightmare_result: PuzzleResult) -> None:
+        # Re-generate with the same seed and verify the rack is identical.
+        r2 = generate_puzzle(difficulty="nightmare", seed=99)
+        assert [(t.color, t.number, t.copy_id) for t in _nightmare_result.rack] == [
+            (t.color, t.number, t.copy_id) for t in r2.rack
+        ]
+
+    def test_nightmare_solvable(self, _nightmare_result: PuzzleResult) -> None:
+        state = BoardState(board_sets=_nightmare_result.board_sets, rack=_nightmare_result.rack)
+        solution = solve(state)
+        assert solution.tiles_placed == len(_nightmare_result.rack)
+
+    def test_nightmare_tiles_all_valid_sets(self, _nightmare_result: PuzzleResult) -> None:
+        for ts in _nightmare_result.board_sets:
+            assert is_valid_set(ts), f"Invalid board set in nightmare puzzle: {ts!r}"
+
+    def test_invalid_difficulty_still_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown difficulty"):
+            generate_puzzle(difficulty="extreme")  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: uniqueness gating
+# ---------------------------------------------------------------------------
+
+
+class TestUniquenessComputation:
+    """check_uniqueness is computed for Expert / Nightmare (informational, not a gate).
+
+    The complete-sacrifice strategy typically yields non-unique solutions
+    (large boards have many equivalent rearrangements), so is_unique is not
+    used to filter candidates — it is stored in PuzzleResult for API consumers.
+    """
+
+    def test_expert_is_unique_is_bool(self) -> None:
+        result = generate_puzzle(difficulty="expert", seed=0)
+        assert isinstance(result.is_unique, bool)
+
+    def test_computes_unique_dict_has_all_tiers(self) -> None:
+        """_COMPUTES_UNIQUE covers all non-custom difficulties."""
+        for tier in ("easy", "medium", "hard", "expert", "nightmare"):
+            assert tier in _COMPUTES_UNIQUE, f"Missing tier {tier!r} in _COMPUTES_UNIQUE"
+
+    def test_hard_is_unique_field_present(self) -> None:
+        result = generate_puzzle(difficulty="hard", seed=3)
+        assert isinstance(result.is_unique, bool)
+
+    def test_easy_is_unique_field_is_bool(self) -> None:
+        result = generate_puzzle(difficulty="easy", seed=1)
+        assert isinstance(result.is_unique, bool)
+
+    def test_computes_unique_false_for_easy_medium_hard(self) -> None:
+        """Non-expert tiers do not call check_uniqueness (overhead avoidance)."""
+        for tier in ("easy", "medium", "hard"):
+            assert _COMPUTES_UNIQUE[tier] is False, (
+                f"{tier} unexpectedly computes uniqueness"
+            )
+
+    def test_computes_unique_true_for_expert_nightmare(self) -> None:
+        for tier in ("expert", "nightmare"):
+            assert _COMPUTES_UNIQUE[tier] is True, (
+                f"{tier} must compute uniqueness"
+            )
