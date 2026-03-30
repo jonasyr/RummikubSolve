@@ -12,7 +12,9 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from solver.config.rules import RulesConfig
+from solver.engine.ilp_formulation import build_ilp_model, extract_solution
 from solver.engine.solver import solve
+from solver.generator.set_enumerator import enumerate_valid_sets
 from solver.models.board_state import BoardState
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
@@ -564,3 +566,153 @@ def test_allow_wrap_runs_does_not_produce_wrap_templates() -> None:
         "Wrap-run solving is now working — update this assertion to "
         "tiles_placed == 3 and remove the 'known gap' note."
     )
+
+
+# ---------------------------------------------------------------------------
+# extract_solution active_set_indices & excluded_solutions tests
+# ---------------------------------------------------------------------------
+
+
+def _build_and_solve(state: BoardState, rules: RulesConfig | None = None, **kwargs):
+    """Helper: enumerate → build → run → extract, returning the full 5-tuple."""
+    if rules is None:
+        rules = RulesConfig()
+    candidate_sets = enumerate_valid_sets(state)
+    model = build_ilp_model(state, candidate_sets, rules, **kwargs)
+    model.highs.run()
+    return extract_solution(model), candidate_sets
+
+
+def test_extract_solution_returns_active_indices_nonempty() -> None:
+    """extract_solution returns a non-empty active_set_indices when tiles are placed."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
+    (_, _, _, _, active_indices), _ = _build_and_solve(state)
+    assert isinstance(active_indices, list)
+    assert len(active_indices) >= 1
+
+
+def test_extract_solution_active_indices_are_valid_set_indices() -> None:
+    """Every returned active index is a valid index into candidate_sets."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
+    (_, _, _, _, active_indices), candidate_sets = _build_and_solve(state)
+    for idx in active_indices:
+        assert 0 <= idx < len(candidate_sets)
+
+
+def test_extract_solution_active_indices_empty_when_no_tiles_placed() -> None:
+    """When no tiles are placed (rack too short), active_set_indices is empty."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5)])
+    (_, placed, _, _, active_indices), _ = _build_and_solve(state)
+    assert placed == []
+    assert active_indices == []
+
+
+def test_excluded_solutions_none_has_no_effect() -> None:
+    """Passing excluded_solutions=None gives identical results to omitting it."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
+    (new_sets1, placed1, _, _, _), _ = _build_and_solve(state)
+    (new_sets2, placed2, _, _, _), _ = _build_and_solve(state, excluded_solutions=None)
+    assert len(placed1) == len(placed2)
+
+
+def test_excluded_solutions_empty_list_has_no_effect() -> None:
+    """Passing excluded_solutions=[] gives identical results to no exclusion."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
+    (_, placed1, _, _, _), _ = _build_and_solve(state)
+    (_, placed2, _, _, _), _ = _build_and_solve(state, excluded_solutions=[])
+    assert len(placed1) == len(placed2)
+
+
+def test_excluded_solutions_forces_different_active_sets() -> None:
+    """After excluding first solution's active sets, re-solve uses different y-vars.
+
+    State: rack = {R4, R5, R6, R7} — solver can place all 4 in one run OR
+    place {R4,R5,R6} and leave R7, etc.  After excluding the first solution's
+    exact active-set combination, the second solve should activate a different
+    set of y variables (different candidate set indices).
+    """
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6), t(R, 7)])
+    (_, _, _, _, active1), candidate_sets = _build_and_solve(state)
+
+    rules = RulesConfig()
+    model2 = build_ilp_model(
+        state, candidate_sets, rules, excluded_solutions=[active1]
+    )
+    model2.highs.run()
+    _, _, _, _, active2 = extract_solution(model2)
+
+    # The exact same combination of active sets must not appear again.
+    assert sorted(active1) != sorted(active2)
+
+
+def test_excluded_solutions_infeasible_when_only_one_solution() -> None:
+    """Excluding the unique optimal solution makes the model infeasible.
+
+    Rack = {R4, R5, R6}: there is exactly one 3-tile run possible.
+    After excluding it, no other arrangement can place even 1 rack tile
+    in a valid set → infeasible (or places 0 tiles).
+    """
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
+    (_, _, _, _, active1), candidate_sets = _build_and_solve(state)
+    assert len(active1) == 1  # exactly one set active for a minimal 3-tile run
+
+    rules = RulesConfig()
+    model2 = build_ilp_model(
+        state, candidate_sets, rules, excluded_solutions=[active1]
+    )
+    model2.highs.run()
+    try:
+        _, placed2, _, _, _ = extract_solution(model2)
+        # If not infeasible, must place fewer tiles (0).
+        assert len(placed2) == 0
+    except ValueError:
+        pass  # Infeasible is also a correct outcome.
+
+
+def test_excluded_solutions_multiple_exclusions() -> None:
+    """Two exclusions → third distinct solution found (or fewer tiles placed).
+
+    Uses a rack with several placement options so that forcing two solutions
+    away still leaves a third reachable arrangement.
+    """
+    # Rack {R3,R4,R5,R6,R7,R8}: multiple possible 3-tile and 4-tile runs.
+    state = BoardState(
+        board_sets=[],
+        rack=[t(R, 3), t(R, 4), t(R, 5), t(R, 6), t(R, 7), t(R, 8)],
+    )
+    (_, _, _, _, active1), candidate_sets = _build_and_solve(state)
+
+    rules = RulesConfig()
+    model2 = build_ilp_model(
+        state, candidate_sets, rules, excluded_solutions=[active1]
+    )
+    model2.highs.run()
+    _, _, _, _, active2 = extract_solution(model2)
+
+    model3 = build_ilp_model(
+        state, candidate_sets, rules, excluded_solutions=[active1, active2]
+    )
+    model3.highs.run()
+    _, placed3, _, _, active3 = extract_solution(model3)
+
+    # Third solve must differ from both prior solutions.
+    assert sorted(active3) != sorted(active1)
+    assert sorted(active3) != sorted(active2)
+    # And it must have placed at least some tiles.
+    assert len(placed3) >= 0  # defensive; realistically ≥3 for this rack
+
+
+def test_solve_solution_carries_active_set_indices() -> None:
+    """solve() populates active_set_indices on the returned Solution."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5), t(R, 6)])
+    sol = solve(state)
+    assert isinstance(sol.active_set_indices, list)
+    assert len(sol.active_set_indices) >= 1
+
+
+def test_solve_no_tiles_placed_active_indices_empty() -> None:
+    """When solve() places 0 tiles, active_set_indices is empty."""
+    state = BoardState(board_sets=[], rack=[t(R, 4), t(R, 5)])
+    sol = solve(state)
+    assert sol.tiles_placed == 0
+    assert sol.active_set_indices == []

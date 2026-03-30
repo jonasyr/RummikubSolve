@@ -20,6 +20,37 @@ import type {
 } from "../types/api";
 
 // ---------------------------------------------------------------------------
+// Phase 5: seen-puzzle tracking (localStorage persistence)
+// Phase 6: last puzzle metadata (chain depth + uniqueness for stats badge)
+// ---------------------------------------------------------------------------
+
+interface PuzzleMeta {
+  chainDepth: number;
+  isUnique: boolean;
+  difficulty: string;
+}
+
+const _SEEN_KEY = "rummikub_seen_puzzles";
+const _SEEN_MAX = 500;
+
+function _loadSeenIds(): string[] {
+  try {
+    const raw = localStorage.getItem(_SEEN_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return []; // localStorage unavailable (SSR / private browsing)
+  }
+}
+
+function _persistSeenIds(ids: string[]): void {
+  try {
+    localStorage.setItem(_SEEN_KEY, JSON.stringify(ids));
+  } catch {
+    // ignore write failures (storage quota, private browsing)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
 
@@ -37,6 +68,12 @@ interface GameState {
 
   // UI state
   isBuildingSet: boolean;
+
+  // Phase 5: accumulated IDs of puzzles already seen (persisted in localStorage)
+  seenPuzzleIds: string[];
+
+  // Phase 6: metadata from the most recently loaded puzzle
+  lastPuzzleMeta: PuzzleMeta | null;
 
   // Actions — board
   addBoardSet: (set: BoardSetInput) => void;
@@ -78,6 +115,8 @@ const initialState = {
   solution: null as SolveResponse | null,
   error: null as string | null,
   isBuildingSet: false,
+  seenPuzzleIds: [] as string[], // Phase 5: reset() clears in-memory list (localStorage retained)
+  lastPuzzleMeta: null as PuzzleMeta | null,
 };
 
 // ---------------------------------------------------------------------------
@@ -86,6 +125,8 @@ const initialState = {
 
 export const useGameStore = create<GameState>((set, get) => ({
   ...initialState,
+  // Phase 5: hydrate seenPuzzleIds from localStorage on first store creation.
+  seenPuzzleIds: _loadSeenIds(),
 
   addBoardSet: (s) =>
     set((state) => ({ boardSets: [...state.boardSets, s] })),
@@ -121,13 +162,33 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (get().isPuzzleLoading) return;
     set({ isPuzzleLoading: true, error: null, solution: null });
     try {
-      const puzzle = await fetchPuzzle(request, signal);
+      // Phase 5: inject seen_ids so the pool avoids sending duplicate puzzles.
+      const currentSeen = get().seenPuzzleIds;
+      const enrichedRequest: PuzzleRequest = {
+        ...request,
+        ...(currentSeen.length > 0 ? { seen_ids: currentSeen } : {}),
+      };
+      const puzzle = await fetchPuzzle(enrichedRequest, signal);
+
+      // Phase 5: accumulate the returned puzzle_id (non-empty = drawn from pool).
+      let updatedSeen = currentSeen;
+      if (puzzle.puzzle_id) {
+        updatedSeen = [...currentSeen, puzzle.puzzle_id].slice(-_SEEN_MAX);
+        _persistSeenIds(updatedSeen);
+      }
+
       set({
         boardSets: puzzle.board_sets,
         rack: puzzle.rack,
         isPuzzleLoading: false,
         isFirstTurn: false,
         isBuildingSet: false,
+        seenPuzzleIds: updatedSeen,
+        lastPuzzleMeta: {           // Phase 6: expose metadata for stats badge
+          chainDepth: puzzle.chain_depth ?? 0,
+          isUnique: puzzle.is_unique ?? false,
+          difficulty: puzzle.difficulty,
+        },
       });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {

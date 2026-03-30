@@ -55,6 +55,7 @@ def build_ilp_model(
     candidate_sets: list[TileSet],
     rules: RulesConfig,
     secondary_objective: Literal["tile_value", "disruption"] = "tile_value",
+    excluded_solutions: list[list[int]] | None = None,
 ) -> ILPModel:
     """Build and configure the HiGHS ILP model.
 
@@ -67,6 +68,15 @@ def build_ilp_model(
                              tiles left in hand. "disruption" is reserved for the
                              planned dual-solution feature (see objective.py) and
                              raises NotImplementedError until implemented.
+        excluded_solutions:  List of previously-found solutions to exclude.
+                             Each entry is a list of candidate-set indices that
+                             were active (y[s]=1) in a prior solution. For each
+                             entry an exclusion constraint is added:
+                                 Σ_{s ∈ active} y[s] ≤ len(active) - 1
+                             This forces at least one currently-active set to
+                             become inactive, producing a structurally different
+                             solution. Used by check_uniqueness() to verify that
+                             no alternative optimal arrangement exists.
 
     Returns:
         An ILPModel wrapping a configured highspy.Highs instance.
@@ -254,6 +264,20 @@ def build_ilp_model(
         tile_value = float(tile.number) if (not tile.is_joker and tile.number is not None) else 0.0
         highs.changeColCost(h_col, 1.0 + tile_value / BIG_M)
 
+    # Exclusion constraints — force at least one y[s] to differ from each
+    # previously-found solution.  Encoding per active set S = {s1…sk}:
+    #   Σ_{s ∈ S} y[s] ≤ k − 1
+    # This makes the exact active-set combination from a prior solve infeasible
+    # while leaving all other combinations reachable.
+    if excluded_solutions:
+        for active_indices in excluded_solutions:
+            if not active_indices:
+                continue
+            cols = [y_vars[s] for s in active_indices]
+            coefs = [1.0] * len(cols)
+            ub = float(len(active_indices) - 1)
+            highs.addRow(-1e30, ub, len(cols), cols, coefs)
+
     return ILPModel(
         highs=highs,
         all_tiles=all_tiles,
@@ -267,13 +291,17 @@ def build_ilp_model(
 
 def extract_solution(
     model: ILPModel,
-) -> tuple[list[TileSet], list[Tile], list[Tile], bool]:
+) -> tuple[list[TileSet], list[Tile], list[Tile], bool, list[int]]:
     """Extract a Solution from a solved ILPModel.
 
     Should be called after model.highs.run().
 
     Returns:
-        (new_sets, placed_tiles, remaining_rack, is_optimal)
+        (new_sets, placed_tiles, remaining_rack, is_optimal, active_set_indices)
+
+        active_set_indices: indices into model.candidate_sets whose y[s]=1 in
+        this solution.  Passed back to build_ilp_model(excluded_solutions=…)
+        to implement the uniqueness check.
 
     Raises:
         ValueError: If the model status is Infeasible (input was invalid).
@@ -302,9 +330,11 @@ def extract_solution(
     all_tiles = model.all_tiles
     new_sets: list[TileSet] = []
     placed_tile_indices: set[int] = set()
+    active_set_indices: list[int] = []
 
     for s, y_col in enumerate(model.y_vars):
         if col_value[y_col] > EPS:
+            active_set_indices.append(s)
             template = model.candidate_sets[s]
             assigned: list[Tile] = []
             for t_idx in range(len(all_tiles)):
@@ -321,4 +351,4 @@ def extract_solution(
         all_tiles[i] for i in sorted(model.rack_tile_indices) if i not in placed_tile_indices
     ]
 
-    return new_sets, placed_tiles, remaining_rack, is_optimal
+    return new_sets, placed_tiles, remaining_rack, is_optimal, active_set_indices

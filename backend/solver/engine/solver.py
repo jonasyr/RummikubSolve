@@ -27,8 +27,10 @@ from ..generator.set_enumerator import enumerate_valid_sets
 from ..models.board_state import BoardState, Solution
 from ..validator.solution_verifier import verify_solution
 from .ilp_formulation import build_ilp_model, extract_solution
+from .objective import compute_chain_depth
 
 _SOLVE_TIMEOUT_SECONDS = 30.0
+_UNIQUENESS_TIMEOUT_SECONDS = 10.0
 
 
 def solve(
@@ -82,9 +84,12 @@ def solve(
     # 4. Extract the solution.
     # For first-turn solves, infeasibility means the rack can't meet the meld
     # threshold — this is a valid "no play" outcome, not an error.
+    active_indices: list[int] = []
     if rules.is_first_turn:
         try:
-            new_sets, placed_tiles, remaining_rack, is_optimal = extract_solution(model)
+            (
+                new_sets, placed_tiles, remaining_rack, is_optimal, active_indices
+            ) = extract_solution(model)
         except ValueError:
             # Can't reach the threshold → player must draw; board is unchanged.
             new_sets = list(state.board_sets)
@@ -96,7 +101,9 @@ def solve(
             new_sets = list(state.board_sets) + new_sets
     else:
         try:
-            new_sets, placed_tiles, remaining_rack, is_optimal = extract_solution(model)
+            (
+                new_sets, placed_tiles, remaining_rack, is_optimal, active_indices
+            ) = extract_solution(model)
         except ValueError:
             # Infeasible — the board enumeration couldn't find a valid rearrangement.
             # This should not happen with a valid board; fall back to no-move so we
@@ -135,6 +142,10 @@ def solve(
     # 5. Generate human-readable move instructions.
     moves = generate_moves(state, new_sets, placed_tiles)
 
+    # Compute chain depth using the original board state (not solve_state,
+    # which may be rack-only for first-turn solves).
+    chain_depth = compute_chain_depth(state.board_sets, new_sets, placed_tiles)
+
     solution = Solution(
         new_sets=new_sets,
         placed_tiles=placed_tiles,
@@ -142,6 +153,8 @@ def solve(
         moves=moves,
         is_optimal=is_optimal,
         solve_time_ms=solve_time_ms,
+        chain_depth=chain_depth,
+        active_set_indices=active_indices,
     )
 
     # 6. Post-solve verification (defense-in-depth per Blueprint §10.4).
@@ -152,3 +165,61 @@ def solve(
         )
 
     return solution
+
+
+def check_uniqueness(
+    state: BoardState,
+    solution: Solution,
+    rules: RulesConfig | None = None,
+) -> bool:
+    """Return True if *solution* is the ONLY arrangement that places solution.tiles_placed tiles.
+
+    Re-solves the ILP with the first solution's active sets excluded via the
+    constraint:
+        Σ_{s ∈ active} y[s] ≤ len(active) − 1
+    If the re-solve places fewer tiles (or becomes infeasible), the original
+    solution is unique.  If an alternative arrangement places the same number of
+    tiles, the puzzle is NOT unique (a player could find either solution).
+
+    Cost: roughly doubles solve time because we run HiGHS twice.  Designed
+    for offline puzzle pre-generation where latency is not critical.
+
+    Args:
+        state:    The board + rack state that produced *solution*.
+        solution: A Solution returned by solve().  Must have active_set_indices
+                  populated (always true when obtained from solve()).
+        rules:    Rule variant configuration.  Uses defaults if None.
+
+    Returns:
+        True  — solution is the unique optimum.
+        False — an alternative arrangement achieves the same tile count.
+    """
+    if rules is None:
+        rules = RulesConfig()
+
+    # If no tiles were placed there is nothing to be unique about.
+    if solution.tiles_placed == 0 or not solution.active_set_indices:
+        return True
+
+    # Re-use the same sub-problem state as solve() did.
+    solve_state = BoardState(board_sets=[], rack=state.rack) if rules.is_first_turn else state
+
+    # Re-enumerate candidate sets (deterministic: same state → same list).
+    candidate_sets = enumerate_valid_sets(solve_state)
+
+    model2 = build_ilp_model(
+        solve_state,
+        candidate_sets,
+        rules,
+        excluded_solutions=[solution.active_set_indices],
+    )
+    model2.highs.setOptionValue("time_limit", _UNIQUENESS_TIMEOUT_SECONDS)
+    model2.highs.run()
+
+    try:
+        _, placed2, _, _, _ = extract_solution(model2)
+    except ValueError:
+        # Infeasible → no alternative arrangement exists.
+        return True
+
+    return len(placed2) < solution.tiles_placed

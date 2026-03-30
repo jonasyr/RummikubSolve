@@ -22,7 +22,7 @@ async def test_health(client: AsyncClient) -> None:
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "ok"
-    assert data["version"] == "0.20.0"
+    assert data["version"] == "0.31.0"
 
 
 async def test_solve_valid_run(client: AsyncClient) -> None:

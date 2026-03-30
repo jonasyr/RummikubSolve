@@ -1,6 +1,22 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useGameStore } from "../../store/game";
 import type { BoardSetInput, TileInput } from "../../types/api";
+
+// ---------------------------------------------------------------------------
+// Mock the API module so loadPuzzle doesn't make real HTTP calls.
+// ---------------------------------------------------------------------------
+vi.mock("../../lib/api", () => ({
+  fetchPuzzle: vi.fn(),
+  solvePuzzle: vi.fn(),
+}));
+
+// Import after vi.mock so we get the mocked version.
+const { fetchPuzzle } = await import("../../lib/api");
+const mockFetchPuzzle = fetchPuzzle as ReturnType<typeof vi.fn>;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 // Access Zustand store state directly — no React rendering needed.
 const store = () => useGameStore.getState();
@@ -10,6 +26,7 @@ const boardSet = (tiles: TileInput[]): BoardSetInput => ({ type: "run", tiles })
 
 beforeEach(() => {
   store().reset();
+  mockFetchPuzzle.mockReset();
 });
 
 describe("rack actions", () => {
@@ -124,5 +141,81 @@ describe("reset", () => {
     expect(s.isLoading).toBe(false);
     expect(s.solution).toBeNull();
     expect(s.isBuildingSet).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6: lastPuzzleMeta
+// ---------------------------------------------------------------------------
+
+describe("lastPuzzleMeta", () => {
+  it("is null in initial state", () => {
+    expect(store().lastPuzzleMeta).toBeNull();
+  });
+
+  it("is set after loadPuzzle resolves", async () => {
+    mockFetchPuzzle.mockResolvedValueOnce({
+      board_sets: [],
+      rack: [],
+      difficulty: "expert",
+      tile_count: 0,
+      disruption_score: 30,
+      chain_depth: 2,
+      is_unique: true,
+      puzzle_id: "test-uuid",
+    });
+    await store().loadPuzzle({ difficulty: "expert" });
+    expect(store().lastPuzzleMeta).toEqual({
+      chainDepth: 2,
+      isUnique: true,
+      difficulty: "expert",
+    });
+  });
+
+  it("defaults chainDepth to 0 and isUnique to false when fields are absent", async () => {
+    mockFetchPuzzle.mockResolvedValueOnce({
+      board_sets: [],
+      rack: [],
+      difficulty: "easy",
+      tile_count: 0,
+      disruption_score: 5,
+      // chain_depth and is_unique intentionally absent
+      puzzle_id: "",
+    });
+    await store().loadPuzzle({ difficulty: "easy" });
+    expect(store().lastPuzzleMeta?.chainDepth).toBe(0);
+    expect(store().lastPuzzleMeta?.isUnique).toBe(false);
+  });
+
+  it("stores difficulty from the response", async () => {
+    mockFetchPuzzle.mockResolvedValueOnce({
+      board_sets: [],
+      rack: [],
+      difficulty: "nightmare",
+      tile_count: 0,
+      disruption_score: 42,
+      chain_depth: 4,
+      is_unique: false,
+      puzzle_id: "some-id",
+    });
+    await store().loadPuzzle({ difficulty: "nightmare" });
+    expect(store().lastPuzzleMeta?.difficulty).toBe("nightmare");
+  });
+
+  it("is cleared by reset()", async () => {
+    mockFetchPuzzle.mockResolvedValueOnce({
+      board_sets: [],
+      rack: [],
+      difficulty: "medium",
+      tile_count: 0,
+      disruption_score: 10,
+      chain_depth: 1,
+      is_unique: false,
+      puzzle_id: "",
+    });
+    await store().loadPuzzle({ difficulty: "medium" });
+    expect(store().lastPuzzleMeta).not.toBeNull();
+    store().reset();
+    expect(store().lastPuzzleMeta).toBeNull();
   });
 });

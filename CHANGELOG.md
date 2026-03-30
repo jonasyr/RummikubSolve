@@ -5,6 +5,319 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.31.0] — 2026-03-29 — Custom mode rework (puzzle rework phase 7a)
+
+### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)
+- **`generate_puzzle()`** gains four new keyword arguments used when `difficulty == "custom"`:
+  `min_board_sets` (default 8), `max_board_sets` (default 14), `min_chain_depth` (default 0),
+  `min_disruption` (default 0). All are ignored for non-custom difficulties.
+- Custom mode now applies **chain depth** and **disruption** filters (previously bypassed entirely).
+- Custom mode now **computes uniqueness** (`check_uniqueness()`) and stores the result in
+  `PuzzleResult.is_unique` — informational only, never a generation gate.
+- Board sizing for custom is now fully explicit (`min_board_sets`/`max_board_sets`) rather
+  than derived from `sets_to_remove` via a formula.
+- `_COMPUTES_UNIQUE` gains `"custom": True`.
+
+### Backend — API models (`backend/api/models.py`)
+- `PuzzleRequest` gains four new custom-mode fields: `min_board_sets`, `max_board_sets`,
+  `min_chain_depth`, `min_disruption` (all validated and defaulted).
+- `sets_to_remove` maximum expanded from **5 to 8** to allow larger custom puzzles.
+
+### Backend — API endpoint (`backend/api/main.py`)
+- `puzzle_endpoint()` passes all five custom parameters to `generate_puzzle()`.
+
+### Frontend — Puzzle controls (`frontend/src/components/PuzzleControls.tsx`)
+- **Custom mode** now shows a full parameter panel instead of a single "sets to remove"
+  stepper. Parameters exposed: sets to sacrifice (1–8), board sets range (5–25),
+  min chain depth (0–4 with descriptive label), min disruption (0–60, step 5).
+- **Slow-generation warning** (amber) appears when settings are likely to be slow:
+  `min_chain_depth ≥ 2`, `min_disruption ≥ 20`, or `sets_to_remove ≥ 6`.
+- **Uniqueness info note** (grey) is always shown in the custom panel explaining that
+  uniqueness is computed and displayed but not enforced.
+- `Stepper` extracted as a local helper function to de-duplicate ±-button markup.
+
+### Frontend — Types (`frontend/src/types/api.ts`)
+- `PuzzleRequest` gains `min_board_sets?`, `max_board_sets?`, `min_chain_depth?`,
+  `min_disruption?` optional fields.
+
+### Frontend — i18n (`frontend/src/i18n/messages/en.json` + `de.json`)
+- Added 11 new `puzzle.*` keys for the custom parameter panel labels, chain depth level
+  names, slow-generation warning, and uniqueness info note.
+
+### Backend — Tests
+- `test_custom_sets_to_remove_six_422` renamed to `test_custom_sets_to_remove_nine_422`
+  (6 is now valid; 9 is the first invalid value).
+- 5 new tests in `test_puzzle_endpoint.py`: chain depth respected, disruption respected,
+  board size params accepted, `sets_to_remove=8` valid, `is_unique` present for custom.
+- 5 new tests in `test_puzzle_generator.py`: same invariants at unit level.
+
+### Frontend — Tests
+- `PuzzleControls.test.tsx`: replaced old single-stepper tests with new custom panel
+  tests; 4 new tests: panel shows all controls, sets-to-sacrifice range 1–8, slow warning
+  hidden by default, uniqueness note always visible, custom request contains all params.
+
+### New file — `PUZZLE_REWORK_STATUS.md`
+- Root-level document tracking which phases of the Puzzle Rework Plan were implemented,
+  where deviations occurred, and what remains open.
+
+---
+
+## [0.30.0] — 2026-03-29 — Frontend integration (puzzle rework phase 6)
+
+### Frontend — Puzzle controls (`frontend/src/components/PuzzleControls.tsx`)
+- **Nightmare difficulty button** added to the difficulty selector row.
+  Players can now request Nightmare-tier puzzles directly from the UI.
+- **Metadata badge** displayed below the difficulty buttons after a puzzle loads.
+  Shows chain depth (e.g. "Chain depth: 3") and, for Expert/Nightmare puzzles with a
+  verified unique solution, a green "✓ Unique solution" indicator.
+
+### Frontend — Game store (`frontend/src/store/game.ts`)
+- **`lastPuzzleMeta`** field (`chainDepth`, `isUnique`, `difficulty`) added to `GameState`.
+  Populated by `loadPuzzle` after each successful puzzle fetch; cleared by `reset()`.
+  Chain depth defaults to `0` and `isUnique` to `false` when the API omits those fields.
+
+### Frontend — i18n (`frontend/src/i18n/messages/en.json` + `de.json`)
+- Added `puzzle.nightmare`, `puzzle.chainDepth`, `puzzle.uniqueSolution` translation keys.
+  EN: "Nightmare", "Chain depth: {depth}", "Unique solution".
+  DE: "Albtraum", "Kettenfolge: {depth}", "Einzige Lösung".
+
+### Frontend — Tests
+- **`PuzzleControls.test.tsx`**: updated to assert Nightmare button is present; 6 new tests
+  covering nightmare selection, nightmare puzzle request, and stats badge visibility (null,
+  chain depth shown, unique indicator shown/hidden).
+- **`game.test.ts`**: 4 new tests verifying `lastPuzzleMeta` initial value, population from
+  `loadPuzzle`, default values for missing response fields, and clearance on `reset()`.
+  Added `vi.mock("../../lib/api")` so `loadPuzzle` runs without real HTTP calls.
+
+---
+
+## [0.29.0] — 2026-03-29 — API pool integration (puzzle rework phase 5)
+
+### Backend — API models (`backend/api/models.py`)
+- **`PuzzleRequest`** gains `seen_ids: list[str]` (default `[]`, max 500 entries).
+  The client sends UUIDs of previously seen puzzles so the API can avoid returning
+  duplicates when drawing from the pre-generated pool.
+- **`PuzzleResponse`** gains `puzzle_id: str` (default `""`).
+  Set to the UUID assigned at pre-generation time for pool-drawn puzzles; empty string
+  for live-generated puzzles (Easy/Medium/Hard/Custom, or expert/nightmare fallback).
+
+### Backend — API endpoint (`backend/api/main.py`)
+- **Expert and Nightmare requests** now first attempt to draw from the pre-generated
+  SQLite pool (`PuzzleStore.draw(difficulty, exclude_ids=seen_ids)`).
+  If the pool is empty or all stored puzzles are excluded, the endpoint falls through
+  to live generation (same behaviour as v0.28.0 and earlier).
+- Easy, Medium, Hard, and Custom continue to use live generation exclusively.
+- Pool hits are logged as `puzzle_pool_hit`; exhausted pools as `puzzle_pool_empty`.
+
+### Backend — Tests
+- **`backend/tests/api/test_puzzle_endpoint.py`** — 13 new tests in 3 new classes:
+  - `TestSeenIdsValidation` (4): absent / empty / valid / too-many
+  - `TestPuzzleIdField` (4): presence and empty-string guarantee for non-pool tiers
+  - `TestPoolIntegration` (5): pool hit, pool empty (fallback), seen_ids forwarding,
+    nightmare pool, easy bypasses pool — all using `monkeypatch` + `MagicMock`
+
+### Frontend — Type definitions (`frontend/src/types/api.ts`)
+- `PuzzleRequest` gains optional `seen_ids?: string[]`.
+- `PuzzleResponse` gains `puzzle_id: string`.
+
+### Frontend — Game store (`frontend/src/store/game.ts`)
+- `GameState` gains `seenPuzzleIds: string[]`, hydrated from `localStorage` at startup.
+- `loadPuzzle()` automatically injects `seen_ids` into every request and accumulates
+  `puzzle_id` values returned by the API (non-empty only).
+- Seen IDs are persisted under `rummikub_seen_puzzles` in `localStorage` and capped
+  at 500 entries to bound storage growth.
+
+---
+
+## [0.28.0] — 2026-03-29 — Pre-generation system (puzzle rework phase 4)
+
+### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)
+- **`PuzzleResult`** gains `joker_count: int = 0`. Defaults to `0` for all current
+  puzzles (the generator is still joker-free). The field is present so `PuzzleStore`
+  can record it in the database and the schema stays stable when joker support lands.
+
+### Backend — Puzzle store (`backend/solver/generator/puzzle_store.py`) — new file
+- **`PuzzleStore`** class: SQLite-backed pool for pre-generated puzzles.
+  - `__init__(db_path)`: creates the file and schema on first use; parent directories
+    are created automatically.
+  - `store(result, seed?) → str`: persists a `PuzzleResult` and returns its UUID.
+  - `draw(difficulty, exclude_ids?) → (PuzzleResult, str) | None`: draws a random
+    unseen puzzle, skipping any IDs in `exclude_ids`. Returns `None` when the pool
+    is exhausted.
+  - `count(difficulty?) → int`: total stored puzzles, optionally filtered by difficulty.
+  - `close()`: closes the SQLite connection.
+- Schema: `puzzles(id, difficulty, board_json, rack_json, chain_depth, disruption,
+  rack_size, board_size, is_unique, joker_count, seed, created_at)` with an index
+  on `difficulty` for fast pool queries.
+- Default DB path: `data/puzzles.db`; overridable via `PUZZLE_DB_PATH` env var.
+
+### Backend — Pre-generation CLI (`backend/solver/generator/pregenerate.py`) — new file
+- `python -m solver.generator.pregenerate --difficulty nightmare --count 200` generates
+  N puzzles at the given difficulty and stores them in the SQLite pool.
+- `--all` generates for `hard`, `expert`, and `nightmare` in sequence.
+- `--stats` prints per-difficulty pool counts and exits.
+- Real-time progress: `[n/total] chain=N disrupt=N unique=T rack=N (rate/s)`.
+
+### Backend — Tests
+- **`backend/tests/solver/test_puzzle_store.py`** — 21 new tests in 4 classes:
+  `TestPuzzleStoreInit` (3), `TestStoreAndCount` (6), `TestDraw` (6), `TestRoundtrip` (6).
+  All use the pytest `tmp_path` fixture for isolated ephemeral SQLite files.
+  A module-scoped `_medium_result` fixture generates one `medium` puzzle once per
+  module to avoid repeated ILP calls.
+
+---
+
+## [0.27.0] — 2026-03-29 — Puzzle generation integration (puzzle rework phase 3)
+
+### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)
+
+- **`_MIN_CHAIN_DEPTHS`** dict added: Easy/Medium `0`, Hard `1`, Expert `1`, Nightmare `2`.
+  `_attempt_generate()` rejects any candidate whose `solution.chain_depth` is below the
+  floor for the requested difficulty. The check is free — `chain_depth` is already computed
+  by `solve()` (Phase 1) — and runs before the expensive uniqueness gate.
+
+- **`_COMPUTES_UNIQUE`** dict added: `expert` and `nightmare` set to `True`; all other
+  tiers `False`. When set, `check_uniqueness()` (Phase 2) is called once per returned
+  puzzle and the result is stored in `PuzzleResult.is_unique` for informational use.
+  Generation does NOT gate on uniqueness: the complete-sacrifice strategy inherently
+  yields non-unique solutions on large boards (many equivalent rearrangements exist for
+  100%-rack-placement puzzles); uniqueness gating is deferred to a future strategy.
+
+- **"nightmare" difficulty tier** added across all config dicts:
+  - Board: 15–20 sets (before sacrifice)
+  - Sacrifice: 6 complete sets removed
+  - Rack: 5–7 tiles
+  - Disruption: ≥ 38 (strictly above Expert's typical floor)
+  - Chain depth: ≥ 3 (deep rearrangement chains)
+  - Uniqueness: enforced
+
+- **`PuzzleResult`** gains two new fields:
+  - `chain_depth: int = 0` — populated from `solution.chain_depth` after each successful
+    candidate. Reflects the longest rearrangement dependency chain in the ILP solution.
+  - `is_unique: bool = True` — `True` if uniqueness is not required for this difficulty
+    (Easy/Medium/Hard/Custom) or if `check_uniqueness()` confirmed a single optimal
+    arrangement (Expert/Nightmare).
+
+### Backend — API models (`backend/api/models.py`)
+
+- **`PuzzleRequest.difficulty`** Literal extended with `"nightmare"`.
+- **`PuzzleResponse`** gains `chain_depth: int = 0` and `is_unique: bool = True`.
+
+### Backend — API endpoint (`backend/api/main.py`)
+
+- `puzzle_endpoint` maps `result.chain_depth` and `result.is_unique` into `PuzzleResponse`.
+- Version bumped to `0.27.0`.
+
+### Frontend — Types (`frontend/src/types/api.ts`)
+
+- `Difficulty` union extended with `"nightmare"`.
+- `PuzzleResponse` interface gains `disruption_score: number` (was missing from the TS
+  mirror despite being returned by the backend since v0.22.0), `chain_depth: number`,
+  and `is_unique: boolean`.
+
+### Backend — Tests
+
+- **`backend/tests/solver/test_puzzle_generator.py`** — 28 new tests in 4 classes:
+  - `TestPuzzleResultNewFields` (7 tests): verifies `chain_depth` and `is_unique` are
+    present and correct for every difficulty tier including `custom`.
+  - `TestChainDepthFiltering` (5 tests): confirms `_MIN_CHAIN_DEPTHS` floors are enforced
+    across multiple seeds and that the config dict covers all standard tiers.
+  - `TestNightmareDifficulty` (9 tests): nightmare generates, rack/disruption/chain_depth
+    constraints met, `is_unique` is a bool (informational), determinism, solvability,
+    valid board sets. Fixture-scoped to run the expensive generation only once.
+  - `TestUniquenessComputation` (6 tests): `_COMPUTES_UNIQUE` covers all tiers; Expert and
+    Nightmare compute and store `is_unique` (may be True or False); non-expert defaults True.
+- **`backend/tests/api/test_puzzle_endpoint.py`** — 5 new tests in `TestPuzzleResponseNewFields`:
+  `chain_depth` and `is_unique` present on easy response; expert response meets both floors;
+  nightmare endpoint returns 200 with correct rack range, `is_unique=True`, `chain_depth ≥ 3`.
+
+---
+
+## [0.26.0] — 2026-03-29 — Uniqueness check (puzzle rework phase 2)
+
+### Backend — ILP formulation (`backend/solver/engine/ilp_formulation.py`)
+
+- **`build_ilp_model()` gains `excluded_solutions: list[list[int]] | None = None`** parameter.
+  Each entry is a list of candidate-set indices (`active_set_indices`) from a prior solve.
+  For each entry the constraint `Σ_{s ∈ active} y[s] ≤ len(active) - 1` is added, forcing
+  HiGHS to find a structurally different arrangement on the next run.
+
+- **`extract_solution()` now returns a 5-tuple** `(new_sets, placed_tiles, remaining_rack,
+  is_optimal, active_set_indices)`. The new fifth element is the list of candidate-set
+  indices where `y[s] = 1` in the ILP solution — used by `check_uniqueness()` as input
+  to the next exclusion constraint.
+
+### Backend — Solution model (`backend/solver/models/board_state.py`)
+
+- **`active_set_indices: list[int] = []`** field added to `Solution` dataclass. Stores
+  the ILP `y[s] = 1` indices for the solved arrangement. Not exposed in the API response
+  (the API models map fields explicitly). Populated automatically by `solve()`.
+
+### Backend — Solver (`backend/solver/engine/solver.py`)
+
+- All three `extract_solution()` call sites in `solve()` updated to unpack the new 5-tuple.
+  Fallback / timeout paths use `active_set_indices = []`.
+- **`check_uniqueness(state, solution, rules) → bool`** added:
+  re-solves the ILP with the first solution's active sets excluded. Returns `True` if
+  the original solution is the only arrangement that places `solution.tiles_placed` tiles
+  (i.e. the re-solve is infeasible or places fewer tiles). Returns `False` if an
+  alternative arrangement exists. Designed for offline puzzle pre-generation where a
+  puzzle with two equally-valid solutions is too easy.
+- `_UNIQUENESS_TIMEOUT_SECONDS = 10.0` constant added (separate from the 30 s solve cap).
+
+### Backend — Tests
+
+- **`backend/tests/solver/test_ilp_solver.py`** — 10 new tests:
+  active-indices extraction, exclusion-constraint correctness, infeasibility when only
+  one solution exists, multiple-exclusion chaining, and integration with `solve()`.
+- **`backend/tests/solver/test_uniqueness.py`** — new file with 26 tests across 5 classes:
+  unique solutions (single run, joker with no ambiguity, rearrangement-forced uniqueness),
+  non-unique solutions (two equivalent groups, tile fits two runs, symmetric board,
+  joker ambiguity), rules integration (first-turn, meld threshold), and edge cases
+  (empty `active_set_indices`, determinism, zero-tile scenario).
+
+---
+
+## [0.25.0] — 2026-03-29 — Chain depth metric (puzzle rework phase 1)
+
+### Backend — Objective metrics (`backend/solver/engine/objective.py`)
+
+- **`compute_chain_depth(old_board_sets, new_board_sets, placed_tiles) → int`** added
+  alongside the existing `compute_disruption_score()`. Measures how many distinct
+  disrupted old sets feed tiles into the most complex new set in a solution:
+  - `0` = pure placement — no board rearrangement required
+  - `1` = simple rearrangement — one or more sets broken, each new set draws
+    from at most one disrupted source
+  - `2` = two-step convergence — one new set combines freed tiles from two
+    separately disrupted old sets (requires two breaking steps)
+  - `3+` = deep chains — N disruptions all feed into a single new set
+
+  This is the foundation metric for Expert/Nightmare difficulty tiers in the
+  forthcoming puzzle rework.
+
+### Backend — Solution model (`backend/solver/models/board_state.py`)
+
+- **`chain_depth: int = 0`** field added to `Solution` dataclass — every solve
+  result now carries its chain depth automatically, with no API changes needed.
+
+### Backend — Solver (`backend/solver/engine/solver.py`)
+
+- Imports and calls `compute_chain_depth()` after each solve and stores the result
+  in the returned `Solution`.
+
+### Backend — Tests (`backend/tests/solver/test_objective.py`)
+
+- 26 new unit tests covering `compute_chain_depth()`:
+  - Depth-0 cases: empty board, untouched sets, rack-only placement, reordering
+  - Depth-1 cases: simple splits, freed-tile + rack placement, independent parallel
+    disruptions, single tile migration between sets
+  - Depth-2 cases: two disrupted sets converging in one new set
+  - Depth-3+ cases: three-disruption convergence
+  - Edge cases: joker tiles, `copy_id` sensitivity, group sets, large boards
+  - Integration: parallel vs. chained disruptions, stable sets mixed with disrupted
+
+---
+
 ## [0.24.1] — 2026-03-26 — Mobile header overflow fix
 
 ### Frontend — Header (`frontend/src/app/[locale]/page.tsx`)

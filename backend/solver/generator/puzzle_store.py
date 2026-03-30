@@ -1,0 +1,197 @@
+"""SQLite-based storage for pre-generated Rummikub puzzles.
+
+Puzzles are stored with full metadata so the API can filter by
+difficulty, exclude already-seen puzzles, and return puzzle IDs
+for client-side deduplication tracking.
+
+Default DB path: data/puzzles.db (relative to CWD).
+Override via PUZZLE_DB_PATH environment variable.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import uuid
+from pathlib import Path
+from typing import Any
+
+from ..models.tile import Color, Tile
+from ..models.tileset import SetType, TileSet
+from .puzzle_generator import PuzzleResult
+
+DEFAULT_DB_PATH = Path(os.getenv("PUZZLE_DB_PATH", "data/puzzles.db"))
+
+_CREATE_TABLE = """
+    CREATE TABLE IF NOT EXISTS puzzles (
+        id          TEXT PRIMARY KEY,
+        difficulty  TEXT NOT NULL,
+        board_json  TEXT NOT NULL,
+        rack_json   TEXT NOT NULL,
+        chain_depth INTEGER NOT NULL,
+        disruption  INTEGER NOT NULL,
+        rack_size   INTEGER NOT NULL,
+        board_size  INTEGER NOT NULL,
+        is_unique   INTEGER NOT NULL DEFAULT 0,
+        joker_count INTEGER NOT NULL DEFAULT 0,
+        seed        INTEGER,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+"""
+
+_CREATE_INDEX = """
+    CREATE INDEX IF NOT EXISTS idx_difficulty
+    ON puzzles(difficulty)
+"""
+
+
+class PuzzleStore:
+    """SQLite-backed pool of pre-generated Rummikub puzzles.
+
+    Typical usage::
+
+        store = PuzzleStore(Path("data/puzzles.db"))
+        puzzle_id = store.store(result, seed=42)
+        drawn = store.draw("expert", exclude_ids=["old-uuid-1"])
+        if drawn is not None:
+            result, puzzle_id = drawn
+        store.close()
+    """
+
+    def __init__(self, db_path: Path = DEFAULT_DB_PATH) -> None:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(str(db_path))
+        self.conn.row_factory = sqlite3.Row
+        self._create_tables()
+
+    def _create_tables(self) -> None:
+        self.conn.execute(_CREATE_TABLE)
+        self.conn.execute(_CREATE_INDEX)
+        self.conn.commit()
+
+    def store(self, result: PuzzleResult, seed: int | None = None) -> str:
+        """Persist a puzzle and return its UUID."""
+        puzzle_id = str(uuid.uuid4())
+        self.conn.execute(
+            """INSERT INTO puzzles
+               (id, difficulty, board_json, rack_json, chain_depth,
+                disruption, rack_size, board_size, is_unique,
+                joker_count, seed)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                puzzle_id,
+                result.difficulty,
+                _serialize_board(result.board_sets),
+                _serialize_rack(result.rack),
+                result.chain_depth,
+                result.disruption_score,
+                len(result.rack),
+                len(result.board_sets),
+                int(result.is_unique),
+                result.joker_count,
+                seed,
+            ),
+        )
+        self.conn.commit()
+        return puzzle_id
+
+    def draw(
+        self,
+        difficulty: str,
+        exclude_ids: list[str] | None = None,
+    ) -> tuple[PuzzleResult, str] | None:
+        """Return a random unseen puzzle of the given difficulty.
+
+        Returns ``None`` when the pool is empty or every stored puzzle
+        has been excluded via *exclude_ids*.
+
+        Args:
+            difficulty:  Difficulty tier to draw from.
+            exclude_ids: Puzzle UUIDs to skip (already seen by the client).
+        """
+        exclude = set(exclude_ids or [])
+        rows = self.conn.execute(
+            "SELECT * FROM puzzles WHERE difficulty = ? ORDER BY RANDOM()",
+            (difficulty,),
+        ).fetchall()
+        for row in rows:
+            if row["id"] not in exclude:
+                return _deserialize_row(row), row["id"]
+        return None
+
+    def count(self, difficulty: str | None = None) -> int:
+        """Return the number of stored puzzles, optionally filtered by difficulty."""
+        if difficulty is not None:
+            row = self.conn.execute(
+                "SELECT COUNT(*) FROM puzzles WHERE difficulty = ?",
+                (difficulty,),
+            ).fetchone()
+        else:
+            row = self.conn.execute("SELECT COUNT(*) FROM puzzles").fetchone()
+        return int(row[0])
+
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        self.conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Serialization helpers
+# ---------------------------------------------------------------------------
+
+
+def _serialize_board(board_sets: list[TileSet]) -> str:
+    return json.dumps(
+        [
+            {
+                "type": ts.type.value,
+                "tiles": [_tile_to_dict(t) for t in ts.tiles],
+            }
+            for ts in board_sets
+        ]
+    )
+
+
+def _serialize_rack(rack: list[Tile]) -> str:
+    return json.dumps([_tile_to_dict(t) for t in rack])
+
+
+def _tile_to_dict(tile: Tile) -> dict[str, Any]:
+    return {
+        "color": tile.color.value if tile.color is not None else None,
+        "number": tile.number,
+        "copy_id": tile.copy_id,
+        "is_joker": tile.is_joker,
+    }
+
+
+def _dict_to_tile(d: dict[str, Any]) -> Tile:
+    if d["is_joker"]:
+        return Tile.joker(copy_id=int(d["copy_id"]))
+    return Tile(
+        color=Color(d["color"]),
+        number=int(d["number"]),
+        copy_id=int(d["copy_id"]),
+    )
+
+
+def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
+    board_data: list[Any] = json.loads(row["board_json"])
+    board_sets = [
+        TileSet(
+            type=SetType(bs["type"]),
+            tiles=[_dict_to_tile(t) for t in bs["tiles"]],
+        )
+        for bs in board_data
+    ]
+    rack = [_dict_to_tile(t) for t in json.loads(row["rack_json"])]
+    return PuzzleResult(
+        board_sets=board_sets,
+        rack=rack,
+        difficulty=row["difficulty"],
+        disruption_score=row["disruption"],
+        chain_depth=row["chain_depth"],
+        is_unique=bool(row["is_unique"]),
+        joker_count=row["joker_count"],
+    )

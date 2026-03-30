@@ -59,6 +59,10 @@ coverage.xml
 # Hypothesis test database
 .hypothesis/
 
+# Puzzle store (SQLite pool — generated at runtime, not committed)
+data/
+*.db
+
 # Misc
 *.log
 Thumbs.db
