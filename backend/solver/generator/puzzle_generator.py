@@ -247,6 +247,11 @@ def _attempt_generate(
 
     board_sets = _assign_copy_ids(board_sets)
 
+    # Inject jokers into the board so they appear as actual board tiles
+    # (enumerate_runs/groups don't produce joker-containing templates).
+    if n_jokers > 0:
+        board_sets = _inject_jokers_into_board(board_sets, n_jokers, rng)
+
     input_board, rack = _extract_rack(board_sets, difficulty, rng, sets_to_remove)
     if len(rack) < 2:
         return None
@@ -285,6 +290,10 @@ def _attempt_generate(
     if _COMPUTES_UNIQUE.get(difficulty, False):
         is_unique = check_uniqueness(state, solution)
 
+    # Count jokers that actually appear on the board (jokers in sacrificed sets
+    # may end up in the rack or get dropped during sampling).
+    actual_joker_count = sum(1 for ts in input_board for t in ts.tiles if t.is_joker)
+
     return PuzzleResult(
         board_sets=input_board,
         rack=rack,
@@ -292,6 +301,7 @@ def _attempt_generate(
         disruption_score=score,
         chain_depth=solution.chain_depth,
         is_unique=is_unique,
+        joker_count=actual_joker_count,
     )
 
 
@@ -303,6 +313,8 @@ def _make_full_pool() -> BoardState:
 
 def _make_pool(n_jokers: int = 0) -> BoardState:
     """104 non-joker tiles plus n_jokers joker tiles."""
+    if not (0 <= n_jokers <= 2):
+        raise ValueError(f"n_jokers must be 0, 1, or 2; got {n_jokers}")
     rack: list[Tile] = [
         Tile(color, n, copy_id)
         for color in Color
@@ -312,6 +324,46 @@ def _make_pool(n_jokers: int = 0) -> BoardState:
     for j in range(n_jokers):
         rack.append(Tile.joker(copy_id=j))
     return BoardState(board_sets=[], rack=rack)
+
+
+def _inject_jokers_into_board(
+    board_sets: list[TileSet],
+    n_jokers: int,
+    rng: random.Random,
+) -> list[TileSet]:
+    """Replace 1–2 random non-joker tiles in board sets with joker tiles.
+
+    The replaced tiles are removed from the board entirely (as if they were
+    never placed there). The joker takes the replaced tile's position in the
+    set, which remains valid because jokers can substitute for any tile.
+
+    Only replaces tiles in sets with ≥ 4 tiles so that set-type ambiguity is
+    preserved: a 3-tile set with a joker replaced would be trivially identifiable,
+    reducing the cognitive challenge.
+    """
+    if n_jokers == 0 or not board_sets:
+        return board_sets
+
+    result = [TileSet(type=ts.type, tiles=list(ts.tiles)) for ts in board_sets]
+
+    # Collect (set_index, tile_index) positions eligible for joker replacement.
+    candidates: list[tuple[int, int]] = []
+    for si, ts in enumerate(result):
+        if len(ts.tiles) >= 4:
+            for ti in range(len(ts.tiles)):
+                if not ts.tiles[ti].is_joker:
+                    candidates.append((si, ti))
+
+    if not candidates:
+        return result
+
+    n_replace = min(n_jokers, len(candidates))
+    chosen = rng.sample(candidates, n_replace)
+
+    for idx, (si, ti) in enumerate(chosen):
+        result[si].tiles[ti] = Tile.joker(copy_id=idx)
+
+    return result
 
 
 def _pick_compatible_sets(all_sets: list[TileSet], n: int) -> list[TileSet]:

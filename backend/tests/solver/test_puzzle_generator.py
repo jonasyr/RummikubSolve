@@ -8,10 +8,13 @@ from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
     _COMPUTES_UNIQUE,  # type: ignore[attr-defined]
     _DISRUPTION_BANDS,  # type: ignore[attr-defined]
+    _JOKER_COUNTS,  # type: ignore[attr-defined]
     _MIN_CHAIN_DEPTHS,  # type: ignore[attr-defined]
     PuzzleGenerationError,
     PuzzleResult,
     _any_trivial_extension,
+    _inject_jokers_into_board,  # type: ignore[attr-defined]
+    _make_pool,  # type: ignore[attr-defined]
     generate_puzzle,
 )
 from solver.models.board_state import BoardState
@@ -497,3 +500,134 @@ def test_custom_zero_filters_still_generates() -> None:
     )
     assert result.difficulty == "custom"
     assert len(result.rack) >= 9  # 3 sets × 3 tiles minimum
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 fixes: joker_count, _make_pool validation, _inject_jokers_into_board
+# ---------------------------------------------------------------------------
+
+
+class TestMakePoolValidation:
+    """_make_pool() validates n_jokers is in [0, 2]."""
+
+    def test_zero_jokers_ok(self) -> None:
+        pool = _make_pool(0)
+        assert len(pool.rack) == 104
+
+    def test_one_joker_ok(self) -> None:
+        pool = _make_pool(1)
+        assert len(pool.rack) == 105
+        jokers = [t for t in pool.rack if t.is_joker]
+        assert len(jokers) == 1
+
+    def test_two_jokers_ok(self) -> None:
+        pool = _make_pool(2)
+        assert len(pool.rack) == 106
+        jokers = [t for t in pool.rack if t.is_joker]
+        assert len(jokers) == 2
+
+    def test_negative_jokers_raises(self) -> None:
+        with pytest.raises(ValueError, match="n_jokers"):
+            _make_pool(-1)
+
+    def test_three_jokers_raises(self) -> None:
+        with pytest.raises(ValueError, match="n_jokers"):
+            _make_pool(3)
+
+
+class TestJokerCountPopulated:
+    """PuzzleResult.joker_count reflects the actual number of jokers used."""
+
+    def test_easy_joker_count_is_zero(self) -> None:
+        result = generate_puzzle(difficulty="easy", seed=1)
+        assert result.joker_count == 0
+
+    def test_medium_joker_count_is_zero(self) -> None:
+        result = generate_puzzle(difficulty="medium", seed=2)
+        assert result.joker_count == 0
+
+    def test_joker_count_is_int(self) -> None:
+        result = generate_puzzle(difficulty="hard", seed=3)
+        assert isinstance(result.joker_count, int)
+
+    def test_expert_joker_count_is_board_joker_count(self) -> None:
+        """joker_count == number of joker tiles on the board (0 if joker sets were sacrificed)."""
+        result = generate_puzzle(difficulty="expert", seed=20)
+        board_jokers = sum(1 for ts in result.board_sets for t in ts.tiles if t.is_joker)
+        assert result.joker_count == board_jokers
+
+
+class TestInjectJokersIntoBoard:
+    """_inject_jokers_into_board places jokers in board sets with ≥ 4 tiles."""
+
+    def _make_board_with_4tile_set(self) -> list:
+        from solver.models.tile import Color, Tile
+        from solver.models.tileset import TileSet
+        # A 4-tile run: R1-R2-R3-R4
+        tiles_4 = [
+            Tile(Color.RED, 1, 0),
+            Tile(Color.RED, 2, 0),
+            Tile(Color.RED, 3, 0),
+            Tile(Color.RED, 4, 0),
+        ]
+        # A 3-tile run: B5-B6-B7 (ineligible for joker injection)
+        tiles_3 = [
+            Tile(Color.BLUE, 5, 0),
+            Tile(Color.BLUE, 6, 0),
+            Tile(Color.BLUE, 7, 0),
+        ]
+        return [TileSet(type="run", tiles=tiles_4), TileSet(type="run", tiles=tiles_3)]
+
+    def test_zero_jokers_returns_unchanged(self) -> None:
+        import random
+        board = self._make_board_with_4tile_set()
+        result = _inject_jokers_into_board(board, 0, random.Random(1))
+        # No jokers injected — tile counts unchanged
+        assert sum(len(ts.tiles) for ts in result) == sum(len(ts.tiles) for ts in board)
+        assert not any(t.is_joker for ts in result for t in ts.tiles)
+
+    def test_one_joker_injected_in_4tile_set(self) -> None:
+        import random
+        board = self._make_board_with_4tile_set()
+        result = _inject_jokers_into_board(board, 1, random.Random(1))
+        jokers = [t for ts in result for t in ts.tiles if t.is_joker]
+        assert len(jokers) == 1
+        # Joker must be in the 4-tile set (only eligible candidate)
+        assert any(t.is_joker for t in result[0].tiles)
+        # 3-tile set must remain unchanged
+        assert not any(t.is_joker for t in result[1].tiles)
+
+    def test_joker_copy_ids_are_valid(self) -> None:
+        import random
+        board = self._make_board_with_4tile_set()
+        result = _inject_jokers_into_board(board, 1, random.Random(42))
+        for ts in result:
+            for t in ts.tiles:
+                assert t.copy_id in (0, 1)
+
+    def test_no_eligible_sets_returns_unchanged(self) -> None:
+        """When all sets have < 4 tiles, no jokers are injected."""
+        import random
+        from solver.models.tile import Color, Tile
+        from solver.models.tileset import TileSet
+        board = [
+            TileSet(type="run", tiles=[Tile(Color.RED, i, 0) for i in range(1, 4)]),
+            TileSet(type="run", tiles=[Tile(Color.BLUE, i, 0) for i in range(5, 8)]),
+        ]
+        result = _inject_jokers_into_board(board, 2, random.Random(1))
+        assert not any(t.is_joker for ts in result for t in ts.tiles)
+
+    def test_joker_count_matches_board_jokers(self) -> None:
+        """joker_count equals the number of joker tiles visible on the board.
+
+        Jokers are injected into board sets by _inject_jokers_into_board.
+        joker_count is the count of jokers actually on board_sets (not the
+        number attempted — jokers in sacrificed sets are excluded).
+        """
+        for seed in range(5):
+            result = generate_puzzle(difficulty="expert", seed=seed)
+            board_jokers = sum(1 for ts in result.board_sets for t in ts.tiles if t.is_joker)
+            assert result.joker_count == board_jokers, (
+                f"Expert seed={seed}: joker_count={result.joker_count} but "
+                f"board has {board_jokers} jokers"
+            )
