@@ -104,8 +104,9 @@ async def test_custom_sets_to_remove_zero_422(client: AsyncClient) -> None:
     assert r.status_code == 422
 
 
-async def test_custom_sets_to_remove_six_422(client: AsyncClient) -> None:
-    r = await client.post("/api/puzzle", json={"difficulty": "custom", "sets_to_remove": 6})
+async def test_custom_sets_to_remove_nine_422(client: AsyncClient) -> None:
+    """sets_to_remove max is now 8; 9 must still be rejected."""
+    r = await client.post("/api/puzzle", json={"difficulty": "custom", "sets_to_remove": 9})
     assert r.status_code == 422
 
 
@@ -291,3 +292,59 @@ class TestPoolIntegration:
         r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
         assert r.status_code == 200
         mock_store.draw.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7a: Custom mode — new generation parameters
+# ---------------------------------------------------------------------------
+
+
+async def test_custom_min_chain_depth_respected(client: AsyncClient) -> None:
+    """min_chain_depth=1 is honoured: returned puzzle has chain_depth >= 1."""
+    r = await client.post(
+        "/api/puzzle", json={"difficulty": "custom", "seed": 5, "min_chain_depth": 1}
+    )
+    assert r.status_code == 200
+    assert r.json()["chain_depth"] >= 1
+
+
+async def test_custom_min_disruption_respected(client: AsyncClient) -> None:
+    """min_disruption=10 is honoured: returned disruption_score >= 10."""
+    r = await client.post(
+        "/api/puzzle", json={"difficulty": "custom", "seed": 6, "min_disruption": 10}
+    )
+    assert r.status_code == 200
+    assert r.json()["disruption_score"] >= 10
+
+
+async def test_custom_board_size_params_accepted(client: AsyncClient) -> None:
+    """Explicit min/max_board_sets are accepted and produce a valid puzzle."""
+    r = await client.post(
+        "/api/puzzle",
+        json={"difficulty": "custom", "seed": 7, "min_board_sets": 7, "max_board_sets": 10},
+    )
+    assert r.status_code == 200
+    assert r.json()["difficulty"] == "custom"
+
+
+async def test_custom_sets_to_remove_eight_ok(client: AsyncClient) -> None:
+    """sets_to_remove=8 is valid after range was expanded from 5 to 8."""
+    r = await client.post(
+        "/api/puzzle",
+        json={
+            "difficulty": "custom",
+            "seed": 8,
+            "sets_to_remove": 8,
+            "min_board_sets": 12,
+            "max_board_sets": 20,
+        },
+    )
+    assert r.status_code == 200
+
+
+async def test_custom_is_unique_field_present(client: AsyncClient) -> None:
+    """Custom puzzles always include is_unique (computed, never enforced)."""
+    r = await client.post("/api/puzzle", json={"difficulty": "custom", "seed": 4})
+    assert r.status_code == 200
+    assert "is_unique" in r.json()
+    assert isinstance(r.json()["is_unique"], bool)

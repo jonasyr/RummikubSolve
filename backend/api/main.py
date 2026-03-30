@@ -72,7 +72,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="RummikubSolve API",
-    version="0.30.0",
+    version="0.31.0",
     description="Optimal Rummikub move solver — ILP-powered via HiGHS.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -340,6 +340,10 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             difficulty=request.difficulty,
             seed=request.seed,
             sets_to_remove=request.sets_to_remove,
+            min_board_sets=request.min_board_sets,
+            max_board_sets=request.max_board_sets,
+            min_chain_depth=request.min_chain_depth,
+            min_disruption=request.min_disruption,
         )
     except PuzzleGenerationError as exc:
         logger.warning("puzzle_generation_failed", error=str(exc))

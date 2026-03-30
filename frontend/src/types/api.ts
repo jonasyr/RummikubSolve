@@ -69,10 +69,19 @@ export type Difficulty = "easy" | "medium" | "hard" | "expert" | "nightmare" | "
 export interface PuzzleRequest {
   difficulty?: Difficulty;
   seed?: number;
-  /** Only used when difficulty == "custom". Range 1–5, default 3. */
-  sets_to_remove?: number;
   /** Phase 5: IDs of puzzles already seen; prevents duplicates when drawing from pool. */
   seen_ids?: string[];
+  // Phase 7a: Custom mode parameters — ignored for all non-custom difficulties.
+  /** Custom: sets to sacrifice. Range 1–8, default 3. */
+  sets_to_remove?: number;
+  /** Custom: minimum board sets before sacrifice. Range 5–25, default 8. */
+  min_board_sets?: number;
+  /** Custom: maximum board sets before sacrifice. Range 5–25, default 14. */
+  max_board_sets?: number;
+  /** Custom: minimum chain depth required in solution. Range 0–4, default 0. */
+  min_chain_depth?: number;
+  /** Custom: minimum disruption score required. Range 0–60, default 0. */
+  min_disruption?: number;
 }
 
 export interface PuzzleResponse {

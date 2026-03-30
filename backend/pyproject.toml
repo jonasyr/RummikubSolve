@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rummikub-solver"
-version = "0.30.0"
+version = "0.31.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",

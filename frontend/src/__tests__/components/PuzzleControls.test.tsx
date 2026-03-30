@@ -22,6 +22,7 @@ vi.mock("../../store/game", () => ({
       isPuzzleLoading: mockIsPuzzleLoading,
       loadPuzzle: mockLoadPuzzle,
       lastPuzzleMeta: mockLastPuzzleMeta,
+      error: null,
     }),
 }));
 
@@ -73,9 +74,6 @@ describe("PuzzleControls", () => {
   it("Get Puzzle button is disabled while isPuzzleLoading is true", () => {
     mockIsPuzzleLoading = true;
     render(<PuzzleControls />);
-    // When loading, the button renders "⟳ loading" (spinner + translated key).
-    // Match via accessible-name substring so the test is independent of the
-    // spinner character.
     expect(screen.getByRole("button", { name: /loading/i })).toBeDisabled();
   });
 
@@ -97,52 +95,6 @@ describe("PuzzleControls", () => {
       { difficulty: "easy" },
       expect.any(AbortSignal),
     );
-  });
-
-  it("selecting Custom shows the sets-to-remove stepper", async () => {
-    render(<PuzzleControls />);
-    // Stepper should not be visible for default (medium) selection.
-    expect(screen.queryByLabelText("Decrease sets to remove")).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "custom" }));
-    expect(screen.getByLabelText("Decrease sets to remove")).toBeInTheDocument();
-    expect(screen.getByLabelText("Increase sets to remove")).toBeInTheDocument();
-    // Default value is 3.
-    expect(screen.getByText("3")).toBeInTheDocument();
-  });
-
-  it("Custom Get Puzzle passes sets_to_remove in the request", async () => {
-    render(<PuzzleControls />);
-    await userEvent.click(screen.getByRole("button", { name: "custom" }));
-    // Increment from default 3 → 4.
-    await userEvent.click(screen.getByLabelText("Increase sets to remove"));
-    await userEvent.click(screen.getByRole("button", { name: "getButton" }));
-    expect(mockLoadPuzzle).toHaveBeenCalledWith(
-      { difficulty: "custom", sets_to_remove: 4 },
-      expect.any(AbortSignal),
-    );
-  });
-
-  it("stepper − button is disabled at minimum (1) and + at maximum (5)", async () => {
-    render(<PuzzleControls />);
-    await userEvent.click(screen.getByRole("button", { name: "custom" }));
-
-    const dec = screen.getByLabelText("Decrease sets to remove");
-    const inc = screen.getByLabelText("Increase sets to remove");
-
-    // Decrement to 1.
-    await userEvent.click(dec); // 2
-    await userEvent.click(dec); // 1
-    expect(dec).toBeDisabled();
-    expect(inc).not.toBeDisabled();
-
-    // Increment to 5.
-    await userEvent.click(inc); // 2
-    await userEvent.click(inc); // 3
-    await userEvent.click(inc); // 4
-    await userEvent.click(inc); // 5
-    expect(inc).toBeDisabled();
-    expect(dec).not.toBeDisabled();
   });
 
   // Phase 6: Nightmare difficulty
@@ -172,7 +124,6 @@ describe("PuzzleControls", () => {
   it("stats badge shows chain depth when lastPuzzleMeta is set", () => {
     mockLastPuzzleMeta = { chainDepth: 3, isUnique: false, difficulty: "expert" };
     render(<PuzzleControls />);
-    // useTranslations mock returns the key, so "chainDepth" appears verbatim
     expect(screen.getByText(/chainDepth/)).toBeInTheDocument();
   });
 
@@ -186,5 +137,68 @@ describe("PuzzleControls", () => {
     mockLastPuzzleMeta = { chainDepth: 1, isUnique: false, difficulty: "hard" };
     render(<PuzzleControls />);
     expect(screen.queryByText(/uniqueSolution/)).not.toBeInTheDocument();
+  });
+
+  // Phase 7a: Custom mode parameter panel
+  it("selecting Custom shows the custom parameter panel", async () => {
+    render(<PuzzleControls />);
+    // Panel should not be visible for default (medium) selection
+    expect(screen.queryByLabelText("Decrease sets to sacrifice")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "custom" }));
+    expect(screen.getByLabelText("Decrease sets to sacrifice")).toBeInTheDocument();
+    expect(screen.getByLabelText("Decrease min board sets")).toBeInTheDocument();
+    expect(screen.getByLabelText("Decrease min chain depth")).toBeInTheDocument();
+    expect(screen.getByLabelText("Decrease min disruption")).toBeInTheDocument();
+  });
+
+  it("sets-to-sacrifice stepper − is disabled at min (1) and + at max (8)", async () => {
+    render(<PuzzleControls />);
+    await userEvent.click(screen.getByRole("button", { name: "custom" }));
+
+    const dec = screen.getByLabelText("Decrease sets to sacrifice");
+    const inc = screen.getByLabelText("Increase sets to sacrifice");
+
+    // Decrement to 1
+    await userEvent.click(dec); // 2
+    await userEvent.click(dec); // 1
+    expect(dec).toBeDisabled();
+    expect(inc).not.toBeDisabled();
+
+    // Increment to 8
+    for (let i = 0; i < 7; i++) {
+      await userEvent.click(inc);
+    }
+    expect(inc).toBeDisabled();
+    expect(dec).not.toBeDisabled();
+  });
+
+  it("slow warning is not shown with default custom params", async () => {
+    render(<PuzzleControls />);
+    await userEvent.click(screen.getByRole("button", { name: "custom" }));
+    expect(screen.queryByText(/customSlowWarning/)).not.toBeInTheDocument();
+  });
+
+  it("uniqueness info note is always shown for custom", async () => {
+    render(<PuzzleControls />);
+    await userEvent.click(screen.getByRole("button", { name: "custom" }));
+    expect(screen.getByText(/customUniquenessNote/)).toBeInTheDocument();
+  });
+
+  it("custom Get Puzzle sends all custom params", async () => {
+    render(<PuzzleControls />);
+    await userEvent.click(screen.getByRole("button", { name: "custom" }));
+    await userEvent.click(screen.getByRole("button", { name: "getButton" }));
+    expect(mockLoadPuzzle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        difficulty: "custom",
+        sets_to_remove: expect.any(Number),
+        min_board_sets: expect.any(Number),
+        max_board_sets: expect.any(Number),
+        min_chain_depth: expect.any(Number),
+        min_disruption: expect.any(Number),
+      }),
+      expect.any(AbortSignal),
+    );
   });
 });

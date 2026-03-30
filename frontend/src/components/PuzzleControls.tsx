@@ -8,10 +8,59 @@ import type { Difficulty, PuzzleRequest } from "../types/api";
 
 const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard", "expert", "nightmare", "custom"];
 
+// ---------------------------------------------------------------------------
+// Stepper: inline helper for the ± counter controls
+// ---------------------------------------------------------------------------
+
+interface StepperProps {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  decLabel: string;
+  incLabel: string;
+}
+
+function Stepper({ value, min, max, step = 1, onChange, decLabel, incLabel }: StepperProps) {
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => onChange(Math.max(min, value - step))}
+        disabled={value <= min}
+        className="w-6 h-6 flex items-center justify-center rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed font-mono leading-none"
+        aria-label={decLabel}
+      >
+        −
+      </button>
+      <span className="w-6 text-center text-sm font-medium tabular-nums">{value}</span>
+      <button
+        onClick={() => onChange(Math.min(max, value + step))}
+        disabled={value >= max}
+        className="w-6 h-6 flex items-center justify-center rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed font-mono leading-none"
+        aria-label={incLabel}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export default function PuzzleControls() {
   const t = useTranslations("puzzle");
   const [selected, setSelected] = useState<Difficulty>("medium");
+
+  // Custom mode parameters
   const [setsToRemove, setSetsToRemove] = useState(3);
+  const [minBoardSets, setMinBoardSets] = useState(8);
+  const [maxBoardSets, setMaxBoardSets] = useState(14);
+  const [minChainDepth, setMinChainDepth] = useState(0);
+  const [minDisruption, setMinDisruption] = useState(0);
+
   const isPuzzleLoading = useGameStore((s) => s.isPuzzleLoading);
   const puzzleError = useGameStore((s) => s.error);
   const loadPuzzle = useGameStore((s) => s.loadPuzzle);
@@ -19,6 +68,20 @@ export default function PuzzleControls() {
   const abortRef = useRef<AbortController | null>(null);
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const wasLoadingRef = useRef(false);
+
+  // Chain depth label array (index = depth value 0–4)
+  const chainDepthLabels = [
+    t("customChainDepthNone"),
+    t("customChainDepthSimple"),
+    t("customChainDepthModerate"),
+    t("customChainDepthDeep"),
+    t("customChainDepthExpert"),
+  ] as const;
+
+  // Show slow-generation warning for strict custom settings
+  const isSlowWarning =
+    selected === "custom" &&
+    (minChainDepth >= 2 || minDisruption >= 20 || setsToRemove >= 6);
 
   useEffect(() => {
     // Only collapse on successful load (not on error — user needs to see the error and retry).
@@ -35,7 +98,15 @@ export default function PuzzleControls() {
     abortRef.current = controller;
     const request: PuzzleRequest = {
       difficulty: selected,
-      ...(selected === "custom" ? { sets_to_remove: setsToRemove } : {}),
+      ...(selected === "custom"
+        ? {
+            sets_to_remove: setsToRemove,
+            min_board_sets: minBoardSets,
+            max_board_sets: maxBoardSets,
+            min_chain_depth: minChainDepth,
+            min_disruption: minDisruption,
+          }
+        : {}),
     };
     void loadPuzzle(request, controller.signal);
   }
@@ -46,6 +117,7 @@ export default function PuzzleControls() {
         <span className="text-base">🎯</span> {t("title")}
       </summary>
       <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+        {/* Difficulty buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           {DIFFICULTIES.map((d) => (
             <button
@@ -61,43 +133,6 @@ export default function PuzzleControls() {
             </button>
           ))}
 
-          {selected === "custom" && (
-            <div className="flex items-center gap-1 ml-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                {t("setsToRemove")}:
-              </span>
-              <button
-                onClick={() => setSetsToRemove((v) => Math.max(1, v - 1))}
-                disabled={setsToRemove <= 1}
-                className="w-6 h-6 flex items-center justify-center rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed font-mono leading-none"
-                aria-label="Decrease sets to remove"
-              >
-                −
-              </button>
-              <span className="w-5 text-center text-sm font-medium tabular-nums">
-                {setsToRemove}
-              </span>
-              <button
-                onClick={() => setSetsToRemove((v) => Math.min(5, v + 1))}
-                disabled={setsToRemove >= 5}
-                className="w-6 h-6 flex items-center justify-center rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed font-mono leading-none"
-                aria-label="Increase sets to remove"
-              >
-                +
-              </button>
-            </div>
-          )}
-
-          {lastPuzzleMeta && (
-            <div className="w-full mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-              <span>{t("chainDepth", { depth: lastPuzzleMeta.chainDepth })}</span>
-              {lastPuzzleMeta.isUnique && (
-                <span className="text-green-600 dark:text-green-400 font-medium">
-                  ✓ {t("uniqueSolution")}
-                </span>
-              )}
-            </div>
-          )}
           <button
             onClick={handleGetPuzzle}
             disabled={isPuzzleLoading}
@@ -113,6 +148,104 @@ export default function PuzzleControls() {
             )}
           </button>
         </div>
+
+        {/* Custom mode parameter panel */}
+        {selected === "custom" && (
+          <div className="w-full mt-2 space-y-2 text-xs text-gray-600 dark:text-gray-300 border-t border-gray-200 dark:border-gray-600 pt-2">
+            {/* Sets to sacrifice */}
+            <div className="flex items-center justify-between">
+              <span>{t("customSetsToSacrifice")}</span>
+              <Stepper
+                value={setsToRemove}
+                min={1}
+                max={8}
+                onChange={setSetsToRemove}
+                decLabel="Decrease sets to sacrifice"
+                incLabel="Increase sets to sacrifice"
+              />
+            </div>
+
+            {/* Board sets range */}
+            <div className="flex items-center justify-between">
+              <span>{t("customBoardSets")}</span>
+              <div className="flex items-center gap-1">
+                <Stepper
+                  value={minBoardSets}
+                  min={5}
+                  max={maxBoardSets}
+                  onChange={setMinBoardSets}
+                  decLabel="Decrease min board sets"
+                  incLabel="Increase min board sets"
+                />
+                <span className="text-gray-400 px-1">–</span>
+                <Stepper
+                  value={maxBoardSets}
+                  min={minBoardSets}
+                  max={25}
+                  onChange={setMaxBoardSets}
+                  decLabel="Decrease max board sets"
+                  incLabel="Increase max board sets"
+                />
+              </div>
+            </div>
+
+            {/* Min chain depth */}
+            <div className="flex items-center justify-between">
+              <span>{t("customMinChainDepth")}</span>
+              <div className="flex items-center gap-2">
+                <Stepper
+                  value={minChainDepth}
+                  min={0}
+                  max={4}
+                  onChange={setMinChainDepth}
+                  decLabel="Decrease min chain depth"
+                  incLabel="Increase min chain depth"
+                />
+                <span className="text-gray-400 italic text-[10px] w-14 text-right">
+                  {chainDepthLabels[minChainDepth]}
+                </span>
+              </div>
+            </div>
+
+            {/* Min disruption */}
+            <div className="flex items-center justify-between">
+              <span>{t("customMinDisruption")}</span>
+              <Stepper
+                value={minDisruption}
+                min={0}
+                max={60}
+                step={5}
+                onChange={setMinDisruption}
+                decLabel="Decrease min disruption"
+                incLabel="Increase min disruption"
+              />
+            </div>
+
+            {/* Slow generation warning */}
+            {isSlowWarning && (
+              <p className="text-amber-600 dark:text-amber-400 text-[11px]">
+                ⚠ {t("customSlowWarning")}
+              </p>
+            )}
+
+            {/* Uniqueness info note */}
+            <p className="text-gray-400 dark:text-gray-500 text-[10px] leading-tight">
+              ℹ {t("customUniquenessNote")}
+            </p>
+          </div>
+        )}
+
+        {/* Stats badge — shown after a puzzle loads */}
+        {lastPuzzleMeta && (
+          <div className="w-full mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+            <span>{t("chainDepth", { depth: lastPuzzleMeta.chainDepth })}</span>
+            {lastPuzzleMeta.isUnique && (
+              <span className="text-green-600 dark:text-green-400 font-medium">
+                ✓ {t("uniqueSolution")}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </details>
   );

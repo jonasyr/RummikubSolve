@@ -453,3 +453,46 @@ class TestUniquenessComputation:
             assert _COMPUTES_UNIQUE[tier] is True, (
                 f"{tier} must compute uniqueness"
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 7a: Custom mode — new generation parameters
+# ---------------------------------------------------------------------------
+
+
+def test_custom_respects_min_chain_depth() -> None:
+    result = generate_puzzle(difficulty="custom", seed=5, min_chain_depth=1)
+    assert result.chain_depth >= 1, (
+        f"Expected chain_depth >= 1, got {result.chain_depth}"
+    )
+
+
+def test_custom_respects_min_disruption() -> None:
+    result = generate_puzzle(difficulty="custom", seed=6, min_disruption=10)
+    assert result.disruption_score >= 10, (
+        f"Expected disruption_score >= 10, got {result.disruption_score}"
+    )
+
+
+def test_custom_respects_board_size_params() -> None:
+    """Explicit board size params are accepted; generation must succeed."""
+    result = generate_puzzle(
+        difficulty="custom", seed=7, min_board_sets=7, max_board_sets=10
+    )
+    assert result.difficulty == "custom"
+
+
+def test_custom_computes_is_unique() -> None:
+    """Custom puzzles always compute is_unique (informational, not gated)."""
+    result = generate_puzzle(difficulty="custom", seed=4, sets_to_remove=2)
+    assert isinstance(result.is_unique, bool)
+
+
+def test_custom_zero_filters_still_generates() -> None:
+    """Default custom params (all zeros) still generates successfully."""
+    result = generate_puzzle(
+        difficulty="custom", seed=10, sets_to_remove=3,
+        min_chain_depth=0, min_disruption=0,
+    )
+    assert result.difficulty == "custom"
+    assert len(result.rack) >= 9  # 3 sets × 3 tiles minimum

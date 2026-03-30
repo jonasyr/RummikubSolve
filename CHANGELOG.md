@@ -5,6 +5,63 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.31.0] — 2026-03-29 — Custom mode rework (puzzle rework phase 7a)
+
+### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)
+- **`generate_puzzle()`** gains four new keyword arguments used when `difficulty == "custom"`:
+  `min_board_sets` (default 8), `max_board_sets` (default 14), `min_chain_depth` (default 0),
+  `min_disruption` (default 0). All are ignored for non-custom difficulties.
+- Custom mode now applies **chain depth** and **disruption** filters (previously bypassed entirely).
+- Custom mode now **computes uniqueness** (`check_uniqueness()`) and stores the result in
+  `PuzzleResult.is_unique` — informational only, never a generation gate.
+- Board sizing for custom is now fully explicit (`min_board_sets`/`max_board_sets`) rather
+  than derived from `sets_to_remove` via a formula.
+- `_COMPUTES_UNIQUE` gains `"custom": True`.
+
+### Backend — API models (`backend/api/models.py`)
+- `PuzzleRequest` gains four new custom-mode fields: `min_board_sets`, `max_board_sets`,
+  `min_chain_depth`, `min_disruption` (all validated and defaulted).
+- `sets_to_remove` maximum expanded from **5 to 8** to allow larger custom puzzles.
+
+### Backend — API endpoint (`backend/api/main.py`)
+- `puzzle_endpoint()` passes all five custom parameters to `generate_puzzle()`.
+
+### Frontend — Puzzle controls (`frontend/src/components/PuzzleControls.tsx`)
+- **Custom mode** now shows a full parameter panel instead of a single "sets to remove"
+  stepper. Parameters exposed: sets to sacrifice (1–8), board sets range (5–25),
+  min chain depth (0–4 with descriptive label), min disruption (0–60, step 5).
+- **Slow-generation warning** (amber) appears when settings are likely to be slow:
+  `min_chain_depth ≥ 2`, `min_disruption ≥ 20`, or `sets_to_remove ≥ 6`.
+- **Uniqueness info note** (grey) is always shown in the custom panel explaining that
+  uniqueness is computed and displayed but not enforced.
+- `Stepper` extracted as a local helper function to de-duplicate ±-button markup.
+
+### Frontend — Types (`frontend/src/types/api.ts`)
+- `PuzzleRequest` gains `min_board_sets?`, `max_board_sets?`, `min_chain_depth?`,
+  `min_disruption?` optional fields.
+
+### Frontend — i18n (`frontend/src/i18n/messages/en.json` + `de.json`)
+- Added 11 new `puzzle.*` keys for the custom parameter panel labels, chain depth level
+  names, slow-generation warning, and uniqueness info note.
+
+### Backend — Tests
+- `test_custom_sets_to_remove_six_422` renamed to `test_custom_sets_to_remove_nine_422`
+  (6 is now valid; 9 is the first invalid value).
+- 5 new tests in `test_puzzle_endpoint.py`: chain depth respected, disruption respected,
+  board size params accepted, `sets_to_remove=8` valid, `is_unique` present for custom.
+- 5 new tests in `test_puzzle_generator.py`: same invariants at unit level.
+
+### Frontend — Tests
+- `PuzzleControls.test.tsx`: replaced old single-stepper tests with new custom panel
+  tests; 4 new tests: panel shows all controls, sets-to-sacrifice range 1–8, slow warning
+  hidden by default, uniqueness note always visible, custom request contains all params.
+
+### New file — `PUZZLE_REWORK_STATUS.md`
+- Root-level document tracking which phases of the Puzzle Rework Plan were implemented,
+  where deviations occurred, and what remains open.
+
+---
+
 ## [0.30.0] — 2026-03-29 — Frontend integration (puzzle rework phase 6)
 
 ### Frontend — Puzzle controls (`frontend/src/components/PuzzleControls.tsx`)

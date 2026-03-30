@@ -107,11 +107,15 @@ class SolveResponse(BaseModel):
 class PuzzleRequest(BaseModel):
     difficulty: Literal["easy", "medium", "hard", "expert", "nightmare", "custom"] = "medium"
     seed: int | None = None
-    # Only meaningful when difficulty == "custom"; ignored for other difficulties.
-    sets_to_remove: int = Field(3, ge=1, le=5)
     # Phase 5: UUIDs of puzzles the client has already seen; used to avoid duplicates
     # when drawing from the pre-generated pool.  Capped at 500 to bound request size.
     seen_ids: list[str] = Field(default_factory=list, max_length=500)
+    # Phase 7a: Custom mode parameters — ignored for all non-custom difficulties.
+    sets_to_remove: int = Field(3, ge=1, le=8)    # sets to sacrifice (expanded from 5 to 8)
+    min_board_sets: int = Field(8, ge=5, le=25)   # board sets before sacrifice
+    max_board_sets: int = Field(14, ge=5, le=25)  # board sets before sacrifice
+    min_chain_depth: int = Field(0, ge=0, le=4)   # minimum solution chain depth
+    min_disruption: int = Field(0, ge=0, le=60)   # minimum disruption score
 
 
 class PuzzleResponse(BaseModel):

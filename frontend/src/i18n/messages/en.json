@@ -136,7 +136,18 @@
     "loading": "Loading…",
     "error": "Could not load puzzle — please try again.",
     "chainDepth": "Chain depth: {depth}",
-    "uniqueSolution": "Unique solution"
+    "uniqueSolution": "Unique solution",
+    "customSetsToSacrifice": "Sets to sacrifice",
+    "customBoardSets": "Board sets",
+    "customMinChainDepth": "Min chain depth",
+    "customChainDepthNone": "none",
+    "customChainDepthSimple": "simple",
+    "customChainDepthModerate": "moderate",
+    "customChainDepthDeep": "deep",
+    "customChainDepthExpert": "expert",
+    "customMinDisruption": "Min disruption",
+    "customSlowWarning": "Strict settings may significantly increase generation time.",
+    "customUniquenessNote": "Uniqueness is computed and shown after generation — not enforced. The complete-sacrifice strategy rarely yields a single unique solution."
   },
   "errorBoundary": {
     "heading": "Something went wrong displaying the result.",

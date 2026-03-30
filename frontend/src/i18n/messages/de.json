@@ -136,7 +136,18 @@
     "loading": "Wird geladen…",
     "error": "Rätsel konnte nicht geladen werden — bitte erneut versuchen.",
     "chainDepth": "Kettenfolge: {depth}",
-    "uniqueSolution": "Einzige Lösung"
+    "uniqueSolution": "Einzige Lösung",
+    "customSetsToSacrifice": "Zu opfernde Sätze",
+    "customBoardSets": "Tischsätze",
+    "customMinChainDepth": "Min. Kettenfolge",
+    "customChainDepthNone": "keine",
+    "customChainDepthSimple": "einfach",
+    "customChainDepthModerate": "moderat",
+    "customChainDepthDeep": "tief",
+    "customChainDepthExpert": "Experte",
+    "customMinDisruption": "Min. Störung",
+    "customSlowWarning": "Strenge Einstellungen können die Generierungszeit erheblich verlängern.",
+    "customUniquenessNote": "Einzigartigkeit wird berechnet und nach der Generierung angezeigt — aber nicht erzwungen. Die Komplett-Opfer-Strategie ergibt selten eine einzige Lösung."
   },
   "errorBoundary": {
     "heading": "Beim Anzeigen des Ergebnisses ist ein Fehler aufgetreten.",

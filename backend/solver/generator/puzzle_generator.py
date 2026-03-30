@@ -108,6 +108,7 @@ _COMPUTES_UNIQUE: dict[str, bool] = {
     "hard": False,
     "expert": True,
     "nightmare": True,
+    "custom": True,   # Phase 7a: always compute for custom (shown in stats badge)
 }
 
 # Max tile-sample attempts inside _extract_by_sacrifice before giving up
@@ -148,19 +149,27 @@ def generate_puzzle(
     seed: int | None = None,
     max_attempts: int | None = None,
     sets_to_remove: int = 3,
+    # Custom mode knobs — ignored for all non-custom difficulties:
+    min_board_sets: int = 8,
+    max_board_sets: int = 14,
+    min_chain_depth: int = 0,
+    min_disruption: int = 0,
 ) -> PuzzleResult:
     """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
 
     Args:
-        difficulty:    "easy", "medium", "hard", "expert", "nightmare", or "custom".
-        seed:          Optional RNG seed for reproducible puzzles.
-        max_attempts:  How many boards to try before giving up. Defaults to a
-                       per-difficulty value from _DEFAULT_MAX_ATTEMPTS (higher for
-                       Expert/Nightmare which have stricter acceptance filters).
-                       Pass 0 to raise PuzzleGenerationError immediately (useful
-                       for testing the error path).
-        sets_to_remove: Number of complete sets to remove (only used when
-                        difficulty == "custom"; valid range 1–5).
+        difficulty:      "easy", "medium", "hard", "expert", "nightmare", or "custom".
+        seed:            Optional RNG seed for reproducible puzzles.
+        max_attempts:    How many boards to try before giving up. Defaults to a
+                         per-difficulty value from _DEFAULT_MAX_ATTEMPTS (higher for
+                         Expert/Nightmare which have stricter acceptance filters).
+                         Pass 0 to raise PuzzleGenerationError immediately (useful
+                         for testing the error path).
+        sets_to_remove:  Number of complete sets to sacrifice (custom only; range 1–8).
+        min_board_sets:  Minimum board sets before sacrifice (custom only; range 5–25).
+        max_board_sets:  Maximum board sets before sacrifice (custom only; range 5–25).
+        min_chain_depth: Minimum chain depth required in the solution (custom only; 0–4).
+        min_disruption:  Minimum disruption score required (custom only; 0–60).
 
     Returns:
         A PuzzleResult whose rack the solver can fully place, with a
@@ -181,7 +190,10 @@ def generate_puzzle(
     )
     rng = random.Random(seed)
     for _ in range(n_attempts):
-        result = _attempt_generate(rng, difficulty, sets_to_remove)
+        result = _attempt_generate(
+            rng, difficulty, sets_to_remove,
+            min_board_sets, max_board_sets, min_chain_depth, min_disruption,
+        )
         if result is not None:
             return result
 
@@ -196,7 +208,13 @@ def generate_puzzle(
 
 
 def _attempt_generate(
-    rng: random.Random, difficulty: Difficulty, sets_to_remove: int = 3
+    rng: random.Random,
+    difficulty: Difficulty,
+    sets_to_remove: int = 3,
+    min_board_sets: int = 8,
+    max_board_sets: int = 14,
+    min_chain_depth: int = 0,
+    min_disruption: int = 0,
 ) -> PuzzleResult | None:
     full_pool = _make_full_pool()
     all_sets = enumerate_runs(full_pool) + enumerate_groups(full_pool)
@@ -204,8 +222,7 @@ def _attempt_generate(
 
     # Scale the board target per difficulty so there are enough sets to sacrifice.
     if difficulty == "custom":
-        lo = max(5, sets_to_remove + 4)
-        hi = max(9, sets_to_remove + 7)
+        lo, hi = min_board_sets, max_board_sets
     else:
         lo, hi = _BOARD_SIZES[difficulty]
     n_target = rng.randint(lo, hi)
@@ -228,7 +245,10 @@ def _attempt_generate(
 
     # Compute disruption score and validate against the difficulty band.
     score = compute_disruption_score(input_board, solution.new_sets)
-    if difficulty != "custom":
+    if difficulty == "custom":
+        if score < min_disruption:
+            return None
+    else:
         lo_d, hi_d = _DISRUPTION_BANDS[difficulty]
         if score < lo_d:
             return None
@@ -236,15 +256,17 @@ def _attempt_generate(
             return None
 
     # Filter by chain_depth minimum — free, already computed by solve() (Phase 3).
-    if difficulty != "custom" and solution.chain_depth < _MIN_CHAIN_DEPTHS.get(difficulty, 0):
+    if difficulty == "custom":
+        if solution.chain_depth < min_chain_depth:
+            return None
+    elif solution.chain_depth < _MIN_CHAIN_DEPTHS.get(difficulty, 0):
         return None
 
-    # Compute uniqueness for Expert / Nightmare (informational, not a gate).
-    # Called once per returned puzzle — not per candidate — so overhead is minimal.
-    # Complete-sacrifice puzzles are typically non-unique (large boards have many
-    # equivalent rearrangements), so this does not filter candidates (Phase 3).
+    # Compute uniqueness (informational, not a gate).
+    # Custom always computes uniqueness so the stats badge can display it.
+    # Expert/Nightmare likewise. Called once per returned puzzle — not per candidate.
     is_unique = True
-    if difficulty != "custom" and _COMPUTES_UNIQUE.get(difficulty, False):
+    if _COMPUTES_UNIQUE.get(difficulty, False):
         is_unique = check_uniqueness(state, solution)
 
     return PuzzleResult(
