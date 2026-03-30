@@ -48,8 +48,8 @@ _RACK_SIZES: dict[str, tuple[int, int]] = {
     "easy": (2, 3),
     "medium": (3, 4),
     "hard": (4, 5),
-    "expert": (4, 6),    # min raised from 2; Expert always forces meaningful placement
-    "nightmare": (5, 7), # Phase 3: deep chains need more tiles to place
+    "expert": (6, 10),    # was (4, 6); larger rack forces deeper mental search
+    "nightmare": (10, 14), # was (5, 7); 10–14 tiles overwhelms working memory
 }
 
 # Number of complete board sets sacrificed (removed entirely) per difficulty.
@@ -58,7 +58,7 @@ _SACRIFICE_COUNTS: dict[str, int] = {
     "medium": 2,
     "hard": 3,
     "expert": 5,     # was 4; one extra sacrifice drives more rearrangement
-    "nightmare": 6,  # Phase 3: maximum sacrifice → maximum rearrangement pressure
+    "nightmare": 7,  # was 6; 7 sacrificed sets from 22–28 = massive rearrangement pressure
 }
 
 # Disruption band: (min_inclusive, max_inclusive).
@@ -70,8 +70,8 @@ _DISRUPTION_BANDS: dict[str, tuple[int, int | None]] = {
     "easy": (2, 10),
     "medium": (9, 18),
     "hard": (16, 28),
-    "expert": (29, None),    # was 26; strictly above Hard's ceiling (28)
-    "nightmare": (38, None), # Phase 3: strictly above typical Expert floor
+    "expert": (32, None),    # was (29, None); higher floor with larger boards
+    "nightmare": (38, None), # larger boards give ILP more routing options → same floor as before
 }
 
 # Board size range (number of sets, BEFORE sacrifice) per difficulty.
@@ -80,8 +80,8 @@ _BOARD_SIZES: dict[str, tuple[int, int]] = {
     "easy": (5, 9),
     "medium": (7, 11),
     "hard": (9, 13),
-    "expert": (13, 18),    # was (11, 15); larger table = more disruption potential
-    "nightmare": (15, 20), # Phase 3: very large tables enable deep rearrangement chains
+    "expert": (16, 22),    # was (13, 18); larger table = more disruption potential
+    "nightmare": (22, 28), # was (15, 20); prevents visual scan of entire board
 }
 
 # Minimum chain_depth required per difficulty (Phase 3).
@@ -91,8 +91,8 @@ _MIN_CHAIN_DEPTHS: dict[str, int] = {
     "easy": 0,
     "medium": 0,
     "hard": 1,
-    "expert": 1,    # Expert is differentiated primarily by uniqueness + disruption ≥ 29.
-    "nightmare": 2, # Nightmare requires genuine two-step convergence in the solution.
+    "expert": 2,    # was 1; Expert requires a real two-step sequential dependency
+    "nightmare": 3, # was 2; requires genuine 2-step sequential chain under the new DAG metric
 }
 
 # Whether to compute uniqueness for this difficulty (Phase 3).
@@ -111,6 +111,18 @@ _COMPUTES_UNIQUE: dict[str, bool] = {
     "custom": True,   # Phase 7a: always compute for custom (shown in stats badge)
 }
 
+# Number of joker tiles to add to the tile pool, per difficulty.
+# Jokers on the board force the player to deduce what each joker represents
+# before reasoning about rearrangements — a significant complexity multiplier.
+_JOKER_COUNTS: dict[str, tuple[int, int]] = {
+    "easy": (0, 0),
+    "medium": (0, 0),
+    "hard": (0, 1),
+    "expert": (1, 2),
+    "nightmare": (1, 2),
+    "custom": (0, 0),
+}
+
 # Max tile-sample attempts inside _extract_by_sacrifice before giving up
 # on a board and letting the outer loop retry with a fresh board.
 _MAX_SAMPLE_ATTEMPTS = 20
@@ -123,8 +135,8 @@ _DEFAULT_MAX_ATTEMPTS: dict[str, int] = {
     "easy": 150,
     "medium": 150,
     "hard": 200,
-    "expert": 400,
-    "nightmare": 600,
+    "expert": 600,     # was 400; larger boards + chain_depth ≥ 2 lower acceptance rate
+    "nightmare": 1500, # was 600; chain_depth ≥ 4 + uniqueness is rare, needs more tries
     "custom": 150,
 }
 
@@ -216,7 +228,9 @@ def _attempt_generate(
     min_chain_depth: int = 0,
     min_disruption: int = 0,
 ) -> PuzzleResult | None:
-    full_pool = _make_full_pool()
+    joker_lo, joker_hi = _JOKER_COUNTS.get(difficulty, (0, 0))
+    n_jokers = rng.randint(joker_lo, joker_hi)
+    full_pool = _make_pool(n_jokers)
     all_sets = enumerate_runs(full_pool) + enumerate_groups(full_pool)
     rng.shuffle(all_sets)
 
@@ -263,8 +277,10 @@ def _attempt_generate(
         return None
 
     # Compute uniqueness (informational, not a gate).
-    # Custom always computes uniqueness so the stats badge can display it.
-    # Expert/Nightmare likewise. Called once per returned puzzle — not per candidate.
+    # Expert/Nightmare/Custom compute it so the stats badge can display it.
+    # Large boards with many equivalent rearrangements typically yield non-unique
+    # solutions, so gating on uniqueness would make Nightmare generation infeasible.
+    # Called once per candidate that passes all other filters.
     is_unique = True
     if _COMPUTES_UNIQUE.get(difficulty, False):
         is_unique = check_uniqueness(state, solution)
@@ -282,6 +298,19 @@ def _attempt_generate(
 def _make_full_pool() -> BoardState:
     """104 non-joker tiles (4 colors × 13 numbers × 2 copies), no jokers."""
     rack = [Tile(color, n, copy_id) for color in Color for n in range(1, 14) for copy_id in (0, 1)]
+    return BoardState(board_sets=[], rack=rack)
+
+
+def _make_pool(n_jokers: int = 0) -> BoardState:
+    """104 non-joker tiles plus n_jokers joker tiles."""
+    rack: list[Tile] = [
+        Tile(color, n, copy_id)
+        for color in Color
+        for n in range(1, 14)
+        for copy_id in (0, 1)
+    ]
+    for j in range(n_jokers):
+        rack.append(Tile.joker(copy_id=j))
     return BoardState(board_sets=[], rack=rack)
 
 

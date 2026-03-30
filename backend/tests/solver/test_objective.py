@@ -169,23 +169,29 @@ class TestChainDepthNoCaseZero:
 
 
 class TestChainDepthOne:
-    """Scenarios where chain depth should be 1 (simple rearrangement)."""
+    """Scenarios where chain depth should be 2 (simple rearrangement).
+
+    Under the DAG algorithm a simple break creates an inheritor→dependent edge
+    (longest_path=1), so the result is longest_path + 1 = 2. Two independent
+    parallel breaks also give 2 (parallel edges, max_path still 1).
+    """
 
     def test_one_set_split_no_further_dependency(self) -> None:
-        """Old set {R4,R5,R6,R7} split into {R4,R5} and {R6,R7} → depth 1.
+        """Old set {R4,R5,R6,R7} split into {R4,R5} and {R6,R7} → depth 2.
 
-        This is the simplest rearrangement: one set broken, tiles go to exactly
-        two new sets with no further chaining.
+        One set broken: inheritor gets more tiles, dependent gets the rest.
+        DAG edge inheritor→dependent gives longest_path=1, result=2.
         """
         old = [run_set(t(R, 4), t(R, 5), t(R, 6), t(R, 7))]
         new = [run_set(t(R, 4), t(R, 5)), run_set(t(R, 6), t(R, 7))]
-        assert compute_chain_depth(old, new, []) == 1
+        assert compute_chain_depth(old, new, []) == 2
 
     def test_rack_tile_placed_with_freed_tiles(self) -> None:
-        """Rack tile joins tiles freed by breaking an old set.
+        """Rack tile joins tiles freed by breaking an old set → depth 2.
 
         Old set O = {R4, R5, R6, R7}.
-        Player breaks O: {R4,R5,R6} stays, {R7} + rack tile R8 form new set.
+        Player breaks O: {R4,R5,R6} stays (inheritor), {R7} + rack R8 form new set.
+        DAG edge inheritor→dependent gives longest_path=1, result=2.
         """
         rack_tile = t(R, 8)
         old_set = run_set(t(R, 4), t(R, 5), t(R, 6), t(R, 7))
@@ -193,10 +199,14 @@ class TestChainDepthOne:
         new_b = run_set(t(R, 7), rack_tile)
         old = [old_set]
         new = [new_a, new_b]
-        assert compute_chain_depth(old, new, [rack_tile]) == 1
+        assert compute_chain_depth(old, new, [rack_tile]) == 2
 
-    def test_two_independent_disruptions_are_still_depth_1(self) -> None:
-        """Two unrelated sets each broken independently → depth 1 (parallel, not chained)."""
+    def test_two_independent_disruptions_are_still_depth_2(self) -> None:
+        """Two unrelated sets each broken independently → depth 2 (parallel, not chained).
+
+        Each split produces one inheritor→dependent edge. The two edges are
+        independent (no node shared), so the longest path is still 1 → result 2.
+        """
         old_a = run_set(t(R, 1), t(R, 2), t(R, 3), t(R, 4))
         old_b = run_set(t(B, 5), t(B, 6), t(B, 7), t(B, 8))
         # Both split in half — no tile from set A ends up in any subset of B or vice versa.
@@ -206,20 +216,21 @@ class TestChainDepthOne:
             run_set(t(B, 5), t(B, 6)),
             run_set(t(B, 7), t(B, 8)),
         ]
-        assert compute_chain_depth([old_a, old_b], new, []) == 1
+        assert compute_chain_depth([old_a, old_b], new, []) == 2
 
     def test_single_tile_moved_between_sets(self) -> None:
-        """One tile leaves its old set and joins another set → depth 1.
+        """One tile leaves its old set and joins another set → depth 2.
 
         Old: A={R1,R2,R3}, B={R4,R5,R6}
         New: A'={R1,R2}, B'={R3,R4,R5,R6}  (R3 migrates from A to B)
         Old set A is disrupted (R3 leaves); B unchanged.
+        DAG: A's inheritor (A'={R1,R2}) → B' (got the freed R3). Depth=2.
         """
         old_a = run_set(t(R, 1), t(R, 2), t(R, 3))
         old_b = run_set(t(R, 4), t(R, 5), t(R, 6))
         new_a = run_set(t(R, 1), t(R, 2))
         new_b = run_set(t(R, 3), t(R, 4), t(R, 5), t(R, 6))
-        assert compute_chain_depth([old_a, old_b], [new_a, new_b], []) == 1
+        assert compute_chain_depth([old_a, old_b], [new_a, new_b], []) == 2
 
 
 class TestChainDepthTwo:
@@ -255,18 +266,18 @@ class TestChainDepthTwo:
         """Break old set O; freed tile joins rack tile to form N2.
 
         Old: O={R5,R6,R7,R8,R9}
-        New: N1={R5,R6,R7,R8} (kept most tiles from O)
-             N2={R9,rack_R10} (got R9 freed from O, plus rack)
+        New: N1={R5,R6,R7,R8} (inheritor — kept most tiles from O)
+             N2={R9,rack_R10} (dependent — got R9 freed from O, plus rack)
 
-        O is disrupted (tiles scattered to N1 and N2). N2 gets tiles
-        from exactly ONE disrupted old set (O). Depth = 1.
+        O is disrupted. DAG edge N1→N2 (inheritor→dependent).
+        longest_path=1, result=2.
         """
         rack_tile = t(R, 10)
         old_o = run_set(t(R, 5), t(R, 6), t(R, 7), t(R, 8), t(R, 9))
         new_n1 = run_set(t(R, 5), t(R, 6), t(R, 7), t(R, 8))
         new_n2 = run_set(t(R, 9), rack_tile)
         depth = compute_chain_depth([old_o], [new_n1, new_n2], [rack_tile])
-        assert depth == 1
+        assert depth == 2
 
 
 class TestChainDepthThreePlus:
@@ -319,14 +330,18 @@ class TestChainDepthEdgeCases:
         assert compute_chain_depth(old, new, [j]) == 0
 
     def test_joker_tile_in_placed_tiles_with_disruption(self) -> None:
-        """Joker is a placed tile; it joins tiles freed from a disrupted old set → depth 1."""
+        """Joker is a placed tile; it joins tiles freed from a disrupted old set → depth 2.
+
+        Old set broken: new_a is inheritor (3 tiles), new_b is dependent (1 tile + joker).
+        DAG edge new_a→new_b gives longest_path=1, result=2.
+        """
         j = joker(0)
         old_set = run_set(t(R, 4), t(R, 5), t(R, 6), t(R, 7))
         new_a = run_set(t(R, 4), t(R, 5), t(R, 6))
         new_b = run_set(t(R, 7), j)  # joker + freed R7
         old = [old_set]
         new = [new_a, new_b]
-        assert compute_chain_depth(old, new, [j]) == 1
+        assert compute_chain_depth(old, new, [j]) == 2
 
     def test_all_rack_tiles_no_board_involvement(self) -> None:
         """Rack tiles form their own new set; the single old set is untouched."""
@@ -383,8 +398,11 @@ class TestChainDepthEdgeCases:
         new = old + [new_rack_set]
         assert compute_chain_depth(old, new, [rack_tile]) == 0
 
-    def test_group_set_disruption_depth_1(self) -> None:
-        """Group set broken into two parts → depth 1."""
+    def test_group_set_disruption_depth_2(self) -> None:
+        """Group set broken into two parts → depth 2.
+
+        Inheritor→dependent edge gives longest_path=1, result=2.
+        """
         # Old group: all four colors of number 7
         old_group = group_set(t(R, 7), t(B, 7), t(BL, 7), t(Y, 7))
         # New: split into two groups (not valid Rummikub, tests the metric)
@@ -392,7 +410,7 @@ class TestChainDepthEdgeCases:
         new_b = group_set(t(BL, 7), t(Y, 7))
         old = [old_group]
         new = [new_a, new_b]
-        assert compute_chain_depth(old, new, []) == 1
+        assert compute_chain_depth(old, new, []) == 2
 
     def test_only_new_board_sets_no_old(self) -> None:
         """No old board, only new sets formed from rack → depth 0."""
@@ -403,10 +421,10 @@ class TestChainDepthEdgeCases:
         assert compute_chain_depth([], new, [rack_a, rack_b, rack_c]) == 0
 
     def test_disruption_with_no_rack_tiles(self) -> None:
-        """Board tiles rearranged with no rack tiles at all → depth ≥ 1."""
+        """Board tiles rearranged with no rack tiles at all → depth 2."""
         old = [run_set(t(R, 1), t(R, 2), t(R, 3), t(R, 4))]
         new = [run_set(t(R, 1), t(R, 2)), run_set(t(R, 3), t(R, 4))]
-        assert compute_chain_depth(old, new, []) == 1
+        assert compute_chain_depth(old, new, []) == 2
 
 
 class TestChainDepthIntegration:
@@ -433,8 +451,10 @@ class TestChainDepthIntegration:
         assert deep_depth >= shallow_depth
 
     def test_parallel_vs_chained_disruptions(self) -> None:
-        """Two parallel disruptions should not inflate depth beyond 1."""
-        # Two completely independent splits — no tile crosses from one group to another
+        """Two parallel disruptions → depth 2 (parallel edges, longest_path=1)."""
+        # Two completely independent splits — no tile crosses from one group to another.
+        # Each split adds one inheritor→dependent edge; edges are independent so
+        # longest_path=1, result=2. Parallel, not sequential.
         old_a = run_set(t(R, 1), t(R, 2), t(R, 3), t(R, 4))
         old_b = run_set(t(B, 1), t(B, 2), t(B, 3), t(B, 4))
         new = [
@@ -444,10 +464,10 @@ class TestChainDepthIntegration:
             run_set(t(B, 3), t(B, 4)),
         ]
         depth = compute_chain_depth([old_a, old_b], new, [])
-        assert depth == 1  # parallel, not sequential
+        assert depth == 2  # parallel, not sequential
 
     def test_stable_sets_mixed_with_disrupted_sets(self) -> None:
-        """Stable sets don't affect the chain depth calculation."""
+        """Stable sets don't affect the chain depth calculation → depth 2."""
         stable1 = run_set(t(Y, 1), t(Y, 2), t(Y, 3))
         stable2 = run_set(t(BL, 5), t(BL, 6), t(BL, 7))
         disrupted = run_set(t(R, 8), t(R, 9), t(R, 10), t(R, 11))
@@ -457,5 +477,6 @@ class TestChainDepthIntegration:
         old = [stable1, stable2, disrupted]
         new = [stable1, stable2, new_part_a, new_part_b]
         depth = compute_chain_depth(old, new, [rack_tile])
-        # disrupted set gets broken; rack tile joins freed R11 → depth 1
-        assert depth == 1
+        # disrupted set broken: new_part_a is inheritor (3 tiles), new_part_b is dependent.
+        # DAG edge new_part_a→new_part_b, longest_path=1, result=2.
+        assert depth == 2

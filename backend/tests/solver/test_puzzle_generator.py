@@ -64,7 +64,7 @@ def test_custom_puzzle_is_solvable() -> None:
 def test_expert_puzzle_generates() -> None:
     result = generate_puzzle(difficulty="expert", seed=20)
     assert result.difficulty == "expert"
-    assert 4 <= len(result.rack) <= 6
+    assert 6 <= len(result.rack) <= 10
 
 
 def test_expert_rack_has_no_trivial_extension() -> None:
@@ -172,7 +172,7 @@ def test_puzzle_is_fully_solvable() -> None:
 
 def test_rack_minimum_size() -> None:
     """Rack size stays within the configured range for each difficulty."""
-    rack_ranges = {"easy": (2, 3), "medium": (3, 4), "hard": (4, 5), "expert": (4, 6)}
+    rack_ranges = {"easy": (2, 3), "medium": (3, 4), "hard": (4, 5), "expert": (6, 10)}
     for seed in range(5):
         for difficulty, (lo, hi) in rack_ranges.items():
             result = generate_puzzle(difficulty=difficulty, seed=seed)  # type: ignore[arg-type]
@@ -328,11 +328,11 @@ class TestChainDepthFiltering:
                 f"Hard seed={seed}: chain_depth={result.chain_depth} below floor 1"
             )
 
-    def test_expert_multiple_seeds_chain_depth_ge_1(self) -> None:
+    def test_expert_multiple_seeds_chain_depth_ge_2(self) -> None:
         for seed in range(3):
             result = generate_puzzle(difficulty="expert", seed=seed)
-            assert result.chain_depth >= 1, (
-                f"Expert seed={seed}: chain_depth={result.chain_depth} below floor 1"
+            assert result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"], (
+                f"Expert seed={seed}: chain_depth={result.chain_depth} below floor {_MIN_CHAIN_DEPTHS['expert']}"
             )
 
     def test_easy_chain_depth_zero_is_allowed(self) -> None:
@@ -375,13 +375,14 @@ class TestNightmareDifficulty:
         assert _nightmare_result.difficulty == "nightmare"
 
     def test_nightmare_rack_size_range(self, _nightmare_result: PuzzleResult) -> None:
-        assert 5 <= len(_nightmare_result.rack) <= 7
+        assert 10 <= len(_nightmare_result.rack) <= 14
 
-    def test_nightmare_chain_depth_at_least_2(self, _nightmare_result: PuzzleResult) -> None:
-        assert _nightmare_result.chain_depth >= 2
+    def test_nightmare_chain_depth_meets_floor(self, _nightmare_result: PuzzleResult) -> None:
+        assert _nightmare_result.chain_depth >= _MIN_CHAIN_DEPTHS["nightmare"]
 
     def test_nightmare_is_unique_field_is_bool(self, _nightmare_result: PuzzleResult) -> None:
-        # is_unique is informational (not gated): could be True or False.
+        # is_unique is informational (not gated) — large boards have many equivalent
+        # rearrangements so requiring uniqueness would make generation infeasible.
         assert isinstance(_nightmare_result.is_unique, bool)
 
     def test_nightmare_disruption_floor(self, _nightmare_result: PuzzleResult) -> None:
@@ -417,11 +418,11 @@ class TestNightmareDifficulty:
 
 
 class TestUniquenessComputation:
-    """check_uniqueness is computed for Expert / Nightmare (informational, not a gate).
+    """check_uniqueness is computed for Expert / Nightmare / Custom (informational, not a gate).
 
-    The complete-sacrifice strategy typically yields non-unique solutions
-    (large boards have many equivalent rearrangements), so is_unique is not
-    used to filter candidates — it is stored in PuzzleResult for API consumers.
+    Large boards with many equivalent rearrangements typically yield non-unique
+    solutions, so uniqueness is stored in PuzzleResult for API consumers but is
+    not used to filter candidates.
     """
 
     def test_expert_is_unique_is_bool(self) -> None:

@@ -115,9 +115,9 @@ async def test_expert_puzzle_200(client: AsyncClient) -> None:
     assert r.status_code == 200
     data = r.json()
     assert data["difficulty"] == "expert"
-    assert 2 <= len(data["rack"]) <= 6
+    assert 6 <= len(data["rack"]) <= 10
     assert len(data["board_sets"]) >= 2
-    assert data["disruption_score"] >= 26  # Expert floor
+    assert data["disruption_score"] >= 32  # Expert floor
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ class TestPuzzleResponseNewFields:
         assert r.status_code == 200
         data = r.json()
         assert data["difficulty"] == "nightmare"
-        assert 5 <= len(data["rack"]) <= 7
+        assert 10 <= len(data["rack"]) <= 14
         assert isinstance(data["is_unique"], bool)  # informational; may be True or False
         assert data["chain_depth"] >= _MIN_CHAIN_DEPTHS["nightmare"]
 
