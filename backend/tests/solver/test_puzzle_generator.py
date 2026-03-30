@@ -8,7 +8,6 @@ from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
     _COMPUTES_UNIQUE,  # type: ignore[attr-defined]
     _DISRUPTION_BANDS,  # type: ignore[attr-defined]
-    _JOKER_COUNTS,  # type: ignore[attr-defined]
     _MIN_CHAIN_DEPTHS,  # type: ignore[attr-defined]
     PuzzleGenerationError,
     PuzzleResult,
@@ -334,8 +333,9 @@ class TestChainDepthFiltering:
     def test_expert_multiple_seeds_chain_depth_ge_2(self) -> None:
         for seed in range(3):
             result = generate_puzzle(difficulty="expert", seed=seed)
-            assert result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"], (
-                f"Expert seed={seed}: chain_depth={result.chain_depth} below floor {_MIN_CHAIN_DEPTHS['expert']}"
+            floor = _MIN_CHAIN_DEPTHS["expert"]
+            assert result.chain_depth >= floor, (
+                f"Expert seed={seed}: chain_depth={result.chain_depth} below floor {floor}"
             )
 
     def test_easy_chain_depth_zero_is_allowed(self) -> None:
@@ -608,6 +608,7 @@ class TestInjectJokersIntoBoard:
     def test_no_eligible_sets_returns_unchanged(self) -> None:
         """When all sets have < 4 tiles, no jokers are injected."""
         import random
+
         from solver.models.tile import Color, Tile
         from solver.models.tileset import TileSet
         board = [
