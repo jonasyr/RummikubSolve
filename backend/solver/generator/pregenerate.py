@@ -98,7 +98,11 @@ def _generate_batch(store: PuzzleStore, difficulty: str, count: int) -> None:
     while generated < count:
         seed += 1
         try:
-            result = generate_puzzle(difficulty=difficulty, seed=seed)  # type: ignore[arg-type]
+            result = generate_puzzle(
+                difficulty=difficulty,  # type: ignore[arg-type]
+                seed=seed,
+                pregen=True,
+            )
             store.store(result, seed=seed)
             generated += 1
             elapsed = time.monotonic() - t0

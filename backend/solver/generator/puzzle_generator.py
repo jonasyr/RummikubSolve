@@ -140,6 +140,28 @@ _DEFAULT_MAX_ATTEMPTS: dict[str, int] = {
     "custom": 150,
 }
 
+# Stricter thresholds used by pregenerate.py (offline batch, no time pressure).
+# Live API generation uses _MIN_CHAIN_DEPTHS / _DISRUPTION_BANDS (relaxed) to
+# guarantee response within timeout. Pool-drawn puzzles must meet these stricter
+# thresholds so they deliver the intended 15–30 min difficulty experience.
+_PREGEN_CONSTRAINTS: dict[str, dict[str, int]] = {
+    "expert": {
+        "min_chain_depth": 3,   # vs live: 2; requires a genuine 2-step sequential chain
+        "min_disruption": 38,   # vs live: 32; forces significant board rearrangement
+    },
+    "nightmare": {
+        "min_chain_depth": 4,   # vs live: 3; the original target from the plan
+        "min_disruption": 45,   # vs live: 38; achievable ~2% of candidates; batch is fine
+    },
+}
+
+# Max attempts for pre-generation. Strict constraints have low acceptance rates,
+# so pre-generation needs far more attempts than live generation.
+_PREGEN_MAX_ATTEMPTS: dict[str, int] = {
+    "expert": 5000,
+    "nightmare": 10000,
+}
+
 
 class PuzzleGenerationError(Exception):
     """Raised when a puzzle cannot be generated within the attempt limit."""
@@ -160,6 +182,7 @@ def generate_puzzle(
     difficulty: Difficulty = "medium",
     seed: int | None = None,
     max_attempts: int | None = None,
+    pregen: bool = False,
     sets_to_remove: int = 3,
     # Custom mode knobs — ignored for all non-custom difficulties:
     min_board_sets: int = 8,
@@ -173,8 +196,13 @@ def generate_puzzle(
         difficulty:      "easy", "medium", "hard", "expert", "nightmare", or "custom".
         seed:            Optional RNG seed for reproducible puzzles.
         max_attempts:    How many boards to try before giving up. Defaults to a
-                         per-difficulty value from _DEFAULT_MAX_ATTEMPTS (higher for
-                         Expert/Nightmare which have stricter acceptance filters).
+                         per-difficulty value from _DEFAULT_MAX_ATTEMPTS (live) or
+                         _PREGEN_MAX_ATTEMPTS (pregen). Override by passing explicitly.
+        pregen:          If True, apply stricter _PREGEN_CONSTRAINTS (higher chain_depth
+                         and disruption floors) for offline batch pre-generation. Uses
+                         _PREGEN_MAX_ATTEMPTS as the default attempt budget. This produces
+                         harder puzzles suitable for the pool; live generation keeps the
+                         relaxed defaults to guarantee response within API timeout.
                          Pass 0 to raise PuzzleGenerationError immediately (useful
                          for testing the error path).
         sets_to_remove:  Number of complete sets to sacrifice (custom only; range 1–8).
@@ -197,14 +225,21 @@ def generate_puzzle(
             f"Use 'easy', 'medium', 'hard', 'expert', 'nightmare', or 'custom'."
         )
 
-    n_attempts = max_attempts if max_attempts is not None else _DEFAULT_MAX_ATTEMPTS.get(
-        difficulty, 150
-    )
+    if max_attempts is not None:
+        n_attempts = max_attempts
+    elif pregen:
+        n_attempts = _PREGEN_MAX_ATTEMPTS.get(
+            difficulty, _DEFAULT_MAX_ATTEMPTS.get(difficulty, 150)
+        )
+    else:
+        n_attempts = _DEFAULT_MAX_ATTEMPTS.get(difficulty, 150)
+
     rng = random.Random(seed)
     for _ in range(n_attempts):
         result = _attempt_generate(
             rng, difficulty, sets_to_remove,
             min_board_sets, max_board_sets, min_chain_depth, min_disruption,
+            pregen=pregen,
         )
         if result is not None:
             return result
@@ -227,6 +262,7 @@ def _attempt_generate(
     max_board_sets: int = 14,
     min_chain_depth: int = 0,
     min_disruption: int = 0,
+    pregen: bool = False,
 ) -> PuzzleResult | None:
     joker_lo, joker_hi = _JOKER_COUNTS.get(difficulty, (0, 0))
     n_jokers = rng.randint(joker_lo, joker_hi)
@@ -263,22 +299,27 @@ def _attempt_generate(
         return None
 
     # Compute disruption score and validate against the difficulty band.
+    # When pregen=True, use stricter _PREGEN_CONSTRAINTS floors (higher chain_depth
+    # and disruption minimums) so pool-drawn puzzles are genuinely harder.
     score = compute_disruption_score(input_board, solution.new_sets)
     if difficulty == "custom":
-        if score < min_disruption:
-            return None
+        effective_lo_d: int = min_disruption
+        effective_hi_d: int | None = None
+        effective_min_chain: int = min_chain_depth
+    elif pregen and difficulty in _PREGEN_CONSTRAINTS:
+        pc = _PREGEN_CONSTRAINTS[difficulty]
+        effective_lo_d = pc["min_disruption"]
+        effective_hi_d = None
+        effective_min_chain = pc["min_chain_depth"]
     else:
-        lo_d, hi_d = _DISRUPTION_BANDS[difficulty]
-        if score < lo_d:
-            return None
-        if hi_d is not None and score > hi_d:
-            return None
+        effective_lo_d, effective_hi_d = _DISRUPTION_BANDS[difficulty]
+        effective_min_chain = _MIN_CHAIN_DEPTHS.get(difficulty, 0)
 
-    # Filter by chain_depth minimum — free, already computed by solve() (Phase 3).
-    if difficulty == "custom":
-        if solution.chain_depth < min_chain_depth:
-            return None
-    elif solution.chain_depth < _MIN_CHAIN_DEPTHS.get(difficulty, 0):
+    if score < effective_lo_d:
+        return None
+    if effective_hi_d is not None and score > effective_hi_d:
+        return None
+    if solution.chain_depth < effective_min_chain:
         return None
 
     # Compute uniqueness (informational, not a gate).

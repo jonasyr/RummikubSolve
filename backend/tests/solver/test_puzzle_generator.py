@@ -7,8 +7,11 @@ import pytest
 from solver.engine.solver import solve
 from solver.generator.puzzle_generator import (
     _COMPUTES_UNIQUE,  # type: ignore[attr-defined]
+    _DEFAULT_MAX_ATTEMPTS,  # type: ignore[attr-defined]
     _DISRUPTION_BANDS,  # type: ignore[attr-defined]
     _MIN_CHAIN_DEPTHS,  # type: ignore[attr-defined]
+    _PREGEN_CONSTRAINTS,  # type: ignore[attr-defined]
+    _PREGEN_MAX_ATTEMPTS,  # type: ignore[attr-defined]
     PuzzleGenerationError,
     PuzzleResult,
     _any_trivial_extension,
@@ -632,3 +635,90 @@ class TestInjectJokersIntoBoard:
                 f"Expert seed={seed}: joker_count={result.joker_count} but "
                 f"board has {board_jokers} jokers"
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Pre-generation tier (_PREGEN_CONSTRAINTS, pregen=True)
+# ---------------------------------------------------------------------------
+
+
+class TestPregenTier:
+    """pregen=True applies stricter chain_depth and disruption thresholds.
+
+    These tests use fast seeds and low attempt counts to stay under CI timeout.
+    The pregen=True path is tested for:
+      - Correct constant structure (_PREGEN_CONSTRAINTS / _PREGEN_MAX_ATTEMPTS)
+      - Stricter thresholds applied (disruption and chain_depth floors higher)
+      - pregen=False (default) still uses live thresholds
+    """
+
+    def test_pregen_constraints_dict_structure(self) -> None:
+        """_PREGEN_CONSTRAINTS covers expert and nightmare with required keys."""
+        for tier in ("expert", "nightmare"):
+            assert tier in _PREGEN_CONSTRAINTS, f"Missing tier {tier!r}"
+            c = _PREGEN_CONSTRAINTS[tier]
+            assert "min_chain_depth" in c
+            assert "min_disruption" in c
+
+    def test_pregen_stricter_than_live_expert(self) -> None:
+        """Pre-generation thresholds must exceed live generation thresholds."""
+        live_chain = _MIN_CHAIN_DEPTHS["expert"]
+        live_disrupt, _ = _DISRUPTION_BANDS["expert"]
+        pregen = _PREGEN_CONSTRAINTS["expert"]
+        assert pregen["min_chain_depth"] > live_chain, (
+            f"pregen chain {pregen['min_chain_depth']} must exceed live {live_chain}"
+        )
+        assert pregen["min_disruption"] > live_disrupt, (
+            f"pregen disruption {pregen['min_disruption']} must exceed live {live_disrupt}"
+        )
+
+    def test_pregen_stricter_than_live_nightmare(self) -> None:
+        """Pre-generation thresholds must exceed live generation thresholds."""
+        live_chain = _MIN_CHAIN_DEPTHS["nightmare"]
+        live_disrupt, _ = _DISRUPTION_BANDS["nightmare"]
+        pregen = _PREGEN_CONSTRAINTS["nightmare"]
+        assert pregen["min_chain_depth"] > live_chain
+        assert pregen["min_disruption"] > live_disrupt
+
+    def test_pregen_max_attempts_higher_than_default(self) -> None:
+        """Pre-generation attempt budget must exceed live budget."""
+        for tier in ("expert", "nightmare"):
+            assert _PREGEN_MAX_ATTEMPTS[tier] > _DEFAULT_MAX_ATTEMPTS[tier], (  # type: ignore[attr-defined]
+                f"{tier}: pregen attempts {_PREGEN_MAX_ATTEMPTS[tier]} "
+                f"not > live {_DEFAULT_MAX_ATTEMPTS[tier]}"  # type: ignore[attr-defined]
+            )
+
+    def test_pregen_false_uses_live_thresholds(self) -> None:
+        """Default pregen=False produces puzzles meeting live (not pregen) thresholds.
+
+        Expert live floor is disruption ≥ 32, chain ≥ 2. Pregen floor is ≥ 38 / ≥ 3.
+        A live puzzle may have disruption in [32, 37] or chain == 2 — still valid.
+        """
+        result = generate_puzzle(difficulty="expert", seed=0)
+        live_lo, _ = _DISRUPTION_BANDS["expert"]
+        assert result.disruption_score >= live_lo
+        assert result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"]
+
+    def test_pregen_true_result_meets_stricter_thresholds(self) -> None:
+        """pregen=True puzzle meets _PREGEN_CONSTRAINTS (not just live thresholds).
+
+        Uses a higher max_attempts override to keep test duration bounded.
+        Expert pregen requires chain ≥ 3 and disruption ≥ 38.
+        """
+        result = generate_puzzle(difficulty="expert", seed=7, pregen=True)
+        pc = _PREGEN_CONSTRAINTS["expert"]
+        assert result.disruption_score >= pc["min_disruption"], (
+            f"pregen expert: disruption {result.disruption_score} < {pc['min_disruption']}"
+        )
+        assert result.chain_depth >= pc["min_chain_depth"], (
+            f"pregen expert: chain_depth {result.chain_depth} < {pc['min_chain_depth']}"
+        )
+
+    def test_pregen_result_is_solvable(self) -> None:
+        """pregen=True puzzle is still fully solvable."""
+        from solver.engine.solver import solve
+        from solver.models.board_state import BoardState
+        result = generate_puzzle(difficulty="expert", seed=7, pregen=True)
+        state = BoardState(board_sets=result.board_sets, rack=result.rack)
+        solution = solve(state)
+        assert solution.tiles_placed == len(result.rack)
