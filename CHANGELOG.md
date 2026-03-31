@@ -5,6 +5,87 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.32.0] — 2026-03-31 — Nightmare difficulty overhaul + joker infrastructure (phases 8 + 8b)
+
+### Backend — Chain depth metric (`backend/solver/engine/objective.py`)
+- **`compute_chain_depth()`** completely rewritten from a convergence-breadth metric to a
+  **DAG longest-path algorithm**. Builds a directed graph where `inheritor → dependent`
+  edges model sequential set dependencies; uses Kahn's BFS topological sort (cycle-safe)
+  to find the longest path.
+- New semantics: a simple split now returns depth 2 (was 1); a genuine 2-step sequential
+  chain returns 3 (was 2). Old tests updated to reflect the new metric.
+- **RecursionError fix:** step 5 (rack-tile prerequisite edges) can create back-edges
+  producing cycles. Replaced recursive DFS with Kahn's algorithm; cyclic nodes are
+  naturally excluded because they never reach in-degree 0.
+
+### Backend — Difficulty constants (`backend/solver/generator/puzzle_generator.py`)
+- All six difficulty configuration dicts updated for Expert and Nightmare:
+
+  | Parameter | Expert (old → new) | Nightmare (old → new) |
+  |-----------|-------------------|-----------------------|
+  | Rack size | (4,6) → (6,10) | (5,7) → (10,14) |
+  | Board size | (13,18) → (16,22) | (15,20) → (22,28) |
+  | Sacrifice | 4 → 5 | 6 → 7 |
+  | Chain depth (live) | 1 → 2 | 2 → 3 |
+  | Disruption floor (live) | 29 → 32 | 35 → 38 |
+  | Max attempts | 400 → 600 | 600 → 1500 |
+
+- **Uniqueness:** computed for Expert/Nightmare (informational, never a generation gate —
+  complete-sacrifice produces too many equivalent rearrangements for gating to be feasible).
+
+### Backend — Joker infrastructure (Phase 8)
+- **`_JOKER_COUNTS`** dict: `hard (0,1)`, `expert (1,2)`, `nightmare (1,2)`.
+- **`_make_pool(n_jokers)`**: builds the 104-tile base pool plus `n_jokers` joker tiles.
+  Raises `ValueError` if `n_jokers` is outside `[0, 2]` (guard against `Tile.__post_init__`
+  crash with invalid `copy_id`).
+- **`_inject_jokers_into_board(board_sets, n_jokers, rng)`**: physically places jokers into
+  existing board sets with ≥ 4 tiles by replacing a random non-joker tile. This bypasses
+  the limitation that `enumerate_runs()`/`enumerate_groups()` don't produce joker-containing
+  set templates. Jokers in sacrificed sets may end up in the rack (expected).
+- **`PuzzleResult.joker_count`** now reflects jokers actually visible on `board_sets`
+  (previously always 0 — field was declared but never populated).
+
+### Backend — Pre-generation tier (Phase 8b)
+- **`_PREGEN_CONSTRAINTS`**: stricter thresholds for offline batch generation:
+  Expert (chain ≥ 3, disruption ≥ 38); Nightmare (chain ≥ 4, disruption ≥ 45).
+  These are the original plan's targets — achievable in batch, infeasible for live API.
+- **`_PREGEN_MAX_ATTEMPTS`**: 5,000 (Expert) / 10,000 (Nightmare) for the batch CLI.
+- **`generate_puzzle(pregen=False)`**: new `pregen` parameter. When `True`, applies
+  `_PREGEN_CONSTRAINTS` and uses `_PREGEN_MAX_ATTEMPTS` as default budget. Default `False`
+  leaves live generation completely unchanged.
+- **`pregenerate.py`**: now passes `pregen=True` so all CLI-generated pool puzzles meet
+  the strict spec. Pool-drawn puzzles deliver the intended 15–30 min difficulty experience;
+  live fallback uses relaxed thresholds to stay within API timeout.
+
+### Backend — Tests
+- **`test_objective.py`**: all chain-depth assertions updated for new DAG semantics
+  (depth 1 → 2 for split scenarios, depth 2 → 3 for two-step chains).
+- **`test_puzzle_generator.py`**: 20 new tests across three new classes:
+  - `TestMakePoolValidation` (5): `_make_pool()` range validation.
+  - `TestInjectJokersIntoBoard` (5): joker placement correctness.
+  - `TestPregenTier` (6): `_PREGEN_CONSTRAINTS` structure, threshold ordering invariants,
+    `pregen=True` end-to-end generation, solvability.
+  - Existing tests updated: rack/board size ranges, chain depth floors, `is_unique` semantic.
+- **`test_puzzle_endpoint.py`**: nightmare rack range `(5,7) → (10,14)`;
+  expert rack range `(2,6) → (6,10)`; disruption floor `≥ 26 → ≥ 32`; `is_unique`
+  relaxed from `is True` to `isinstance(bool)`.
+
+### Calibration notes (deviations from original plan)
+- Nightmare **live** chain floor is 3, not 4 (plan target). Depth ≥ 4 occurs ~23% of
+  solvable candidates; with uniqueness gating (nearly 0% pass rate for complete-sacrifice),
+  live generation would be infeasible. The pregen=True path enforces the original depth ≥ 4.
+- Nightmare **live** disruption floor is 38, not 45. Empirical p90 on nightmare-scale boards
+  is 39 (larger boards give ILP more routing options). pregen=True enforces ≥ 45.
+- Uniqueness is **informational only** for live generation. Complete-sacrifice always yields
+  many equivalent rearrangements; gating on uniqueness would require pre-generation only.
+
+### New file — `IMPLEMEMTATION EVALUATION.md`
+- Post-mortem evaluation identifying three critical bugs (joker_count always 0, jokers
+  never on board, calibration retreat), plus moderate and low-severity issues.
+- Defines the two-phase fix plan implemented in this release.
+
+---
+
 ## [0.31.0] — 2026-03-29 — Custom mode rework (puzzle rework phase 7a)
 
 ### Backend — Puzzle generator (`backend/solver/generator/puzzle_generator.py`)

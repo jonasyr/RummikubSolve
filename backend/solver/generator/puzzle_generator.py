@@ -48,8 +48,8 @@ _RACK_SIZES: dict[str, tuple[int, int]] = {
     "easy": (2, 3),
     "medium": (3, 4),
     "hard": (4, 5),
-    "expert": (4, 6),    # min raised from 2; Expert always forces meaningful placement
-    "nightmare": (5, 7), # Phase 3: deep chains need more tiles to place
+    "expert": (6, 10),    # was (4, 6); larger rack forces deeper mental search
+    "nightmare": (10, 14), # was (5, 7); 10–14 tiles overwhelms working memory
 }
 
 # Number of complete board sets sacrificed (removed entirely) per difficulty.
@@ -58,7 +58,7 @@ _SACRIFICE_COUNTS: dict[str, int] = {
     "medium": 2,
     "hard": 3,
     "expert": 5,     # was 4; one extra sacrifice drives more rearrangement
-    "nightmare": 6,  # Phase 3: maximum sacrifice → maximum rearrangement pressure
+    "nightmare": 7,  # was 6; 7 sacrificed sets from 22–28 = massive rearrangement pressure
 }
 
 # Disruption band: (min_inclusive, max_inclusive).
@@ -70,8 +70,8 @@ _DISRUPTION_BANDS: dict[str, tuple[int, int | None]] = {
     "easy": (2, 10),
     "medium": (9, 18),
     "hard": (16, 28),
-    "expert": (29, None),    # was 26; strictly above Hard's ceiling (28)
-    "nightmare": (38, None), # Phase 3: strictly above typical Expert floor
+    "expert": (32, None),    # was (29, None); higher floor with larger boards
+    "nightmare": (38, None), # larger boards give ILP more routing options → same floor as before
 }
 
 # Board size range (number of sets, BEFORE sacrifice) per difficulty.
@@ -80,8 +80,8 @@ _BOARD_SIZES: dict[str, tuple[int, int]] = {
     "easy": (5, 9),
     "medium": (7, 11),
     "hard": (9, 13),
-    "expert": (13, 18),    # was (11, 15); larger table = more disruption potential
-    "nightmare": (15, 20), # Phase 3: very large tables enable deep rearrangement chains
+    "expert": (16, 22),    # was (13, 18); larger table = more disruption potential
+    "nightmare": (22, 28), # was (15, 20); prevents visual scan of entire board
 }
 
 # Minimum chain_depth required per difficulty (Phase 3).
@@ -91,8 +91,8 @@ _MIN_CHAIN_DEPTHS: dict[str, int] = {
     "easy": 0,
     "medium": 0,
     "hard": 1,
-    "expert": 1,    # Expert is differentiated primarily by uniqueness + disruption ≥ 29.
-    "nightmare": 2, # Nightmare requires genuine two-step convergence in the solution.
+    "expert": 2,    # was 1; Expert requires a real two-step sequential dependency
+    "nightmare": 3, # was 2; requires genuine 2-step sequential chain under the new DAG metric
 }
 
 # Whether to compute uniqueness for this difficulty (Phase 3).
@@ -111,6 +111,18 @@ _COMPUTES_UNIQUE: dict[str, bool] = {
     "custom": True,   # Phase 7a: always compute for custom (shown in stats badge)
 }
 
+# Number of joker tiles to add to the tile pool, per difficulty.
+# Jokers on the board force the player to deduce what each joker represents
+# before reasoning about rearrangements — a significant complexity multiplier.
+_JOKER_COUNTS: dict[str, tuple[int, int]] = {
+    "easy": (0, 0),
+    "medium": (0, 0),
+    "hard": (0, 1),
+    "expert": (1, 2),
+    "nightmare": (1, 2),
+    "custom": (0, 0),
+}
+
 # Max tile-sample attempts inside _extract_by_sacrifice before giving up
 # on a board and letting the outer loop retry with a fresh board.
 _MAX_SAMPLE_ATTEMPTS = 20
@@ -123,9 +135,31 @@ _DEFAULT_MAX_ATTEMPTS: dict[str, int] = {
     "easy": 150,
     "medium": 150,
     "hard": 200,
-    "expert": 400,
-    "nightmare": 600,
+    "expert": 600,     # was 400; larger boards + chain_depth ≥ 2 lower acceptance rate
+    "nightmare": 1500, # was 600; chain_depth ≥ 4 + uniqueness is rare, needs more tries
     "custom": 150,
+}
+
+# Stricter thresholds used by pregenerate.py (offline batch, no time pressure).
+# Live API generation uses _MIN_CHAIN_DEPTHS / _DISRUPTION_BANDS (relaxed) to
+# guarantee response within timeout. Pool-drawn puzzles must meet these stricter
+# thresholds so they deliver the intended 15–30 min difficulty experience.
+_PREGEN_CONSTRAINTS: dict[str, dict[str, int]] = {
+    "expert": {
+        "min_chain_depth": 3,   # vs live: 2; requires a genuine 2-step sequential chain
+        "min_disruption": 38,   # vs live: 32; forces significant board rearrangement
+    },
+    "nightmare": {
+        "min_chain_depth": 4,   # vs live: 3; the original target from the plan
+        "min_disruption": 45,   # vs live: 38; achievable ~2% of candidates; batch is fine
+    },
+}
+
+# Max attempts for pre-generation. Strict constraints have low acceptance rates,
+# so pre-generation needs far more attempts than live generation.
+_PREGEN_MAX_ATTEMPTS: dict[str, int] = {
+    "expert": 5000,
+    "nightmare": 10000,
 }
 
 
@@ -148,6 +182,7 @@ def generate_puzzle(
     difficulty: Difficulty = "medium",
     seed: int | None = None,
     max_attempts: int | None = None,
+    pregen: bool = False,
     sets_to_remove: int = 3,
     # Custom mode knobs — ignored for all non-custom difficulties:
     min_board_sets: int = 8,
@@ -161,8 +196,13 @@ def generate_puzzle(
         difficulty:      "easy", "medium", "hard", "expert", "nightmare", or "custom".
         seed:            Optional RNG seed for reproducible puzzles.
         max_attempts:    How many boards to try before giving up. Defaults to a
-                         per-difficulty value from _DEFAULT_MAX_ATTEMPTS (higher for
-                         Expert/Nightmare which have stricter acceptance filters).
+                         per-difficulty value from _DEFAULT_MAX_ATTEMPTS (live) or
+                         _PREGEN_MAX_ATTEMPTS (pregen). Override by passing explicitly.
+        pregen:          If True, apply stricter _PREGEN_CONSTRAINTS (higher chain_depth
+                         and disruption floors) for offline batch pre-generation. Uses
+                         _PREGEN_MAX_ATTEMPTS as the default attempt budget. This produces
+                         harder puzzles suitable for the pool; live generation keeps the
+                         relaxed defaults to guarantee response within API timeout.
                          Pass 0 to raise PuzzleGenerationError immediately (useful
                          for testing the error path).
         sets_to_remove:  Number of complete sets to sacrifice (custom only; range 1–8).
@@ -185,14 +225,21 @@ def generate_puzzle(
             f"Use 'easy', 'medium', 'hard', 'expert', 'nightmare', or 'custom'."
         )
 
-    n_attempts = max_attempts if max_attempts is not None else _DEFAULT_MAX_ATTEMPTS.get(
-        difficulty, 150
-    )
+    if max_attempts is not None:
+        n_attempts = max_attempts
+    elif pregen:
+        n_attempts = _PREGEN_MAX_ATTEMPTS.get(
+            difficulty, _DEFAULT_MAX_ATTEMPTS.get(difficulty, 150)
+        )
+    else:
+        n_attempts = _DEFAULT_MAX_ATTEMPTS.get(difficulty, 150)
+
     rng = random.Random(seed)
     for _ in range(n_attempts):
         result = _attempt_generate(
             rng, difficulty, sets_to_remove,
             min_board_sets, max_board_sets, min_chain_depth, min_disruption,
+            pregen=pregen,
         )
         if result is not None:
             return result
@@ -215,8 +262,11 @@ def _attempt_generate(
     max_board_sets: int = 14,
     min_chain_depth: int = 0,
     min_disruption: int = 0,
+    pregen: bool = False,
 ) -> PuzzleResult | None:
-    full_pool = _make_full_pool()
+    joker_lo, joker_hi = _JOKER_COUNTS.get(difficulty, (0, 0))
+    n_jokers = rng.randint(joker_lo, joker_hi)
+    full_pool = _make_pool(n_jokers)
     all_sets = enumerate_runs(full_pool) + enumerate_groups(full_pool)
     rng.shuffle(all_sets)
 
@@ -233,6 +283,11 @@ def _attempt_generate(
 
     board_sets = _assign_copy_ids(board_sets)
 
+    # Inject jokers into the board so they appear as actual board tiles
+    # (enumerate_runs/groups don't produce joker-containing templates).
+    if n_jokers > 0:
+        board_sets = _inject_jokers_into_board(board_sets, n_jokers, rng)
+
     input_board, rack = _extract_rack(board_sets, difficulty, rng, sets_to_remove)
     if len(rack) < 2:
         return None
@@ -244,30 +299,41 @@ def _attempt_generate(
         return None
 
     # Compute disruption score and validate against the difficulty band.
+    # When pregen=True, use stricter _PREGEN_CONSTRAINTS floors (higher chain_depth
+    # and disruption minimums) so pool-drawn puzzles are genuinely harder.
     score = compute_disruption_score(input_board, solution.new_sets)
     if difficulty == "custom":
-        if score < min_disruption:
-            return None
+        effective_lo_d: int = min_disruption
+        effective_hi_d: int | None = None
+        effective_min_chain: int = min_chain_depth
+    elif pregen and difficulty in _PREGEN_CONSTRAINTS:
+        pc = _PREGEN_CONSTRAINTS[difficulty]
+        effective_lo_d = pc["min_disruption"]
+        effective_hi_d = None
+        effective_min_chain = pc["min_chain_depth"]
     else:
-        lo_d, hi_d = _DISRUPTION_BANDS[difficulty]
-        if score < lo_d:
-            return None
-        if hi_d is not None and score > hi_d:
-            return None
+        effective_lo_d, effective_hi_d = _DISRUPTION_BANDS[difficulty]
+        effective_min_chain = _MIN_CHAIN_DEPTHS.get(difficulty, 0)
 
-    # Filter by chain_depth minimum — free, already computed by solve() (Phase 3).
-    if difficulty == "custom":
-        if solution.chain_depth < min_chain_depth:
-            return None
-    elif solution.chain_depth < _MIN_CHAIN_DEPTHS.get(difficulty, 0):
+    if score < effective_lo_d:
+        return None
+    if effective_hi_d is not None and score > effective_hi_d:
+        return None
+    if solution.chain_depth < effective_min_chain:
         return None
 
     # Compute uniqueness (informational, not a gate).
-    # Custom always computes uniqueness so the stats badge can display it.
-    # Expert/Nightmare likewise. Called once per returned puzzle — not per candidate.
+    # Expert/Nightmare/Custom compute it so the stats badge can display it.
+    # Large boards with many equivalent rearrangements typically yield non-unique
+    # solutions, so gating on uniqueness would make Nightmare generation infeasible.
+    # Called once per candidate that passes all other filters.
     is_unique = True
     if _COMPUTES_UNIQUE.get(difficulty, False):
         is_unique = check_uniqueness(state, solution)
+
+    # Count jokers that actually appear on the board (jokers in sacrificed sets
+    # may end up in the rack or get dropped during sampling).
+    actual_joker_count = sum(1 for ts in input_board for t in ts.tiles if t.is_joker)
 
     return PuzzleResult(
         board_sets=input_board,
@@ -276,6 +342,7 @@ def _attempt_generate(
         disruption_score=score,
         chain_depth=solution.chain_depth,
         is_unique=is_unique,
+        joker_count=actual_joker_count,
     )
 
 
@@ -283,6 +350,61 @@ def _make_full_pool() -> BoardState:
     """104 non-joker tiles (4 colors × 13 numbers × 2 copies), no jokers."""
     rack = [Tile(color, n, copy_id) for color in Color for n in range(1, 14) for copy_id in (0, 1)]
     return BoardState(board_sets=[], rack=rack)
+
+
+def _make_pool(n_jokers: int = 0) -> BoardState:
+    """104 non-joker tiles plus n_jokers joker tiles."""
+    if not (0 <= n_jokers <= 2):
+        raise ValueError(f"n_jokers must be 0, 1, or 2; got {n_jokers}")
+    rack: list[Tile] = [
+        Tile(color, n, copy_id)
+        for color in Color
+        for n in range(1, 14)
+        for copy_id in (0, 1)
+    ]
+    for j in range(n_jokers):
+        rack.append(Tile.joker(copy_id=j))
+    return BoardState(board_sets=[], rack=rack)
+
+
+def _inject_jokers_into_board(
+    board_sets: list[TileSet],
+    n_jokers: int,
+    rng: random.Random,
+) -> list[TileSet]:
+    """Replace 1–2 random non-joker tiles in board sets with joker tiles.
+
+    The replaced tiles are removed from the board entirely (as if they were
+    never placed there). The joker takes the replaced tile's position in the
+    set, which remains valid because jokers can substitute for any tile.
+
+    Only replaces tiles in sets with ≥ 4 tiles so that set-type ambiguity is
+    preserved: a 3-tile set with a joker replaced would be trivially identifiable,
+    reducing the cognitive challenge.
+    """
+    if n_jokers == 0 or not board_sets:
+        return board_sets
+
+    result = [TileSet(type=ts.type, tiles=list(ts.tiles)) for ts in board_sets]
+
+    # Collect (set_index, tile_index) positions eligible for joker replacement.
+    candidates: list[tuple[int, int]] = []
+    for si, ts in enumerate(result):
+        if len(ts.tiles) >= 4:
+            for ti in range(len(ts.tiles)):
+                if not ts.tiles[ti].is_joker:
+                    candidates.append((si, ti))
+
+    if not candidates:
+        return result
+
+    n_replace = min(n_jokers, len(candidates))
+    chosen = rng.sample(candidates, n_replace)
+
+    for idx, (si, ti) in enumerate(chosen):
+        result[si].tiles[ti] = Tile.joker(copy_id=idx)
+
+    return result
 
 
 def _pick_compatible_sets(all_sets: list[TileSet], n: int) -> list[TileSet]:
