@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from collections import Counter
-from typing import Literal
+from typing import Literal, cast
 
 import sentry_sdk
 import structlog
@@ -202,7 +202,7 @@ def _build_set_changes(
             SetChange(
                 action=d.action,
                 result_set=SetChangeResultSet(
-                    type=d.set_type,
+                    type=cast(Literal["run", "group"], d.set_type),
                     tiles=tiles_with_origin,
                 ),
                 source_set_indices=list(d.source_set_indices) if d.source_set_indices is not None else None,
