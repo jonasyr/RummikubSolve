@@ -8,6 +8,7 @@ Each test builds a known game state and verifies:
 
 from __future__ import annotations
 
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -490,6 +491,7 @@ _tile_st = st.builds(
 )
 
 
+@pytest.mark.slow
 @given(rack_tiles=st.lists(_tile_st, min_size=0, max_size=7))
 @settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
 def test_property_tile_conservation(rack_tiles: list[Tile]) -> None:
@@ -503,6 +505,7 @@ def test_property_tile_conservation(rack_tiles: list[Tile]) -> None:
     assert len(sol.placed_tiles) + len(sol.remaining_rack) == len(rack_tiles)
 
 
+@pytest.mark.slow
 @given(rack_tiles=st.lists(_tile_st, min_size=1, max_size=9))
 @settings(max_examples=60, suppress_health_check=[HealthCheck.too_slow])
 def test_property_output_sets_are_valid(rack_tiles: list[Tile]) -> None:
@@ -517,6 +520,7 @@ def test_property_output_sets_are_valid(rack_tiles: list[Tile]) -> None:
         assert is_valid_set(ts, RulesConfig()), f"Invalid set in solution: {ts}"
 
 
+@pytest.mark.slow
 @given(rack_tiles=st.lists(_tile_st, min_size=3, max_size=6))
 @settings(max_examples=40, suppress_health_check=[HealthCheck.too_slow])
 def test_property_first_turn_threshold_respected(rack_tiles: list[Tile]) -> None:

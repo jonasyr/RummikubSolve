@@ -31,6 +31,9 @@ packages = ["solver", "api"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow — puzzle generation, uniqueness checks, hypothesis (skip with -m 'not slow')",
+]
 
 [tool.ruff]
 line-length = 100

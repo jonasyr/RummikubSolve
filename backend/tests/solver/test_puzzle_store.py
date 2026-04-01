@@ -10,6 +10,8 @@ import pytest
 from solver.generator.puzzle_generator import PuzzleResult, generate_puzzle
 from solver.generator.puzzle_store import PuzzleStore
 
+pytestmark = pytest.mark.slow
+
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
