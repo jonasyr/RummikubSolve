@@ -121,7 +121,8 @@
     "boardRearrangeOnly": "Board rearrangement — no rack tiles this step",
     "rackProgress": "Rack progress",
     "showUnchanged": "Show all {n} sets",
-    "hideUnchanged": "Hide unchanged"
+    "hideUnchanged": "Hide unchanged",
+    "source": "was: {desc}"
   },
   "puzzle": {
     "title": "Practice Puzzle",
