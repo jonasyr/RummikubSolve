@@ -10,6 +10,7 @@ interface TileProps {
   highlighted?: boolean;
   onRemove?: () => void;
   size?: "xs" | "sm" | "md";
+  label?: string;
 }
 
 // Static map so Tailwind JIT can detect all class names at build time.
@@ -27,6 +28,7 @@ export default function Tile({
   highlighted = false,
   onRemove,
   size = "md",
+  label,
 }: TileProps) {
   const t = useTranslations("tile");
 
@@ -55,6 +57,13 @@ export default function Tile({
   return (
     <div className="relative inline-block">
       <div className={classes}>{isJoker ? "★" : (number ?? "?")}</div>
+      {label && (
+        <div className="text-center mt-0.5">
+          <span className="text-[8px] font-medium leading-none px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            {label}
+          </span>
+        </div>
+      )}
       {onRemove && (
         <button
           onClick={onRemove}

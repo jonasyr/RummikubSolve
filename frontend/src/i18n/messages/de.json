@@ -122,7 +122,11 @@
     "rackProgress": "Hand-Fortschritt",
     "showUnchanged": "Alle {n} Sätze zeigen",
     "hideUnchanged": "Unveränderte ausblenden",
-    "source": "war: {desc}"
+    "source": "war: {desc}",
+    "showProvenance": "Herkunft zeigen",
+    "hideProvenance": "Herkunft ausblenden",
+    "originHand": "HAND",
+    "originSet": "SATZ {n}"
   },
   "puzzle": {
     "title": "Übungsrätsel",

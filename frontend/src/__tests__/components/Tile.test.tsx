@@ -72,4 +72,15 @@ describe("Tile", () => {
     const tileDiv = container.querySelector(".ring-2");
     expect(tileDiv).not.toBeInTheDocument();
   });
+
+  it("renders label chip when label prop is given", () => {
+    render(<Tile color="red" number={5} label="HAND" />);
+    expect(screen.getByText("HAND")).toBeInTheDocument();
+  });
+
+  it("does not render label chip when label prop is absent", () => {
+    render(<Tile color="red" number={5} />);
+    expect(screen.queryByText("HAND")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^SET/)).not.toBeInTheDocument();
+  });
 });

@@ -58,10 +58,17 @@ function sortedTiles(sc: SetChange): TileWithOrigin[] {
 interface CardProps {
   sc: SetChange;
   t: TFunc;
+  showProvenance: boolean;
 }
 
-function SetChangeCard({ sc, t }: CardProps) {
+function SetChangeCard({ sc, t, showProvenance }: CardProps) {
   const tiles = sortedTiles(sc);
+
+  const getLabel = (tile: TileWithOrigin): string | undefined => {
+    if (!showProvenance) return undefined;
+    if (tile.origin === "hand") return t("originHand");
+    return t("originSet", { n: tile.origin + 1 } as Parameters<TFunc>[1]);
+  };
 
   return (
     <div
@@ -90,6 +97,7 @@ function SetChangeCard({ sc, t }: CardProps) {
             isJoker={tile.joker}
             highlighted={tile.origin === "hand"}
             size="sm"
+            label={getLabel(tile)}
           />
         ))}
       </div>
@@ -111,10 +119,12 @@ function SetChangeCard({ sc, t }: CardProps) {
 export default function SolutionView({ solution }: Props) {
   const t = useTranslations("solution");
   const [showUnchanged, setShowUnchanged] = useState(false);
+  const [showProvenance, setShowProvenance] = useState(false);
 
-  // Collapse unchanged sets whenever a new solution arrives.
+  // Reset display toggles whenever a new solution arrives.
   useEffect(() => {
     setShowUnchanged(false);
+    setShowProvenance(false);
   }, [solution]);
 
   // ── No-solution state ──────────────────────────────────────────────────
@@ -172,6 +182,16 @@ export default function SolutionView({ solution }: Props) {
         )}
       </div>
 
+      {/* ── Provenance toggle ───────────────────────────────────────────── */}
+      {setChanges.length > 0 && (
+        <button
+          onClick={() => setShowProvenance((v) => !v)}
+          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          {showProvenance ? t("hideProvenance") : t("showProvenance")}
+        </button>
+      )}
+
       {/* ── Fallback: set_changes absent but tiles were placed ───────────── */}
       {setChanges.length === 0 && solution.tiles_placed > 0 && (
         <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-500 dark:text-gray-400">
@@ -182,7 +202,7 @@ export default function SolutionView({ solution }: Props) {
       {/* ── Set-change cards (sorted: new → extended → rearranged) ───────── */}
       <div className="space-y-2">
         {visible.map((sc, i) => (
-          <SetChangeCard key={i} sc={sc} t={t} />
+          <SetChangeCard key={i} sc={sc} t={t} showProvenance={showProvenance} />
         ))}
       </div>
 
