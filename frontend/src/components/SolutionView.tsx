@@ -43,6 +43,11 @@ type TFunc = ReturnType<typeof useTranslations<"solution">>;
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Stable key for cross-card selection: jokers share one key, colored tiles key on color+number. */
+function tileKey(tile: TileWithOrigin): string {
+  return tile.joker ? "joker" : `${tile.color}:${tile.number}`;
+}
+
 /** Sort tiles by number for runs; preserve order for groups. */
 function sortedTiles(sc: SetChange): TileWithOrigin[] {
   if (sc.result_set.type !== "run") return sc.result_set.tiles;
@@ -59,10 +64,17 @@ interface CardProps {
   sc: SetChange;
   t: TFunc;
   showProvenance: boolean;
+  selectedTileKey: string | null;
+  onTileSelect: (key: string | null) => void;
 }
 
-function SetChangeCard({ sc, t, showProvenance }: CardProps) {
+function SetChangeCard({ sc, t, showProvenance, selectedTileKey, onTileSelect }: CardProps) {
   const tiles = sortedTiles(sc);
+
+  const handleTileClick = (tile: TileWithOrigin) => {
+    const key = tileKey(tile);
+    onTileSelect(selectedTileKey === key ? null : key);
+  };
 
   const getLabel = (tile: TileWithOrigin): string | undefined => {
     if (!showProvenance) return undefined;
@@ -98,6 +110,8 @@ function SetChangeCard({ sc, t, showProvenance }: CardProps) {
             highlighted={tile.origin === "hand"}
             size="sm"
             label={getLabel(tile)}
+            selected={tileKey(tile) === selectedTileKey}
+            onClick={() => handleTileClick(tile)}
           />
         ))}
       </div>
@@ -120,11 +134,13 @@ export default function SolutionView({ solution }: Props) {
   const t = useTranslations("solution");
   const [showUnchanged, setShowUnchanged] = useState(false);
   const [showProvenance, setShowProvenance] = useState(false);
+  const [selectedTileKey, setSelectedTileKey] = useState<string | null>(null);
 
-  // Reset display toggles whenever a new solution arrives.
+  // Reset all display state whenever a new solution arrives.
   useEffect(() => {
     setShowUnchanged(false);
     setShowProvenance(false);
+    setSelectedTileKey(null);
   }, [solution]);
 
   // ── No-solution state ──────────────────────────────────────────────────
@@ -202,7 +218,14 @@ export default function SolutionView({ solution }: Props) {
       {/* ── Set-change cards (sorted: new → extended → rearranged) ───────── */}
       <div className="space-y-2">
         {visible.map((sc, i) => (
-          <SetChangeCard key={i} sc={sc} t={t} showProvenance={showProvenance} />
+          <SetChangeCard
+            key={i}
+            sc={sc}
+            t={t}
+            showProvenance={showProvenance}
+            selectedTileKey={selectedTileKey}
+            onTileSelect={setSelectedTileKey}
+          />
         ))}
       </div>
 
