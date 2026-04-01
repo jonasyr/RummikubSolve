@@ -121,7 +121,12 @@
     "boardRearrangeOnly": "Board rearrangement — no rack tiles this step",
     "rackProgress": "Rack progress",
     "showUnchanged": "Show all {n} sets",
-    "hideUnchanged": "Hide unchanged"
+    "hideUnchanged": "Hide unchanged",
+    "source": "was: {desc}",
+    "showProvenance": "Show origins",
+    "hideProvenance": "Hide origins",
+    "originHand": "HAND",
+    "originSet": "SET {n}"
   },
   "puzzle": {
     "title": "Practice Puzzle",

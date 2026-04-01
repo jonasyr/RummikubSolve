@@ -17,6 +17,6 @@ test("places a valid run from an empty board", async ({ page }) => {
   });
   await expect(page.getByText("Optimal")).toBeVisible();
 
-  // At least one move instruction should appear (the "create" step).
-  await expect(page.getByText("Move instructions")).toBeVisible();
+  // A "NEW" set-change card should appear (all tiles from rack → action = new).
+  await expect(page.getByText("NEW")).toBeVisible();
 });

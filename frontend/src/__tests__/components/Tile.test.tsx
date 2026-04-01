@@ -72,4 +72,43 @@ describe("Tile", () => {
     const tileDiv = container.querySelector(".ring-2");
     expect(tileDiv).not.toBeInTheDocument();
   });
+
+  it("selected tile shows blue ring", () => {
+    const { container } = render(<Tile color="red" number={5} selected />);
+    expect(container.querySelector(".ring-blue-400")).toBeInTheDocument();
+  });
+
+  it("selected ring overrides highlighted ring", () => {
+    const { container } = render(<Tile color="red" number={5} selected highlighted />);
+    expect(container.querySelector(".ring-blue-400")).toBeInTheDocument();
+    expect(container.querySelector(".ring-yellow-300")).not.toBeInTheDocument();
+  });
+
+  it("calls onClick when tile is clicked", async () => {
+    const onClick = vi.fn();
+    const { container } = render(<Tile color="red" number={5} onClick={onClick} />);
+    await userEvent.click(container.firstChild as HTMLElement);
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("applies cursor-pointer class when onClick is provided", () => {
+    const { container } = render(<Tile color="red" number={5} onClick={() => {}} />);
+    expect(container.firstChild).toHaveClass("cursor-pointer");
+  });
+
+  it("does not apply cursor-pointer when onClick is absent", () => {
+    const { container } = render(<Tile color="red" number={5} />);
+    expect(container.firstChild).not.toHaveClass("cursor-pointer");
+  });
+
+  it("renders label chip when label prop is given", () => {
+    render(<Tile color="red" number={5} label="HAND" />);
+    expect(screen.getByText("HAND")).toBeInTheDocument();
+  });
+
+  it("does not render label chip when label prop is absent", () => {
+    render(<Tile color="red" number={5} />);
+    expect(screen.queryByText("HAND")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^SET/)).not.toBeInTheDocument();
+  });
 });

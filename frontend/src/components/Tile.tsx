@@ -10,6 +10,9 @@ interface TileProps {
   highlighted?: boolean;
   onRemove?: () => void;
   size?: "xs" | "sm" | "md";
+  label?: string;
+  selected?: boolean;
+  onClick?: () => void;
 }
 
 // Static map so Tailwind JIT can detect all class names at build time.
@@ -27,6 +30,9 @@ export default function Tile({
   highlighted = false,
   onRemove,
   size = "md",
+  label,
+  selected = false,
+  onClick,
 }: TileProps) {
   const t = useTranslations("tile");
 
@@ -43,18 +49,35 @@ export default function Tile({
       ? BG[color]
       : "bg-gray-300 text-gray-600";
 
+  // selected (blue) takes visual precedence over highlighted (yellow)
+  const ringCls = selected
+    ? "ring-2 ring-blue-400 ring-offset-1"
+    : highlighted
+      ? "ring-2 ring-yellow-300 ring-offset-1"
+      : "";
+
   const classes = [
     sizeClass,
     bgClass,
     "rounded font-bold flex items-center justify-center border border-white/20 select-none",
-    highlighted ? "ring-2 ring-yellow-300 ring-offset-1" : "",
+    ringCls,
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <div className="relative inline-block">
+    <div
+      className={`relative inline-block${onClick ? " cursor-pointer" : ""}`}
+      onClick={onClick}
+    >
       <div className={classes}>{isJoker ? "★" : (number ?? "?")}</div>
+      {label && (
+        <div className="text-center mt-0.5">
+          <span className="text-[8px] font-medium leading-none px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            {label}
+          </span>
+        </div>
+      )}
       {onRemove && (
         <button
           onClick={onRemove}

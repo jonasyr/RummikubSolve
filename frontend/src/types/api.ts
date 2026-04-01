@@ -98,6 +98,41 @@ export interface PuzzleResponse {
 
 export type SolveStatus = "solved" | "no_solution";
 
+// ---------------------------------------------------------------------------
+// Phase UI-1: per-set change manifest (ui_rework.jsx migration step 1)
+// Keep in sync with backend/api/models.py TileWithOrigin / SetChange.
+// ---------------------------------------------------------------------------
+
+export interface TileWithOrigin extends TileOutput {
+  /**
+   * Provenance of this tile:
+   * "hand"  → placed from the player's rack this turn.
+   * number  → 0-based index of the old board set this tile was taken from.
+   */
+  origin: "hand" | number;
+}
+
+export interface SetChangeResultSet {
+  type: "run" | "group";
+  tiles: TileWithOrigin[];
+}
+
+export interface SetChange {
+  /**
+   * What happened to this set:
+   * "new"        → every tile came from the rack.
+   * "extended"   → rack tiles added to one existing board set.
+   * "rearranged" → tiles moved from one or more old sets, possibly with rack tiles.
+   * "unchanged"  → set identical to an existing board set.
+   */
+  action: "new" | "extended" | "rearranged" | "unchanged";
+  result_set: SetChangeResultSet;
+  /** null for "new" and "unchanged" actions */
+  source_set_indices: number[] | null;
+  /** Human-readable source description, mainly for "rearranged" sets */
+  source_description: string | null;
+}
+
 export interface SolveResponse {
   status: SolveStatus;
   tiles_placed: number;
@@ -108,4 +143,6 @@ export interface SolveResponse {
   new_board: BoardSetOutput[];
   remaining_rack: TileOutput[];
   moves: MoveOutput[];
+  /** Phase UI-1: per-set change manifest with tile provenance. */
+  set_changes?: SetChange[];
 }

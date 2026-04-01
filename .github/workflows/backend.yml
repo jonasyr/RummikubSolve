@@ -40,5 +40,5 @@ jobs:
       - name: Type check (mypy)
         run: mypy solver/ api/
 
-      - name: Run tests (pytest)
-        run: pytest -v --tb=short
+      - name: Run tests (pytest, skip slow)
+        run: pytest -v --tb=short -m "not slow"

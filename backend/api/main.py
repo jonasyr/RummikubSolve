@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from collections import Counter
-from typing import Literal
+from typing import Literal, cast
 
 import sentry_sdk
 import structlog
@@ -116,6 +116,9 @@ from solver.generator.puzzle_generator import (  # noqa: E402
     generate_puzzle,
 )
 from solver.generator.puzzle_store import PuzzleStore  # noqa: E402
+from solver.generator.set_changes import (  # noqa: E402
+    build_set_changes as _build_set_changes_data,
+)
 from solver.models.board_state import BoardState  # noqa: E402
 from solver.models.tile import Color, Tile  # noqa: E402
 from solver.models.tileset import SetType, TileSet  # noqa: E402
@@ -126,10 +129,13 @@ from .models import (  # noqa: E402  (import after app init is intentional)
     MoveOutput,
     PuzzleRequest,
     PuzzleResponse,
+    SetChange,
+    SetChangeResultSet,
     SolveRequest,
     SolveResponse,
     TileInput,
     TileOutput,
+    TileWithOrigin,
 )
 
 
@@ -165,6 +171,47 @@ def _tile_to_output(t: Tile) -> TileOutput:
         joker=t.is_joker,
         copy_id=t.copy_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase UI-1: adapter — convert solver SetChangeData → Pydantic SetChange
+# ---------------------------------------------------------------------------
+
+
+def _build_set_changes(
+    old_board_sets: list[TileSet],
+    new_sets: list[TileSet],
+    placed_tiles: list[Tile],
+    old_set_sigs: list[Counter[tuple[Color | None, int | None, bool]]],
+) -> list[SetChange]:
+    """Thin adapter: call the pure solver logic and convert to Pydantic models."""
+    data_list = _build_set_changes_data(old_board_sets, new_sets, placed_tiles, old_set_sigs)
+    result: list[SetChange] = []
+    for d in data_list:
+        tiles_with_origin = [
+            TileWithOrigin(
+                color=t.color.value if t.color is not None else None,
+                number=t.number,
+                joker=t.is_joker,
+                copy_id=t.copy_id,
+                origin=t.origin,
+            )
+            for t in d.tiles
+        ]
+        result.append(
+            SetChange(
+                action=d.action,
+                result_set=SetChangeResultSet(
+                    type=cast(Literal["run", "group"], d.set_type),
+                    tiles=tiles_with_origin,
+                ),
+                source_set_indices=(
+                    list(d.source_set_indices) if d.source_set_indices is not None else None
+                ),
+                source_description=d.source_description,
+            )
+        )
+    return result
 
 
 @app.post("/api/solve", response_model=SolveResponse, tags=["solver"])
@@ -257,6 +304,14 @@ def solve_endpoint(request: SolveRequest) -> SolveResponse:
         "solved" if solution.tiles_placed > 0 else "no_solution"
     )
 
+    # Phase UI-1: build the per-set change manifest with tile provenance.
+    set_changes = _build_set_changes(
+        old_board_sets=state.board_sets,
+        new_sets=solution.new_sets,
+        placed_tiles=solution.placed_tiles,
+        old_set_sigs=old_set_sigs,
+    )
+
     return SolveResponse(
         status=_status,
         tiles_placed=solution.tiles_placed,
@@ -270,6 +325,7 @@ def solve_endpoint(request: SolveRequest) -> SolveResponse:
             MoveOutput(action=m.action, description=m.description, set_index=m.set_index)
             for m in solution.moves
         ],
+        set_changes=set_changes,
     )
 
 

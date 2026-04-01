@@ -121,7 +121,12 @@
     "boardRearrangeOnly": "Brett-Umstellung — keine Hand-Steine in diesem Schritt",
     "rackProgress": "Hand-Fortschritt",
     "showUnchanged": "Alle {n} Sätze zeigen",
-    "hideUnchanged": "Unveränderte ausblenden"
+    "hideUnchanged": "Unveränderte ausblenden",
+    "source": "war: {desc}",
+    "showProvenance": "Herkunft zeigen",
+    "hideProvenance": "Herkunft ausblenden",
+    "originHand": "HAND",
+    "originSet": "SATZ {n}"
   },
   "puzzle": {
     "title": "Übungsrätsel",

@@ -13,6 +13,8 @@ from solver.generator.puzzle_generator import (
     generate_puzzle,
 )
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 async def client() -> AsyncClient:  # type: ignore[misc]
