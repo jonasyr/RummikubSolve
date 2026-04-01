@@ -10,6 +10,7 @@ Added in Phase UI-1 (ui_rework.jsx migration step 1).
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from solver.models.tile import Color, Tile
@@ -33,9 +34,6 @@ TileOrigin = Literal["hand"] | int  # "hand" or 0-based old board-set index
 # We deliberately use plain dataclasses rather than Pydantic here to keep
 # the solver package independent of the API layer.  api.main converts these
 # into Pydantic models before serialisation.
-
-
-from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)

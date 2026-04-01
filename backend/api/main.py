@@ -205,7 +205,9 @@ def _build_set_changes(
                     type=cast(Literal["run", "group"], d.set_type),
                     tiles=tiles_with_origin,
                 ),
-                source_set_indices=list(d.source_set_indices) if d.source_set_indices is not None else None,
+                source_set_indices=(
+                    list(d.source_set_indices) if d.source_set_indices is not None else None
+                ),
                 source_description=d.source_description,
             )
         )

@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from collections import Counter
 
-import pytest
-
 from solver.generator.set_changes import build_old_tile_origin_map, build_set_changes
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
@@ -33,7 +31,7 @@ def run_ts(color: Color, *numbers: int, copy_ids: list[int] | None = None) -> Ti
     ids = copy_ids or [0] * len(numbers)
     return TileSet(
         type=SetType.RUN,
-        tiles=[Tile(color, n, cid) for n, cid in zip(numbers, ids)],
+        tiles=[Tile(color, n, cid) for n, cid in zip(numbers, ids, strict=True)],
     )
 
 
