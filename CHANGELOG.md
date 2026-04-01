@@ -5,6 +5,102 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.33.0] — 2026-04-01 — UI rework: set-centric solution view (ui_rework phases 1–4)
+
+### Backend — Per-set change manifest (`backend/api/`, `backend/solver/generator/set_changes.py`)
+
+- **Phase UI-1:** `POST /api/solve` now returns a `set_changes[]` array alongside the
+  existing `moves[]` and `new_board[]` fields (full backward compatibility preserved).
+- **`solver/generator/set_changes.py`** (new pure module, no FastAPI deps):
+  - `TileWithOriginData` dataclass: every tile carries an `origin` field —
+    `"hand"` (placed from rack this turn) or an `int` (0-based index of the old board
+    set the tile was taken from).
+  - `SetChangeData` dataclass: per-result-set record with `action`, `tiles`,
+    `set_type`, `source_set_indices`, `source_description`.
+  - `build_old_tile_origin_map()`: builds a `(color, number, copy_id, is_joker) →
+    [set_index, …]` map from the pre-solve board state for O(1) tile lookup.
+  - `build_set_changes()`: classifies each result set as one of four actions:
+    - `"new"` — every tile came from the rack.
+    - `"extended"` — rack tiles added to exactly one existing board set.
+    - `"rearranged"` — tiles sourced from multiple board sets or mixed with rack tiles
+      in a non-extend pattern.
+    - `"unchanged"` — set is identical (same tiles, same signature) to a pre-solve set.
+- **`api/models.py`**: new Pydantic models `TileWithOrigin`, `SetChangeResultSet`,
+  `SetChange`; `SolveResponse` gains `set_changes: list[SetChange] = []`.
+- **`api/main.py`**: thin adapter converts `SetChangeData` → `SetChange` Pydantic model;
+  `cast(Literal["run","group"], d.set_type)` satisfies mypy strict mode.
+
+### Backend — Tests
+- **`tests/solver/test_set_changes.py`** (new, 30 unit tests): imports pure
+  `solver.generator.set_changes` directly — no web stack required.
+  Covers `build_old_tile_origin_map`, all four action classifications, copy-id
+  disambiguation, joker handling, and `source_set_indices` tuple correctness.
+- **`tests/api/test_solve_endpoint.py`** (+12 integration tests): `set_changes` field
+  presence, count, action values, origin correctness, backward compatibility with
+  `moves[]`, empty array on `no_solution`.
+
+### Backend — CI performance
+- Added `@pytest.mark.slow` to 163 tests that require multiple solver calls each
+  (puzzle generation, uniqueness verification, hypothesis property tests, puzzle
+  endpoint integration).
+- `pytest -m "not slow"` now runs 250 tests in ~2–3 minutes (was 413 tests, 24+ min).
+- Run the full suite locally with `pytest` or `pytest -m slow` for the slow subset.
+
+### Frontend — Types (`frontend/src/types/api.ts`)
+- New interfaces mirroring backend models: `TileWithOrigin`, `SetChangeResultSet`,
+  `SetChange`; `SolveResponse.set_changes?: SetChange[]` (optional for back-compat).
+
+### Frontend — Phase UI-2: SetChangeCards (`frontend/src/components/SolutionView.tsx`)
+- **Complete rewrite** of `SolutionView`. The fake step-navigator UI (Prev/Next buttons,
+  progress dots, before/after panels, `moves[]`-driven instructions) is removed.
+- One `SetChangeCard` per `SetChange` entry, sorted: new → extended → rearranged →
+  unchanged.
+- Cards colour-coded by action (green / blue / amber / gray).
+- Tiles from the player's rack highlighted with a yellow ring (`origin === "hand"`).
+- Run tiles sorted by number; group tile order preserved.
+- Unchanged sets collapsed behind a toggle button by default.
+- `originalBoard` prop removed from `SolutionView`; `page.tsx` updated accordingly.
+- i18n: added `solution.source` key (`"was: {desc}"` / `"war: {desc}"`).
+
+### Frontend — Phase UI-3: Provenance toggle
+- **"Show origins" / "Hide origins"** toggle button above the cards.
+- When on, each tile shows a tiny chip below it: `HAND` (rack) or `SET N` (1-based
+  index of the old board set the tile came from).
+- Labels hidden by default; reset automatically on each new solution.
+- `Tile.tsx`: new `label?: string` prop renders an 8 px neutral chip below the tile face.
+  All 13 existing Tile tests unaffected (prop is optional).
+- i18n keys added: `showProvenance`, `hideProvenance`, `originHand`, `originSet` (EN + DE).
+
+### Frontend — Phase UI-4: Tile tap-to-highlight
+- **Click any tile** to cross-highlight every tile in the solution sharing the same
+  `(color, number)` key (or all jokers) with a blue ring. Click the same tile again to
+  deselect.
+- Blue "selected" ring takes visual precedence over the yellow "from hand" ring.
+- `selectedTileKey` state in `SolutionView`; reset via `useEffect` on new solution.
+- `Tile.tsx`: new `selected?: boolean` + `onClick?: () => void` props;
+  `cursor-pointer` class applied when clickable.
+- Helper `tileKey(tile)` encodes jokers as `"joker"`, colored tiles as `"color:number"`.
+
+### Frontend — Tests
+- `SolutionView.test.tsx` (24 tests): no-solution, summary bar, card rendering, tile
+  highlighting, sort order, unchanged collapse/expand, remaining rack, fallback, run
+  tile sorting, absence of step navigator.
+- `SolutionView.provenance.test.tsx` (10 tests): toggle visibility, button show/hide,
+  HAND label, SET N 1-based conversion, state reset on new solution.
+- `SolutionView.taphighlight.test.tsx` (7 tests): single-tile select/deselect, switch,
+  cross-card highlight, joker grouping, state reset.
+- `Tile.test.tsx` (+7 tests): label chip presence/absence, selected ring (blue),
+  selected overrides highlighted, `onClick` called, `cursor-pointer` class.
+- Total: **104 unit tests pass** (was 56 before this release).
+
+### Frontend — Playwright E2E
+- `solve_basic_run.spec.ts`: updated assertion from removed `"Move instructions"` heading
+  to new `"NEW"` badge.
+- `extend_board_set.spec.ts`: updated assertion from removed move-description text to
+  new `"+"` badge.
+
+---
+
 ## [0.32.0] — 2026-03-31 — Nightmare difficulty overhaul + joker infrastructure (phases 8 + 8b)
 
 ### Backend — Chain depth metric (`backend/solver/engine/objective.py`)

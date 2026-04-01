@@ -7,11 +7,15 @@ check_uniqueness(state, solution, rules) → bool
 
 from __future__ import annotations
 
+import pytest
+
 from solver.config.rules import RulesConfig
 from solver.engine.solver import check_uniqueness, solve
 from solver.models.board_state import BoardState
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
+
+pytestmark = pytest.mark.slow
 
 R, B, BL, Y = Color.RED, Color.BLUE, Color.BLACK, Color.YELLOW
 

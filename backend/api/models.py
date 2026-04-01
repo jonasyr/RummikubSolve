@@ -85,6 +85,51 @@ class MoveOutput(BaseModel):
     set_index: int | None = None
 
 
+class TileWithOrigin(TileOutput):
+    """TileOutput enriched with provenance: where did this tile come from?
+
+    Added in Phase UI-1 (ui_rework.jsx migration step 1).
+    """
+
+    origin: Literal["hand"] | int
+    # "hand"  → the tile was placed from the player's rack this turn
+    # int     → 0-based index of the old board set this tile was taken from
+
+
+class SetChangeResultSet(BaseModel):
+    """The final state of a set after the solver has run."""
+
+    type: Literal["run", "group"]
+    tiles: list[TileWithOrigin]
+
+
+class SetChange(BaseModel):
+    """Describes what happened to one set as a result of the solver move.
+
+    Replaces the fake ``moves[]`` step-sequence with a truthful per-set
+    change manifest.  Each ``SetChange`` is always in a valid final state;
+    the ``action`` field classifies the change type and the ``origin`` on
+    every tile records its provenance.
+
+    Added in Phase UI-1 (ui_rework.jsx migration step 1).
+    """
+
+    action: Literal["new", "extended", "rearranged", "unchanged"]
+    # "new"        → every tile came from the rack (entirely new set)
+    # "extended"   → rack tiles added to one existing board set
+    # "rearranged" → tiles moved from one or more old sets, possibly with rack tiles
+    # "unchanged"  → set identical to an existing board set, nothing added
+
+    result_set: SetChangeResultSet
+
+    source_set_indices: list[int] | None
+    # null for "new" and "unchanged"; 0-based old-board-set indices for others
+
+    source_description: str | None
+    # Human-readable description of the source set(s), mainly for "rearranged".
+    # e.g. "Set 1: Red 3, Red 4, Red 5, Red 6"
+
+
 class SolveResponse(BaseModel):
     # "error" is intentionally absent: errors are raised as HTTPException (422/503)
     # and never returned in the response body.
@@ -97,6 +142,9 @@ class SolveResponse(BaseModel):
     new_board: list[BoardSetOutput]
     remaining_rack: list[TileOutput]
     moves: list[MoveOutput]
+    # Phase UI-1: per-set change manifest with tile provenance.
+    # Kept alongside moves[] / new_board[] for backward compatibility.
+    set_changes: list[SetChange] = []
 
 
 # ---------------------------------------------------------------------------

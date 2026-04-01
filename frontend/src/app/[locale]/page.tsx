@@ -133,7 +133,7 @@ export default function Home() {
       {solution && (
         <div ref={solutionRef}>
           <TranslatedErrorBoundary>
-            <SolutionView solution={solution} originalBoard={boardSets} />
+            <SolutionView solution={solution} />
           </TranslatedErrorBoundary>
         </div>
       )}

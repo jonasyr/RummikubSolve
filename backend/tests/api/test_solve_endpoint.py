@@ -355,3 +355,311 @@ async def test_empty_rack_returns_no_solution(client: AsyncClient) -> None:
     assert data["tiles_remaining"] == 0
     assert data["new_board"] == []
     assert data["remaining_rack"] == []
+
+
+# ---------------------------------------------------------------------------
+# Phase UI-1: set_changes field — integration tests
+# ---------------------------------------------------------------------------
+
+
+async def test_set_changes_present_in_response(client: AsyncClient) -> None:
+    """set_changes key is always present in the response body."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "rack": [
+                {"color": "red", "number": 10},
+                {"color": "red", "number": 11},
+                {"color": "red", "number": 12},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "set_changes" in data
+    assert isinstance(data["set_changes"], list)
+
+
+async def test_set_changes_count_matches_new_board_count(client: AsyncClient) -> None:
+    """len(set_changes) == len(new_board) for every solve."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "board": [
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "red", "number": 4},
+                        {"color": "red", "number": 5},
+                        {"color": "red", "number": 6},
+                    ],
+                }
+            ],
+            "rack": [{"color": "red", "number": 7}],
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["set_changes"]) == len(data["new_board"])
+
+
+async def test_set_changes_new_action_all_hand_origins(client: AsyncClient) -> None:
+    """When all tiles come from the rack, action='new' and all origins are 'hand'."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "rack": [
+                {"color": "blue", "number": 7},
+                {"color": "blue", "number": 8},
+                {"color": "blue", "number": 9},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "solved"
+    new_changes = [c for c in data["set_changes"] if c["action"] == "new"]
+    assert len(new_changes) >= 1
+    for sc in new_changes:
+        assert all(tile["origin"] == "hand" for tile in sc["result_set"]["tiles"])
+        assert sc["source_set_indices"] is None
+        assert sc["source_description"] is None
+
+
+async def test_set_changes_extended_has_mixed_origins(client: AsyncClient) -> None:
+    """An extend scenario produces action='extended' with board and hand origins."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "board": [
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "red", "number": 4},
+                        {"color": "red", "number": 5},
+                        {"color": "red", "number": 6},
+                    ],
+                }
+            ],
+            "rack": [{"color": "red", "number": 7}],
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    extended = [c for c in data["set_changes"] if c["action"] == "extended"]
+    assert len(extended) >= 1
+    sc = extended[0]
+    origins = [tile["origin"] for tile in sc["result_set"]["tiles"]]
+    assert "hand" in origins
+    board_origins = [o for o in origins if o != "hand"]
+    assert len(board_origins) > 0  # some tiles from board
+    assert sc["source_set_indices"] == [0]
+
+
+async def test_set_changes_extended_source_index_correct_for_second_set(
+    client: AsyncClient,
+) -> None:
+    """source_set_indices points to the correct old-set index when it's not set 0."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "board": [
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "blue", "number": 1},
+                        {"color": "blue", "number": 2},
+                        {"color": "blue", "number": 3},
+                    ],
+                },
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "red", "number": 4},
+                        {"color": "red", "number": 5},
+                        {"color": "red", "number": 6},
+                    ],
+                },
+            ],
+            "rack": [{"color": "red", "number": 7}],
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    extended = [c for c in data["set_changes"] if c["action"] == "extended"]
+    assert len(extended) >= 1
+    # The extended set must reference board set index 1 (the Red run).
+    assert extended[0]["source_set_indices"] == [1]
+
+
+async def test_set_changes_unchanged_action_present(client: AsyncClient) -> None:
+    """An untouched board set appears as action='unchanged' in set_changes."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "board": [
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "red", "number": 4},
+                        {"color": "red", "number": 5},
+                        {"color": "red", "number": 6},
+                    ],
+                }
+            ],
+            "rack": [
+                {"color": "blue", "number": 7},
+                {"color": "blue", "number": 8},
+                {"color": "blue", "number": 9},
+            ],
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    unchanged = [c for c in data["set_changes"] if c["action"] == "unchanged"]
+    assert len(unchanged) >= 1
+    sc = unchanged[0]
+    assert sc["source_set_indices"] is None
+    assert sc["source_description"] is None
+    # All tile origins are int (board set indices), never "hand"
+    assert all(tile["origin"] != "hand" for tile in sc["result_set"]["tiles"])
+
+
+async def test_set_changes_unchanged_tile_origins_are_ints(client: AsyncClient) -> None:
+    """Origins in an unchanged set are board-set indices (integers), not 'hand'."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "board": [
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "red", "number": 4},
+                        {"color": "red", "number": 5},
+                        {"color": "red", "number": 6},
+                    ],
+                }
+            ],
+            "rack": [
+                {"color": "blue", "number": 7},
+                {"color": "blue", "number": 8},
+                {"color": "blue", "number": 9},
+            ],
+        },
+    )
+    data = r.json()
+    unchanged = [c for c in data["set_changes"] if c["action"] == "unchanged"]
+    for sc in unchanged:
+        for tile in sc["result_set"]["tiles"]:
+            assert isinstance(tile["origin"], int)
+
+
+async def test_moves_still_present_for_backward_compatibility(client: AsyncClient) -> None:
+    """moves[] is preserved alongside set_changes for backward compatibility."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "rack": [
+                {"color": "red", "number": 10},
+                {"color": "red", "number": 11},
+                {"color": "red", "number": 12},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "moves" in data
+    assert isinstance(data["moves"], list)
+    assert len(data["moves"]) > 0
+
+
+async def test_no_solution_has_empty_set_changes(client: AsyncClient) -> None:
+    """A no_solution response has an empty set_changes list."""
+    r = await client.post(
+        "/api/solve",
+        json={"rack": [{"color": "red", "number": 1}, {"color": "red", "number": 2}]},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "no_solution"
+    assert data["set_changes"] == []
+
+
+async def test_set_changes_result_set_type_is_run_or_group(client: AsyncClient) -> None:
+    """result_set.type is always 'run' or 'group' for every set_change."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "board": [
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "red", "number": 4},
+                        {"color": "red", "number": 5},
+                        {"color": "red", "number": 6},
+                    ],
+                }
+            ],
+            "rack": [
+                {"color": "red", "number": 7},
+                {"color": "blue", "number": 1},
+                {"color": "blue", "number": 2},
+                {"color": "blue", "number": 3},
+            ],
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    for sc in data["set_changes"]:
+        assert sc["result_set"]["type"] in ("run", "group")
+
+
+async def test_set_changes_tiles_have_origin_field(client: AsyncClient) -> None:
+    """Every tile in every set_change has an 'origin' field that is 'hand' or int."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "board": [
+                {
+                    "type": "run",
+                    "tiles": [
+                        {"color": "red", "number": 4},
+                        {"color": "red", "number": 5},
+                        {"color": "red", "number": 6},
+                    ],
+                }
+            ],
+            "rack": [{"color": "red", "number": 7}],
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    for sc in data["set_changes"]:
+        for tile in sc["result_set"]["tiles"]:
+            assert "origin" in tile
+            assert tile["origin"] == "hand" or isinstance(tile["origin"], int)
+
+
+async def test_set_changes_tiles_include_standard_tile_fields(
+    client: AsyncClient,
+) -> None:
+    """Every tile in set_changes also carries the standard TileOutput fields."""
+    r = await client.post(
+        "/api/solve",
+        json={
+            "rack": [
+                {"color": "red", "number": 10},
+                {"color": "red", "number": 11},
+                {"color": "red", "number": 12},
+            ]
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    for sc in data["set_changes"]:
+        for tile in sc["result_set"]["tiles"]:
+            assert "color" in tile
+            assert "number" in tile
+            assert "joker" in tile
+            assert "copy_id" in tile
+            assert "origin" in tile
