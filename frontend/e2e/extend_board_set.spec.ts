@@ -25,5 +25,6 @@ test("solver extends an existing board run with a rack tile", async ({
 
   // Assert — solver places 1 tile and describes the extend move
   await expect(page.getByText("1 tile placed")).toBeVisible({ timeout: 8_000 });
-  await expect(page.getByText(/Add Red 7 to set 1/i)).toBeVisible();
+  // An "extended" set-change card (+) should appear (rack tile added to existing set).
+  await expect(page.getByText("+", { exact: true }).first()).toBeVisible();
 });

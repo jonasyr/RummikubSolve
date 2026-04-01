@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SolutionView from "../../components/SolutionView";
@@ -25,9 +25,6 @@ function makeTile(
   return { color, number, joker: false, copy_id: 0, origin };
 }
 
-function makeJoker(origin: "hand" | number): TileWithOrigin {
-  return { color: null, number: null, joker: true, copy_id: 0, origin };
-}
 
 function makeSetChange(
   action: SetChange["action"],
