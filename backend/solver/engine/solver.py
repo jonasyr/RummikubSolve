@@ -37,6 +37,7 @@ def solve(
     state: BoardState,
     rules: RulesConfig | None = None,
     secondary_objective: Literal["tile_value", "disruption"] = "tile_value",
+    timeout_seconds: float | None = None,
 ) -> Solution:
     """Solve a Rummikub board state optimally.
 
@@ -78,7 +79,10 @@ def solve(
     model = build_ilp_model(solve_state, candidate_sets, rules, secondary_objective)
 
     # 3. Set solver options and run.
-    model.highs.setOptionValue("time_limit", _SOLVE_TIMEOUT_SECONDS)
+    model.highs.setOptionValue(
+        "time_limit",
+        timeout_seconds if timeout_seconds is not None else _SOLVE_TIMEOUT_SECONDS,
+    )
     model.highs.run()
 
     # 4. Extract the solution.
@@ -171,6 +175,7 @@ def check_uniqueness(
     state: BoardState,
     solution: Solution,
     rules: RulesConfig | None = None,
+    timeout_seconds: float | None = None,
 ) -> bool:
     """Return True if *solution* is the ONLY arrangement that places solution.tiles_placed tiles.
 
@@ -213,7 +218,10 @@ def check_uniqueness(
         rules,
         excluded_solutions=[solution.active_set_indices],
     )
-    model2.highs.setOptionValue("time_limit", _UNIQUENESS_TIMEOUT_SECONDS)
+    model2.highs.setOptionValue(
+        "time_limit",
+        timeout_seconds if timeout_seconds is not None else _UNIQUENESS_TIMEOUT_SECONDS,
+    )
     model2.highs.run()
 
     try:

@@ -162,6 +162,13 @@ _PREGEN_MAX_ATTEMPTS: dict[str, int] = {
     "nightmare": 10000,
 }
 
+# Solver timeouts used during pre-generation.
+# Shorter than the live defaults (30 s solve / 10 s uniqueness) so degenerate
+# boards that the ILP cannot solve in a reasonable window are rejected quickly.
+# 8 s is conservative enough that genuine nightmare boards still pass.
+_PREGEN_SOLVE_TIMEOUT: float = 8.0
+_PREGEN_UNIQUENESS_TIMEOUT: float = 5.0
+
 
 class PuzzleGenerationError(Exception):
     """Raised when a puzzle cannot be generated within the attempt limit."""
@@ -189,6 +196,7 @@ def generate_puzzle(
     max_board_sets: int = 14,
     min_chain_depth: int = 0,
     min_disruption: int = 0,
+    solve_timeout: float | None = None,
 ) -> PuzzleResult:
     """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
 
@@ -234,12 +242,20 @@ def generate_puzzle(
     else:
         n_attempts = _DEFAULT_MAX_ATTEMPTS.get(difficulty, 150)
 
+    # When pregen=True and no explicit solve_timeout given, use the shorter
+    # pregen timeout so degenerate boards are skipped quickly instead of
+    # burning the full 30-second live window on a hopeless ILP run.
+    effective_solve_timeout: float | None = solve_timeout
+    if pregen and effective_solve_timeout is None:
+        effective_solve_timeout = _PREGEN_SOLVE_TIMEOUT
+
     rng = random.Random(seed)
     for _ in range(n_attempts):
         result = _attempt_generate(
             rng, difficulty, sets_to_remove,
             min_board_sets, max_board_sets, min_chain_depth, min_disruption,
             pregen=pregen,
+            solve_timeout=effective_solve_timeout,
         )
         if result is not None:
             return result
@@ -263,6 +279,7 @@ def _attempt_generate(
     min_chain_depth: int = 0,
     min_disruption: int = 0,
     pregen: bool = False,
+    solve_timeout: float | None = None,
 ) -> PuzzleResult | None:
     joker_lo, joker_hi = _JOKER_COUNTS.get(difficulty, (0, 0))
     n_jokers = rng.randint(joker_lo, joker_hi)
@@ -294,7 +311,7 @@ def _attempt_generate(
 
     # Verify: solver must place ALL rack tiles.
     state = BoardState(board_sets=input_board, rack=rack)
-    solution = solve(state, rules=None)
+    solution = solve(state, rules=None, timeout_seconds=solve_timeout)
     if solution.tiles_placed < len(rack):
         return None
 
@@ -329,7 +346,8 @@ def _attempt_generate(
     # Called once per candidate that passes all other filters.
     is_unique = True
     if _COMPUTES_UNIQUE.get(difficulty, False):
-        is_unique = check_uniqueness(state, solution)
+        uniqueness_timeout = _PREGEN_UNIQUENESS_TIMEOUT if pregen else solve_timeout
+        is_unique = check_uniqueness(state, solution, timeout_seconds=uniqueness_timeout)
 
     # Count jokers that actually appear on the board (jokers in sacrificed sets
     # may end up in the rack or get dropped during sampling).
