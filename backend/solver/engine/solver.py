@@ -89,6 +89,7 @@ def solve(
     # For first-turn solves, infeasibility means the rack can't meet the meld
     # threshold — this is a valid "no play" outcome, not an error.
     active_indices: list[int] = []
+    solve_status = "success"
     if rules.is_first_turn:
         try:
             (
@@ -119,6 +120,7 @@ def solve(
             placed_tiles = []
             remaining_rack = list(state.rack)
             is_optimal = False
+            solve_status = "infeasible_fallback"
         # Detect timeout-without-solution: every board tile must appear in new_sets.
         # If any are missing, HiGHS timed out before finding a feasible integer
         # solution. Fall back to no-move (board unchanged, all rack tiles in hand).
@@ -140,6 +142,7 @@ def solve(
             placed_tiles = []
             remaining_rack = list(state.rack)
             is_optimal = False
+            solve_status = "timeout_fallback"
 
     solve_time_ms = (time.monotonic() - t_start) * 1000.0
 
@@ -157,9 +160,17 @@ def solve(
         moves=moves,
         is_optimal=is_optimal,
         solve_time_ms=solve_time_ms,
+        solve_status=solve_status,
         chain_depth=chain_depth,
         active_set_indices=active_indices,
     )
+
+    if (
+        solution.solve_status == "success"
+        and not rules.is_first_turn
+        and solution.tiles_placed < len(state.rack)
+    ):
+        solution.solve_status = "partial_placement"
 
     # 6. Post-solve verification (defense-in-depth per Blueprint §10.4).
     if not verify_solution(state, solution, rules):

@@ -35,7 +35,7 @@ from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
 from ..models.tileset import TileSet
 from ..validator.rule_checker import is_valid_set
-from .set_enumerator import enumerate_groups, enumerate_runs
+from .set_enumerator import enumerate_groups, enumerate_runs, enumerate_valid_sets
 
 Difficulty = Literal["easy", "medium", "hard", "expert", "nightmare", "custom"]
 
@@ -48,8 +48,8 @@ _RACK_SIZES: dict[str, tuple[int, int]] = {
     "easy": (2, 3),
     "medium": (3, 4),
     "hard": (4, 5),
-    "expert": (6, 10),    # was (4, 6); larger rack forces deeper mental search
-    "nightmare": (10, 14), # was (5, 7); 10–14 tiles overwhelms working memory
+    "expert": (6, 10),
+    "nightmare": (10, 14),
 }
 
 # Number of complete board sets sacrificed (removed entirely) per difficulty.
@@ -57,63 +57,48 @@ _SACRIFICE_COUNTS: dict[str, int] = {
     "easy": 1,
     "medium": 2,
     "hard": 3,
-    "expert": 5,     # was 4; one extra sacrifice drives more rearrangement
-    "nightmare": 7,  # was 6; 7 sacrificed sets from 22–28 = massive rearrangement pressure
+    "expert": 5,
+    "nightmare": 7,
 }
 
 # Disruption band: (min_inclusive, max_inclusive).
-# None as max means no upper bound.
-# Bands are non-overlapping to guarantee Nightmare > Expert > Hard > Medium > Easy.
-# These are calibrated for the content-based compute_disruption_score metric.
-# Adjust after running empirical samples if generation rate is too low.
 _DISRUPTION_BANDS: dict[str, tuple[int, int | None]] = {
     "easy": (2, 10),
     "medium": (9, 18),
     "hard": (16, 28),
-    "expert": (32, None),    # was (29, None); higher floor with larger boards
-    "nightmare": (38, None), # larger boards give ILP more routing options → same floor as before
+    "expert": (32, None),
+    "nightmare": (38, None),
 }
 
 # Board size range (number of sets, BEFORE sacrifice) per difficulty.
-# Larger boards give the sacrifice strategy more candidates to work with.
 _BOARD_SIZES: dict[str, tuple[int, int]] = {
     "easy": (5, 9),
     "medium": (7, 11),
     "hard": (9, 13),
-    "expert": (16, 22),    # was (13, 18); larger table = more disruption potential
-    "nightmare": (22, 28), # was (15, 20); prevents visual scan of entire board
+    "expert": (16, 22),
+    "nightmare": (22, 28),
 }
 
 # Minimum chain_depth required per difficulty (Phase 3).
-# chain_depth measures the nesting depth of board rearrangements in the solution.
-# 0 = pure placement, 1 = simple rearrangement, 2 = two-step convergence, 3+ = deep chains.
 _MIN_CHAIN_DEPTHS: dict[str, int] = {
     "easy": 0,
     "medium": 0,
     "hard": 1,
-    "expert": 2,    # was 1; Expert requires a real two-step sequential dependency
-    "nightmare": 3, # was 2; requires genuine 2-step sequential chain under the new DAG metric
+    "expert": 2,
+    "nightmare": 3,
 }
 
 # Whether to compute uniqueness for this difficulty (Phase 3).
-# check_uniqueness() re-solves the ILP and is called once per returned puzzle
-# (not per candidate), so the overhead is small (~1-10 s per Expert/Nightmare puzzle).
-# The result is stored in PuzzleResult.is_unique for informational use.
-# NOTE: the complete-sacrifice strategy typically yields non-unique solutions
-# (many equivalent rearrangements exist on large boards); uniqueness gating is
-# reserved for a future puzzle generation strategy.
 _COMPUTES_UNIQUE: dict[str, bool] = {
     "easy": False,
     "medium": False,
     "hard": False,
     "expert": True,
     "nightmare": True,
-    "custom": True,   # Phase 7a: always compute for custom (shown in stats badge)
+    "custom": True,
 }
 
 # Number of joker tiles to add to the tile pool, per difficulty.
-# Jokers on the board force the player to deduce what each joker represents
-# before reasoning about rearrangements — a significant complexity multiplier.
 _JOKER_COUNTS: dict[str, tuple[int, int]] = {
     "easy": (0, 0),
     "medium": (0, 0),
@@ -123,51 +108,83 @@ _JOKER_COUNTS: dict[str, tuple[int, int]] = {
     "custom": (0, 0),
 }
 
-# Max tile-sample attempts inside _extract_by_sacrifice before giving up
-# on a board and letting the outer loop retry with a fresh board.
+# Max tile-sample attempts inside _extract_by_sacrifice before giving up.
 _MAX_SAMPLE_ATTEMPTS = 20
 
-# Default max outer-loop attempts per difficulty (Phase 3).
-# Expert and Nightmare add chain_depth + uniqueness filters that lower the
-# acceptance rate significantly, so they need more attempts to reliably
-# produce a valid puzzle. Callers can override by passing max_attempts explicitly.
+# Default max outer-loop attempts per difficulty.
 _DEFAULT_MAX_ATTEMPTS: dict[str, int] = {
     "easy": 150,
     "medium": 150,
     "hard": 200,
-    "expert": 600,     # was 400; larger boards + chain_depth ≥ 2 lower acceptance rate
-    "nightmare": 1500, # was 600; chain_depth ≥ 4 + uniqueness is rare, needs more tries
+    "expert": 600,
+    "nightmare": 1500,
     "custom": 150,
 }
 
-# Stricter thresholds used by pregenerate.py (offline batch, no time pressure).
-# Live API generation uses _MIN_CHAIN_DEPTHS / _DISRUPTION_BANDS (relaxed) to
-# guarantee response within timeout. Pool-drawn puzzles must meet these stricter
-# thresholds so they deliver the intended 15–30 min difficulty experience.
+# Stricter thresholds used by pregenerate.py.
 _PREGEN_CONSTRAINTS: dict[str, dict[str, int]] = {
     "expert": {
-        "min_chain_depth": 3,   # vs live: 2; requires a genuine 2-step sequential chain
-        "min_disruption": 38,   # vs live: 32; forces significant board rearrangement
+        "min_chain_depth": 3,
+        "min_disruption": 38,
     },
     "nightmare": {
-        "min_chain_depth": 4,   # vs live: 3; the original target from the plan
-        "min_disruption": 45,   # vs live: 38; achievable ~2% of candidates; batch is fine
+        "min_chain_depth": 4,
+        "min_disruption": 45,
     },
 }
 
-# Max attempts for pre-generation. Strict constraints have low acceptance rates,
-# so pre-generation needs far more attempts than live generation.
 _PREGEN_MAX_ATTEMPTS: dict[str, int] = {
     "expert": 5000,
     "nightmare": 10000,
 }
 
-# Solver timeouts used during pre-generation.
-# Shorter than the live defaults (30 s solve / 10 s uniqueness) so degenerate
-# boards that the ILP cannot solve in a reasonable window are rejected quickly.
-# 8 s is conservative enough that genuine nightmare boards still pass.
 _PREGEN_SOLVE_TIMEOUT: float = 8.0
 _PREGEN_UNIQUENESS_TIMEOUT: float = 5.0
+
+
+@dataclass(frozen=True)
+class _PregenProfile:
+    board_size_range: tuple[int, int]
+    sacrifice_count: int
+    rack_size_range: tuple[int, int]
+    joker_count_range: tuple[int, int]
+    max_rack_source_sets: int
+    max_candidate_sets: int
+    max_ilp_columns: int
+    max_ilp_rows: int
+    min_total_rack_tile_coverage: int
+    min_multi_option_rack_tiles: int
+    rack_sample_budget: int
+
+
+_PREGEN_PROFILES: dict[str, _PregenProfile] = {
+    "expert": _PregenProfile(
+        board_size_range=(12, 14),
+        sacrifice_count=3,
+        rack_size_range=(5, 6),
+        joker_count_range=(0, 0),
+        max_rack_source_sets=2,
+        max_candidate_sets=500,
+        max_ilp_columns=3500,
+        max_ilp_rows=2200,
+        min_total_rack_tile_coverage=12,
+        min_multi_option_rack_tiles=3,
+        rack_sample_budget=100,
+    ),
+    "nightmare": _PregenProfile(
+        board_size_range=(13, 16),
+        sacrifice_count=4,
+        rack_size_range=(7, 8),
+        joker_count_range=(0, 0),
+        max_rack_source_sets=3,
+        max_candidate_sets=700,
+        max_ilp_columns=5000,
+        max_ilp_rows=3200,
+        min_total_rack_tile_coverage=18,
+        min_multi_option_rack_tiles=4,
+        rack_sample_budget=120,
+    ),
+}
 
 
 class PuzzleGenerationError(Exception):
@@ -180,9 +197,35 @@ class PuzzleResult:
     rack: list[Tile]
     difficulty: Difficulty
     disruption_score: int
-    chain_depth: int = 0    # Phase 3: longest rearrangement chain in the solution
-    is_unique: bool = True  # Phase 3: True if uniqueness not required OR verified
-    joker_count: int = 0    # Phase 4: number of jokers in the tile pool (0 = joker-free)
+    chain_depth: int = 0
+    is_unique: bool = True
+    joker_count: int = 0
+
+
+@dataclass(frozen=True)
+class _ComplexityEstimate:
+    candidate_set_count: int
+    estimated_ilp_columns: int
+    estimated_ilp_rows: int
+    board_tile_count: int
+    rack_tile_count: int
+    rack_tiles_placeable: int
+    min_rack_tile_coverage: int
+    total_rack_tile_coverage: int
+    multi_option_rack_tiles: int
+
+
+@dataclass(frozen=True)
+class _RackCandidate:
+    remaining_board: list[TileSet]
+    rack: list[Tile]
+    complexity: _ComplexityEstimate
+
+
+@dataclass(frozen=True)
+class _AttemptOutcome:
+    result: PuzzleResult | None
+    rejection_reason: str | None = None
 
 
 def generate_puzzle(
@@ -191,42 +234,13 @@ def generate_puzzle(
     max_attempts: int | None = None,
     pregen: bool = False,
     sets_to_remove: int = 3,
-    # Custom mode knobs — ignored for all non-custom difficulties:
     min_board_sets: int = 8,
     max_board_sets: int = 14,
     min_chain_depth: int = 0,
     min_disruption: int = 0,
     solve_timeout: float | None = None,
 ) -> PuzzleResult:
-    """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
-
-    Args:
-        difficulty:      "easy", "medium", "hard", "expert", "nightmare", or "custom".
-        seed:            Optional RNG seed for reproducible puzzles.
-        max_attempts:    How many boards to try before giving up. Defaults to a
-                         per-difficulty value from _DEFAULT_MAX_ATTEMPTS (live) or
-                         _PREGEN_MAX_ATTEMPTS (pregen). Override by passing explicitly.
-        pregen:          If True, apply stricter _PREGEN_CONSTRAINTS (higher chain_depth
-                         and disruption floors) for offline batch pre-generation. Uses
-                         _PREGEN_MAX_ATTEMPTS as the default attempt budget. This produces
-                         harder puzzles suitable for the pool; live generation keeps the
-                         relaxed defaults to guarantee response within API timeout.
-                         Pass 0 to raise PuzzleGenerationError immediately (useful
-                         for testing the error path).
-        sets_to_remove:  Number of complete sets to sacrifice (custom only; range 1–8).
-        min_board_sets:  Minimum board sets before sacrifice (custom only; range 5–25).
-        max_board_sets:  Maximum board sets before sacrifice (custom only; range 5–25).
-        min_chain_depth: Minimum chain depth required in the solution (custom only; 0–4).
-        min_disruption:  Minimum disruption score required (custom only; 0–60).
-
-    Returns:
-        A PuzzleResult whose rack the solver can fully place, with a
-        disruption_score in the target band for the given difficulty.
-
-    Raises:
-        ValueError:             If difficulty is not a known value.
-        PuzzleGenerationError:  If no suitable puzzle is found.
-    """
+    """Generate a random, pre-verified Rummikub puzzle at the given difficulty."""
     if difficulty not in ("easy", "medium", "hard", "expert", "nightmare", "custom"):
         raise ValueError(
             f"Unknown difficulty {difficulty!r}. "
@@ -242,32 +256,29 @@ def generate_puzzle(
     else:
         n_attempts = _DEFAULT_MAX_ATTEMPTS.get(difficulty, 150)
 
-    # When pregen=True and no explicit solve_timeout given, use the shorter
-    # pregen timeout so degenerate boards are skipped quickly instead of
-    # burning the full 30-second live window on a hopeless ILP run.
     effective_solve_timeout: float | None = solve_timeout
     if pregen and effective_solve_timeout is None:
         effective_solve_timeout = _PREGEN_SOLVE_TIMEOUT
 
     rng = random.Random(seed)
     for _ in range(n_attempts):
-        result = _attempt_generate(
-            rng, difficulty, sets_to_remove,
-            min_board_sets, max_board_sets, min_chain_depth, min_disruption,
+        outcome = _attempt_generate_with_reason(
+            rng,
+            difficulty,
+            sets_to_remove,
+            min_board_sets,
+            max_board_sets,
+            min_chain_depth,
+            min_disruption,
             pregen=pregen,
             solve_timeout=effective_solve_timeout,
         )
-        if result is not None:
-            return result
+        if outcome.result is not None:
+            return outcome.result
 
     raise PuzzleGenerationError(
         f"Could not generate a {difficulty!r} puzzle after {n_attempts} attempts."
     )
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 
 def _attempt_generate(
@@ -281,43 +292,106 @@ def _attempt_generate(
     pregen: bool = False,
     solve_timeout: float | None = None,
 ) -> PuzzleResult | None:
-    joker_lo, joker_hi = _JOKER_COUNTS.get(difficulty, (0, 0))
+    return _attempt_generate_with_reason(
+        rng,
+        difficulty,
+        sets_to_remove,
+        min_board_sets,
+        max_board_sets,
+        min_chain_depth,
+        min_disruption,
+        pregen,
+        solve_timeout,
+    ).result
+
+
+def _attempt_generate_with_reason(
+    rng: random.Random,
+    difficulty: Difficulty,
+    sets_to_remove: int = 3,
+    min_board_sets: int = 8,
+    max_board_sets: int = 14,
+    min_chain_depth: int = 0,
+    min_disruption: int = 0,
+    pregen: bool = False,
+    solve_timeout: float | None = None,
+) -> _AttemptOutcome:
+    pregen_profile = _PREGEN_PROFILES.get(difficulty) if pregen else None
+
+    joker_lo, joker_hi = (
+        pregen_profile.joker_count_range
+        if pregen_profile is not None
+        else _JOKER_COUNTS.get(difficulty, (0, 0))
+    )
     n_jokers = rng.randint(joker_lo, joker_hi)
     full_pool = _make_pool(n_jokers)
     all_sets = enumerate_runs(full_pool) + enumerate_groups(full_pool)
     rng.shuffle(all_sets)
 
-    # Scale the board target per difficulty so there are enough sets to sacrifice.
     if difficulty == "custom":
         lo, hi = min_board_sets, max_board_sets
+    elif pregen_profile is not None:
+        lo, hi = pregen_profile.board_size_range
     else:
         lo, hi = _BOARD_SIZES[difficulty]
     n_target = rng.randint(lo, hi)
 
     board_sets = _pick_compatible_sets(all_sets, n_target)
     if len(board_sets) < 3:
-        return None
+        return _AttemptOutcome(result=None, rejection_reason="board_fail")
 
     board_sets = _assign_copy_ids(board_sets)
 
-    # Inject jokers into the board so they appear as actual board tiles
-    # (enumerate_runs/groups don't produce joker-containing templates).
     if n_jokers > 0:
         board_sets = _inject_jokers_into_board(board_sets, n_jokers, rng)
 
-    input_board, rack = _extract_rack(board_sets, difficulty, rng, sets_to_remove)
-    if len(rack) < 2:
-        return None
+    rack_candidate = _extract_rack(
+        board_sets,
+        difficulty,
+        rng,
+        sets_to_remove,
+        pregen_profile=pregen_profile,
+    )
+    if rack_candidate is None:
+        return _AttemptOutcome(result=None, rejection_reason="rack_fail")
 
-    # Verify: solver must place ALL rack tiles.
+    input_board = rack_candidate.remaining_board
+    rack = rack_candidate.rack
+    if (
+        pregen_profile is not None
+        and (
+            rack_candidate.complexity.rack_tiles_placeable < len(rack)
+            or rack_candidate.complexity.total_rack_tile_coverage
+            < pregen_profile.min_total_rack_tile_coverage
+            or rack_candidate.complexity.multi_option_rack_tiles
+            < pregen_profile.min_multi_option_rack_tiles
+            or rack_candidate.complexity.min_rack_tile_coverage < 1
+            or
+            rack_candidate.complexity.candidate_set_count > pregen_profile.max_candidate_sets
+            or rack_candidate.complexity.estimated_ilp_columns > pregen_profile.max_ilp_columns
+            or rack_candidate.complexity.estimated_ilp_rows > pregen_profile.max_ilp_rows
+        )
+    ):
+        if rack_candidate.complexity.rack_tiles_placeable < len(rack):
+            return _AttemptOutcome(result=None, rejection_reason="tile_coverage_fail")
+        if (
+            rack_candidate.complexity.total_rack_tile_coverage
+            < pregen_profile.min_total_rack_tile_coverage
+            or rack_candidate.complexity.multi_option_rack_tiles
+            < pregen_profile.min_multi_option_rack_tiles
+            or rack_candidate.complexity.min_rack_tile_coverage < 1
+        ):
+            return _AttemptOutcome(result=None, rejection_reason="rack_proxy_fail")
+        return _AttemptOutcome(result=None, rejection_reason="candidate_cap_reject")
+
     state = BoardState(board_sets=input_board, rack=rack)
     solution = solve(state, rules=None, timeout_seconds=solve_timeout)
     if solution.tiles_placed < len(rack):
-        return None
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason=f"solve_{solution.solve_status}",
+        )
 
-    # Compute disruption score and validate against the difficulty band.
-    # When pregen=True, use stricter _PREGEN_CONSTRAINTS floors (higher chain_depth
-    # and disruption minimums) so pool-drawn puzzles are genuinely harder.
     score = compute_disruption_score(input_board, solution.new_sets)
     if difficulty == "custom":
         effective_lo_d: int = min_disruption
@@ -333,40 +407,40 @@ def _attempt_generate(
         effective_min_chain = _MIN_CHAIN_DEPTHS.get(difficulty, 0)
 
     if score < effective_lo_d:
-        return None
+        return _AttemptOutcome(result=None, rejection_reason="disruption_fail")
     if effective_hi_d is not None and score > effective_hi_d:
-        return None
+        return _AttemptOutcome(result=None, rejection_reason="disruption_fail")
     if solution.chain_depth < effective_min_chain:
-        return None
+        return _AttemptOutcome(result=None, rejection_reason="chain_fail")
 
-    # Compute uniqueness (informational, not a gate).
-    # Expert/Nightmare/Custom compute it so the stats badge can display it.
-    # Large boards with many equivalent rearrangements typically yield non-unique
-    # solutions, so gating on uniqueness would make Nightmare generation infeasible.
-    # Called once per candidate that passes all other filters.
     is_unique = True
     if _COMPUTES_UNIQUE.get(difficulty, False):
         uniqueness_timeout = _PREGEN_UNIQUENESS_TIMEOUT if pregen else solve_timeout
         is_unique = check_uniqueness(state, solution, timeout_seconds=uniqueness_timeout)
 
-    # Count jokers that actually appear on the board (jokers in sacrificed sets
-    # may end up in the rack or get dropped during sampling).
     actual_joker_count = sum(1 for ts in input_board for t in ts.tiles if t.is_joker)
 
-    return PuzzleResult(
-        board_sets=input_board,
-        rack=rack,
-        difficulty=difficulty,
-        disruption_score=score,
-        chain_depth=solution.chain_depth,
-        is_unique=is_unique,
-        joker_count=actual_joker_count,
+    return _AttemptOutcome(
+        result=PuzzleResult(
+            board_sets=input_board,
+            rack=rack,
+            difficulty=difficulty,
+            disruption_score=score,
+            chain_depth=solution.chain_depth,
+            is_unique=is_unique,
+            joker_count=actual_joker_count,
+        )
     )
 
 
 def _make_full_pool() -> BoardState:
     """104 non-joker tiles (4 colors × 13 numbers × 2 copies), no jokers."""
-    rack = [Tile(color, n, copy_id) for color in Color for n in range(1, 14) for copy_id in (0, 1)]
+    rack = [
+        Tile(color, n, copy_id)
+        for color in Color
+        for n in range(1, 14)
+        for copy_id in (0, 1)
+    ]
     return BoardState(board_sets=[], rack=rack)
 
 
@@ -390,22 +464,12 @@ def _inject_jokers_into_board(
     n_jokers: int,
     rng: random.Random,
 ) -> list[TileSet]:
-    """Replace 1–2 random non-joker tiles in board sets with joker tiles.
-
-    The replaced tiles are removed from the board entirely (as if they were
-    never placed there). The joker takes the replaced tile's position in the
-    set, which remains valid because jokers can substitute for any tile.
-
-    Only replaces tiles in sets with ≥ 4 tiles so that set-type ambiguity is
-    preserved: a 3-tile set with a joker replaced would be trivially identifiable,
-    reducing the cognitive challenge.
-    """
+    """Replace 1–2 random non-joker tiles in board sets with joker tiles."""
     if n_jokers == 0 or not board_sets:
         return board_sets
 
     result = [TileSet(type=ts.type, tiles=list(ts.tiles)) for ts in board_sets]
 
-    # Collect (set_index, tile_index) positions eligible for joker replacement.
     candidates: list[tuple[int, int]] = []
     for si, ts in enumerate(result):
         if len(ts.tiles) >= 4:
@@ -471,12 +535,33 @@ def _extract_rack(
     difficulty: Difficulty,
     rng: random.Random,
     sets_to_remove: int = 3,
-) -> tuple[list[TileSet], list[Tile]]:
+    pregen_profile: _PregenProfile | None = None,
+) -> _RackCandidate | None:
     if difficulty == "custom":
-        return _extract_custom(board_sets, rng, sets_to_remove)
-    n_sacrifice = _SACRIFICE_COUNTS[difficulty]
-    rack_size_range = _RACK_SIZES[difficulty]
-    return _extract_by_sacrifice(board_sets, rng, n_sacrifice, rack_size_range)
+        remaining_board, rack = _extract_custom(board_sets, rng, sets_to_remove)
+        if len(rack) < 2:
+            return None
+        return _build_rack_candidate(remaining_board, rack)
+
+    n_sacrifice = (
+        pregen_profile.sacrifice_count if pregen_profile is not None else _SACRIFICE_COUNTS[difficulty]
+    )
+    rack_size_range = (
+        pregen_profile.rack_size_range if pregen_profile is not None else _RACK_SIZES[difficulty]
+    )
+    rack_sample_budget = (
+        pregen_profile.rack_sample_budget if pregen_profile is not None else _MAX_SAMPLE_ATTEMPTS
+    )
+    return _extract_by_sacrifice(
+        board_sets,
+        rng,
+        n_sacrifice,
+        rack_size_range,
+        max_rack_source_sets=(
+            pregen_profile.max_rack_source_sets if pregen_profile is not None else None
+        ),
+        rack_sample_budget=rack_sample_budget,
+    )
 
 
 def _extract_by_sacrifice(
@@ -484,57 +569,176 @@ def _extract_by_sacrifice(
     rng: random.Random,
     num_sacrifice: int,
     rack_size_range: tuple[int, int],
-) -> tuple[list[TileSet], list[Tile]]:
-    """Sacrifice num_sacrifice complete sets; sample rack tiles from them.
-
-    Selects num_sacrifice sets to remove entirely from the board. Those sets'
-    tiles are the candidate pool; rack_size tiles are sampled from them.
-    Because the source sets no longer appear on the board, the player cannot
-    trivially re-add any rack tile — they must rearrange the remaining board.
-
-    Tries up to _MAX_SAMPLE_ATTEMPTS different tile samples per board before
-    returning failure (the outer loop will then retry with a fresh board).
-
-    Args:
-        board_sets:       Current board before extraction.
-        rng:              Seeded random instance.
-        num_sacrifice:    Number of sets to remove entirely.
-        rack_size_range:  (min, max) rack tile count.
-
-    Returns:
-        (remaining_board, rack) on success, or (board_sets, []) on failure.
-    """
+    max_rack_source_sets: int | None = None,
+    rack_sample_budget: int = _MAX_SAMPLE_ATTEMPTS,
+) -> _RackCandidate | None:
+    """Sacrifice sets, then keep the rack with the smallest search space."""
     if len(board_sets) < num_sacrifice + 2:
-        return board_sets, []
+        return None
 
-    # Pick which sets to sacrifice (try a random selection).
     sacrifice_indices = set(rng.sample(range(len(board_sets)), num_sacrifice))
     remaining = [ts for i, ts in enumerate(board_sets) if i not in sacrifice_indices]
-    sacrifice_tiles = [
-        t for i, ts in enumerate(board_sets) if i in sacrifice_indices for t in ts.tiles
-    ]
+    sacrificed_sets = [ts for i, ts in enumerate(board_sets) if i in sacrifice_indices]
+    sacrifice_tiles = [t for ts in sacrificed_sets for t in ts.tiles]
 
     rack_min, rack_max = rack_size_range
     rack_size = rng.randint(rack_min, min(rack_max, len(sacrifice_tiles)))
     if rack_size < 2:
-        return board_sets, []
+        return None
 
-    # Try multiple tile samples until we find one with no trivial extension.
-    for _ in range(_MAX_SAMPLE_ATTEMPTS):
-        rack = rng.sample(sacrifice_tiles, rack_size)
-        if not _any_trivial_extension(rack, remaining):
-            return remaining, rack
+    best_candidate: _RackCandidate | None = None
+    for _ in range(rack_sample_budget):
+        rack = _sample_rack_from_sacrificed_sets(
+            sacrificed_sets=sacrificed_sets,
+            rack_size=rack_size,
+            rng=rng,
+            max_rack_source_sets=max_rack_source_sets,
+        )
+        if _any_trivial_extension(rack, remaining):
+            continue
+        candidate = _build_rack_candidate(remaining, rack)
+        if _better_rack_candidate(candidate, best_candidate):
+            best_candidate = candidate
 
-    return board_sets, []  # no valid sample found; caller retries with new board
+    return best_candidate
+
+
+def _sample_rack_from_sacrificed_sets(
+    sacrificed_sets: list[TileSet],
+    rack_size: int,
+    rng: random.Random,
+    max_rack_source_sets: int | None,
+) -> list[Tile]:
+    if max_rack_source_sets is None or len(sacrificed_sets) <= max_rack_source_sets:
+        return rng.sample([t for ts in sacrificed_sets for t in ts.tiles], rack_size)
+
+    source_set_count = min(
+        max_rack_source_sets,
+        len(sacrificed_sets),
+        max(1, (rack_size + 2) // 3),
+    )
+    chosen_sets = rng.sample(sacrificed_sets, source_set_count)
+    chosen_tiles = [t for ts in chosen_sets for t in ts.tiles]
+    if len(chosen_tiles) < rack_size:
+        chosen_tiles = [t for ts in sacrificed_sets for t in ts.tiles]
+    return rng.sample(chosen_tiles, rack_size)
+
+
+def _build_rack_candidate(
+    remaining_board: list[TileSet],
+    rack: list[Tile],
+) -> _RackCandidate:
+    state = BoardState(board_sets=remaining_board, rack=rack)
+    candidate_sets = enumerate_valid_sets(state)
+    return _RackCandidate(
+        remaining_board=remaining_board,
+        rack=rack,
+        complexity=_estimate_complexity(state, candidate_sets),
+    )
+
+
+def _better_rack_candidate(
+    candidate: _RackCandidate,
+    current_best: _RackCandidate | None,
+) -> bool:
+    if current_best is None:
+        return True
+    if candidate.complexity.rack_tiles_placeable != current_best.complexity.rack_tiles_placeable:
+        return candidate.complexity.rack_tiles_placeable > current_best.complexity.rack_tiles_placeable
+    if candidate.complexity.multi_option_rack_tiles != current_best.complexity.multi_option_rack_tiles:
+        return candidate.complexity.multi_option_rack_tiles > current_best.complexity.multi_option_rack_tiles
+    if candidate.complexity.total_rack_tile_coverage != current_best.complexity.total_rack_tile_coverage:
+        return candidate.complexity.total_rack_tile_coverage > current_best.complexity.total_rack_tile_coverage
+    if candidate.complexity.min_rack_tile_coverage != current_best.complexity.min_rack_tile_coverage:
+        return candidate.complexity.min_rack_tile_coverage > current_best.complexity.min_rack_tile_coverage
+    if (
+        candidate.complexity.estimated_ilp_columns
+        != current_best.complexity.estimated_ilp_columns
+    ):
+        return (
+            candidate.complexity.estimated_ilp_columns
+            < current_best.complexity.estimated_ilp_columns
+        )
+    if candidate.complexity.estimated_ilp_rows != current_best.complexity.estimated_ilp_rows:
+        return candidate.complexity.estimated_ilp_rows < current_best.complexity.estimated_ilp_rows
+    if candidate.complexity.candidate_set_count != current_best.complexity.candidate_set_count:
+        return (
+            candidate.complexity.candidate_set_count
+            < current_best.complexity.candidate_set_count
+        )
+    if len(candidate.rack) != len(current_best.rack):
+        return len(candidate.rack) > len(current_best.rack)
+    candidate_key = [(t.color, t.number, t.copy_id, t.is_joker) for t in candidate.rack]
+    current_key = [(t.color, t.number, t.copy_id, t.is_joker) for t in current_best.rack]
+    return candidate_key < current_key
+
+
+def _estimate_complexity(
+    state: BoardState,
+    candidate_sets: list[TileSet],
+) -> _ComplexityEstimate:
+    all_tiles = list(state.all_tiles)
+
+    slot_to_match_count: Counter[tuple[bool, Color | None, int | None]] = Counter()
+    for tile in all_tiles:
+        if tile.is_joker:
+            slot_to_match_count[(True, None, None)] += 1
+        else:
+            slot_to_match_count[(False, tile.color, tile.number)] += 1
+
+    x_var_count = 0
+    slot_constraint_count = 0
+    rack_tile_coverages = [0] * len(state.rack)
+    for candidate_set in candidate_sets:
+        joker_slot_count = sum(1 for tile in candidate_set.tiles if tile.is_joker)
+        non_joker_slot_count = len(candidate_set.tiles) - joker_slot_count
+        slot_constraint_count += non_joker_slot_count + (1 if joker_slot_count > 0 else 0)
+        seen_keys: set[tuple[bool, Color | None, int | None]] = set()
+        for tile in candidate_set.tiles:
+            slot_key = (
+                (True, None, None)
+                if tile.is_joker
+                else (False, tile.color, tile.number)
+            )
+            if slot_key in seen_keys:
+                continue
+            x_var_count += slot_to_match_count[slot_key]
+            seen_keys.add(slot_key)
+
+        candidate_keys = {
+            (tile.is_joker, tile.color, tile.number)
+            for tile in candidate_set.tiles
+        }
+        for rack_index, rack_tile in enumerate(state.rack):
+            rack_key = (rack_tile.is_joker, rack_tile.color, rack_tile.number)
+            if rack_key in candidate_keys:
+                rack_tile_coverages[rack_index] += 1
+
+    board_tile_count = len(state.board_tiles)
+    rack_tile_count = len(state.rack)
+    candidate_set_count = len(candidate_sets)
+    estimated_ilp_columns = candidate_set_count + rack_tile_count + x_var_count
+    estimated_ilp_rows = board_tile_count + rack_tile_count + slot_constraint_count
+    rack_tiles_placeable = sum(1 for coverage in rack_tile_coverages if coverage > 0)
+    min_rack_tile_coverage = min(rack_tile_coverages, default=0)
+    total_rack_tile_coverage = sum(rack_tile_coverages)
+    multi_option_rack_tiles = sum(1 for coverage in rack_tile_coverages if coverage > 1)
+
+    return _ComplexityEstimate(
+        candidate_set_count=candidate_set_count,
+        estimated_ilp_columns=estimated_ilp_columns,
+        estimated_ilp_rows=estimated_ilp_rows,
+        board_tile_count=board_tile_count,
+        rack_tile_count=rack_tile_count,
+        rack_tiles_placeable=rack_tiles_placeable,
+        min_rack_tile_coverage=min_rack_tile_coverage,
+        total_rack_tile_coverage=total_rack_tile_coverage,
+        multi_option_rack_tiles=multi_option_rack_tiles,
+    )
 
 
 def _any_trivial_extension(rack: list[Tile], board_sets: list[TileSet]) -> bool:
-    """Return True if any rack tile can be directly appended to any board set.
-
-    Uses the same rule_checker as the solver, so the check is authoritative.
-    A puzzle is rejected if this returns True — the player would have an
-    obvious move without needing to rearrange anything.
-    """
+    """Return True if any rack tile can be directly appended to any board set."""
     for tile in rack:
         for ts in board_sets:
             if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
@@ -545,11 +749,7 @@ def _any_trivial_extension(rack: list[Tile], board_sets: list[TileSet]) -> bool:
 def _extract_custom(
     board_sets: list[TileSet], rng: random.Random, n: int
 ) -> tuple[list[TileSet], list[Tile]]:
-    """Remove n complete sets. Rack = all tiles from the removed sets.
-
-    Requires at least n + 2 sets on the board so that at least 2 remain
-    after extraction (giving the solver something to work with).
-    """
+    """Remove n complete sets. Rack = all tiles from the removed sets."""
     if len(board_sets) < n + 2:
         return board_sets, []
     indices = set(rng.sample(range(len(board_sets)), n))

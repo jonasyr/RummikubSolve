@@ -24,13 +24,20 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 import subprocess
 import sys
 import time
+from collections import Counter
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from dataclasses import dataclass
 from pathlib import Path
 
-from .puzzle_generator import PuzzleGenerationError, PuzzleResult, generate_puzzle
+from .puzzle_generator import (
+    PuzzleGenerationError,
+    PuzzleResult,
+    _attempt_generate_with_reason,
+)
 from .puzzle_store import PuzzleStore
 
 _HARD_PLUS = ["hard", "expert", "nightmare"]
@@ -41,17 +48,27 @@ _HARD_PLUS = ["hard", "expert", "nightmare"]
 # ---------------------------------------------------------------------------
 
 
-def _worker_generate_one(args: tuple[str, int]) -> PuzzleResult | None:
-    """Generate a single puzzle attempt in a worker process; return None on failure."""
+@dataclass(frozen=True)
+class _WorkerResult:
+    result: PuzzleResult | None
+    rejection_reason: str | None
+
+
+def _worker_generate_one(args: tuple[str, int]) -> _WorkerResult:
+    """Generate one pregen attempt and classify rejections for progress reporting."""
     difficulty, seed = args
     try:
-        return generate_puzzle(
+        outcome = _attempt_generate_with_reason(
+            random.Random(seed),
             difficulty=difficulty,  # type: ignore[arg-type]
-            seed=seed,
             pregen=True,
         )
+        return _WorkerResult(
+            result=outcome.result,
+            rejection_reason=outcome.rejection_reason,
+        )
     except PuzzleGenerationError:
-        return None
+        return _WorkerResult(result=None, rejection_reason="generation_error")
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +199,8 @@ def _generate_batch(
     next_seed = int(t0 * 1_000) % (2**31)
     last_sync_at = 0
 
-    in_flight: dict[Future[PuzzleResult | None], int] = {}
+    in_flight: dict[Future[_WorkerResult], int] = {}
+    rejection_counts: Counter[str] = Counter()
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
 
@@ -206,12 +224,14 @@ def _generate_batch(
             for future in done:
                 seed_used = in_flight.pop(future)
                 try:
-                    result = future.result()
+                    worker_result = future.result()
                 except Exception as exc:  # noqa: BLE001
                     print(f"\n  [worker error] seed={seed_used}: {exc}")
                     failed += 1
-                    result = None
+                    rejection_counts["worker_error"] += 1
+                    worker_result = _WorkerResult(result=None, rejection_reason="worker_error")
 
+                result = worker_result.result
                 if result is not None:
                     store.store(result, seed=seed_used)
                     generated += 1
@@ -232,12 +252,19 @@ def _generate_batch(
                         _run_sync(sync_cmd)
                 else:
                     failed += 1
+                    rejection_counts[worker_result.rejection_reason or "unknown_fail"] += 1
 
                 if generated < count:
                     _submit(1)
 
     elapsed = time.monotonic() - t0
     print(f"\n  Done: {generated} puzzles in {elapsed:.1f}s  ({failed} failed attempts)")
+    if rejection_counts:
+        counts = "  ".join(
+            f"{reason}={rejection_counts[reason]}"
+            for reason in sorted(rejection_counts)
+        )
+        print(f"  Rejections: {counts}")
 
     if sync_cmd:
         _run_sync(sync_cmd)

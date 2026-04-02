@@ -62,6 +62,7 @@ class Solution:
     moves: list[MoveInstruction] = field(default_factory=list)
     is_optimal: bool = False
     solve_time_ms: float = 0.0
+    solve_status: str = "success"
     chain_depth: int = 0  # Longest rearrangement dependency chain (Phase 1)
     active_set_indices: list[int] = field(default_factory=list)  # ILP y[s]=1 indices (Phase 2)
 
