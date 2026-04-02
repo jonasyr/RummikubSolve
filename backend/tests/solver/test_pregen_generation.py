@@ -145,6 +145,16 @@ def test_pregen_profiles_disable_jokers_for_expert_and_nightmare() -> None:
     assert puzzle_generator._PREGEN_PROFILES["nightmare"].joker_count_range == (0, 0)
 
 
+def test_nightmare_pregen_profile_uses_tighter_rack_and_source_set_caps() -> None:
+    # Arrange
+    profile = puzzle_generator._PREGEN_PROFILES["nightmare"]
+
+    # Act / Assert
+    assert profile.rack_size_range == (6, 7)
+    assert profile.sacrifice_count == 3
+    assert profile.max_rack_source_sets == 2
+
+
 def test_extract_by_sacrifice_keeps_lowest_complexity_rack(monkeypatch) -> None:
     # Arrange
     board = [
@@ -293,7 +303,16 @@ def test_generate_batch_prints_rejection_summary(monkeypatch, capsys) -> None:
         [
             _WorkerResult(result=None, rejection_reason="rack_fail"),
             _WorkerResult(result=None, rejection_reason="candidate_cap_reject"),
-            _WorkerResult(result=None, rejection_reason="solve_timeout_fallback"),
+            _WorkerResult(
+                result=None,
+                rejection_reason="solve_timeout_fallback",
+                rack_size=6,
+                tiles_placed=4,
+                solve_status="timeout_fallback",
+                solve_time_ms=123.0,
+                disruption_score=39,
+                chain_depth=2,
+            ),
             _WorkerResult(
                 result=puzzle_generator.PuzzleResult(
                     board_sets=[],
@@ -353,6 +372,9 @@ def test_generate_batch_prints_rejection_summary(monkeypatch, capsys) -> None:
         workers=1,
         sync_every=10,
         sync_cmd=None,
+        progress_every_attempts=100,
+        progress_every_seconds=30.0,
+        verbose_attempts=False,
     )
 
     output = capsys.readouterr().out
@@ -363,3 +385,5 @@ def test_generate_batch_prints_rejection_summary(monkeypatch, capsys) -> None:
     assert "rack_fail=1" in output
     assert "candidate_cap_reject=1" in output
     assert "solve_timeout_fallback=1" in output
+    assert "Solved failures:" in output
+    assert "Best near miss:" in output

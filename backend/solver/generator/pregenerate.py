@@ -52,6 +52,12 @@ _HARD_PLUS = ["hard", "expert", "nightmare"]
 class _WorkerResult:
     result: PuzzleResult | None
     rejection_reason: str | None
+    rack_size: int = 0
+    tiles_placed: int = 0
+    solve_status: str | None = None
+    solve_time_ms: float = 0.0
+    disruption_score: int | None = None
+    chain_depth: int | None = None
 
 
 def _worker_generate_one(args: tuple[str, int]) -> _WorkerResult:
@@ -66,6 +72,12 @@ def _worker_generate_one(args: tuple[str, int]) -> _WorkerResult:
         return _WorkerResult(
             result=outcome.result,
             rejection_reason=outcome.rejection_reason,
+            rack_size=outcome.rack_size,
+            tiles_placed=outcome.tiles_placed,
+            solve_status=outcome.solve_status,
+            solve_time_ms=outcome.solve_time_ms,
+            disruption_score=outcome.disruption_score,
+            chain_depth=outcome.chain_depth,
         )
     except PuzzleGenerationError:
         return _WorkerResult(result=None, rejection_reason="generation_error")
@@ -133,6 +145,25 @@ def main() -> None:
         action="store_true",
         help="Print pool statistics and exit.",
     )
+    parser.add_argument(
+        "--progress-every-attempts",
+        type=int,
+        default=100,
+        metavar="N",
+        help="Print a live summary after every N failed attempts (default: 100).",
+    )
+    parser.add_argument(
+        "--progress-every-seconds",
+        type=float,
+        default=30.0,
+        metavar="S",
+        help="Print a live summary at least every S seconds while running (default: 30).",
+    )
+    parser.add_argument(
+        "--verbose-attempts",
+        action="store_true",
+        help="Print one-line details for every attempt that reaches the solver.",
+    )
     args = parser.parse_args()
 
     store = PuzzleStore(Path(args.db))
@@ -162,6 +193,9 @@ def main() -> None:
             workers=args.workers,
             sync_every=args.sync_every,
             sync_cmd=args.sync_cmd,
+            progress_every_attempts=args.progress_every_attempts,
+            progress_every_seconds=args.progress_every_seconds,
+            verbose_attempts=args.verbose_attempts,
         )
 
     store.close()
@@ -188,6 +222,9 @@ def _generate_batch(
     workers: int,
     sync_every: int,
     sync_cmd: str | None,
+    progress_every_attempts: int,
+    progress_every_seconds: float,
+    verbose_attempts: bool,
 ) -> None:
     print(f"\n{'=' * 60}")
     print(f"Generating {count} {difficulty} puzzles  |  workers={workers}")
@@ -198,9 +235,74 @@ def _generate_batch(
     t0 = time.monotonic()
     next_seed = int(t0 * 1_000) % (2**31)
     last_sync_at = 0
+    last_progress_failures = 0
+    last_progress_time = t0
 
     in_flight: dict[Future[_WorkerResult], int] = {}
     rejection_counts: Counter[str] = Counter()
+    partial_placement_counts: Counter[str] = Counter()
+    solved_failure_counts: Counter[str] = Counter()
+    solved_failure_time_ms = 0.0
+    solved_failure_attempts = 0
+    best_near_miss: _WorkerResult | None = None
+
+    def _update_best_near_miss(worker_result: _WorkerResult) -> None:
+        nonlocal best_near_miss
+        if worker_result.result is not None:
+            return
+        if worker_result.disruption_score is None and worker_result.tiles_placed == 0:
+            return
+        if best_near_miss is None:
+            best_near_miss = worker_result
+            return
+        current_score = (
+            worker_result.tiles_placed,
+            worker_result.disruption_score or -1,
+            worker_result.chain_depth or -1,
+        )
+        best_score = (
+            best_near_miss.tiles_placed,
+            best_near_miss.disruption_score or -1,
+            best_near_miss.chain_depth or -1,
+        )
+        if current_score > best_score:
+            best_near_miss = worker_result
+
+    def _print_live_summary(prefix: str) -> None:
+        elapsed = time.monotonic() - t0
+        attempts = generated + failed
+        attempt_rate = attempts / elapsed if elapsed > 0 else 0.0
+        accept_rate = generated / elapsed if elapsed > 0 else 0.0
+        rejection_line = "  ".join(
+            f"{reason}={rejection_counts[reason]}"
+            for reason in sorted(rejection_counts)
+        ) or "none"
+        partial_line = "  ".join(
+            f"{bucket}={partial_placement_counts[bucket]}"
+            for bucket in sorted(partial_placement_counts)
+        ) or "none"
+        avg_solve_ms = (
+            solved_failure_time_ms / solved_failure_attempts
+            if solved_failure_attempts > 0
+            else 0.0
+        )
+        print(
+            f"\n  [{prefix}] attempts={attempts} accepted={generated} failed={failed} "
+            f"attempt_rate={attempt_rate:.2f}/s accept_rate={accept_rate:.3f}/s"
+        )
+        print(f"  [live] rejections: {rejection_line}")
+        print(
+            f"  [live] solved_failures={solved_failure_attempts} "
+            f"avg_solve_ms={avg_solve_ms:.1f} partials: {partial_line}"
+        )
+        if best_near_miss is not None:
+            print(
+                "  [live] best_near_miss: "
+                f"reason={best_near_miss.rejection_reason} "
+                f"placed={best_near_miss.tiles_placed}/{best_near_miss.rack_size} "
+                f"disrupt={best_near_miss.disruption_score} "
+                f"chain={best_near_miss.chain_depth}"
+            )
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
 
@@ -253,6 +355,38 @@ def _generate_batch(
                 else:
                     failed += 1
                     rejection_counts[worker_result.rejection_reason or "unknown_fail"] += 1
+                    _update_best_near_miss(worker_result)
+                    if worker_result.solve_status is not None:
+                        solved_failure_attempts += 1
+                        solved_failure_counts[worker_result.solve_status] += 1
+                        solved_failure_time_ms += worker_result.solve_time_ms
+                        if worker_result.rejection_reason == "solve_partial_placement":
+                            bucket = f"{worker_result.tiles_placed}/{worker_result.rack_size}"
+                            partial_placement_counts[bucket] += 1
+                        if verbose_attempts:
+                            print(
+                                "\n  [attempt] "
+                                f"reason={worker_result.rejection_reason} "
+                                f"status={worker_result.solve_status} "
+                                f"placed={worker_result.tiles_placed}/{worker_result.rack_size} "
+                                f"solve_ms={worker_result.solve_time_ms:.1f} "
+                                f"disrupt={worker_result.disruption_score} "
+                                f"chain={worker_result.chain_depth}"
+                            )
+
+                    now = time.monotonic()
+                    should_report_by_attempts = (
+                        progress_every_attempts > 0
+                        and (failed - last_progress_failures) >= progress_every_attempts
+                    )
+                    should_report_by_time = (
+                        progress_every_seconds > 0
+                        and (now - last_progress_time) >= progress_every_seconds
+                    )
+                    if should_report_by_attempts or should_report_by_time:
+                        _print_live_summary("live")
+                        last_progress_failures = failed
+                        last_progress_time = now
 
                 if generated < count:
                     _submit(1)
@@ -265,6 +399,27 @@ def _generate_batch(
             for reason in sorted(rejection_counts)
         )
         print(f"  Rejections: {counts}")
+    if partial_placement_counts:
+        partials = "  ".join(
+            f"{bucket}={partial_placement_counts[bucket]}"
+            for bucket in sorted(partial_placement_counts)
+        )
+        print(f"  Partial placements: {partials}")
+    if solved_failure_counts:
+        solved = "  ".join(
+            f"{status}={solved_failure_counts[status]}"
+            for status in sorted(solved_failure_counts)
+        )
+        avg_solve_ms = solved_failure_time_ms / solved_failure_attempts
+        print(f"  Solved failures: {solved}  avg_solve_ms={avg_solve_ms:.1f}")
+    if best_near_miss is not None:
+        print(
+            "  Best near miss: "
+            f"reason={best_near_miss.rejection_reason} "
+            f"placed={best_near_miss.tiles_placed}/{best_near_miss.rack_size} "
+            f"disrupt={best_near_miss.disruption_score} "
+            f"chain={best_near_miss.chain_depth}"
+        )
 
     if sync_cmd:
         _run_sync(sync_cmd)

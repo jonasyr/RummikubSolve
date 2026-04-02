@@ -129,7 +129,7 @@ _PREGEN_CONSTRAINTS: dict[str, dict[str, int]] = {
     },
     "nightmare": {
         "min_chain_depth": 4,
-        "min_disruption": 45,
+        "min_disruption": 42,
     },
 }
 
@@ -172,17 +172,17 @@ _PREGEN_PROFILES: dict[str, _PregenProfile] = {
         rack_sample_budget=100,
     ),
     "nightmare": _PregenProfile(
-        board_size_range=(13, 16),
-        sacrifice_count=4,
-        rack_size_range=(7, 8),
+        board_size_range=(13, 15),
+        sacrifice_count=3,
+        rack_size_range=(6, 7),
         joker_count_range=(0, 0),
-        max_rack_source_sets=3,
-        max_candidate_sets=700,
-        max_ilp_columns=5000,
-        max_ilp_rows=3200,
-        min_total_rack_tile_coverage=18,
-        min_multi_option_rack_tiles=4,
-        rack_sample_budget=120,
+        max_rack_source_sets=2,
+        max_candidate_sets=650,
+        max_ilp_columns=4600,
+        max_ilp_rows=3000,
+        min_total_rack_tile_coverage=14,
+        min_multi_option_rack_tiles=3,
+        rack_sample_budget=160,
     ),
 }
 
@@ -226,6 +226,12 @@ class _RackCandidate:
 class _AttemptOutcome:
     result: PuzzleResult | None
     rejection_reason: str | None = None
+    rack_size: int = 0
+    tiles_placed: int = 0
+    solve_status: str | None = None
+    solve_time_ms: float = 0.0
+    disruption_score: int | None = None
+    chain_depth: int | None = None
 
 
 def generate_puzzle(
@@ -357,10 +363,11 @@ def _attempt_generate_with_reason(
 
     input_board = rack_candidate.remaining_board
     rack = rack_candidate.rack
+    rack_size = len(rack)
     if (
         pregen_profile is not None
         and (
-            rack_candidate.complexity.rack_tiles_placeable < len(rack)
+            rack_candidate.complexity.rack_tiles_placeable < rack_size
             or rack_candidate.complexity.total_rack_tile_coverage
             < pregen_profile.min_total_rack_tile_coverage
             or rack_candidate.complexity.multi_option_rack_tiles
@@ -372,8 +379,12 @@ def _attempt_generate_with_reason(
             or rack_candidate.complexity.estimated_ilp_rows > pregen_profile.max_ilp_rows
         )
     ):
-        if rack_candidate.complexity.rack_tiles_placeable < len(rack):
-            return _AttemptOutcome(result=None, rejection_reason="tile_coverage_fail")
+        if rack_candidate.complexity.rack_tiles_placeable < rack_size:
+            return _AttemptOutcome(
+                result=None,
+                rejection_reason="tile_coverage_fail",
+                rack_size=rack_size,
+            )
         if (
             rack_candidate.complexity.total_rack_tile_coverage
             < pregen_profile.min_total_rack_tile_coverage
@@ -381,15 +392,28 @@ def _attempt_generate_with_reason(
             < pregen_profile.min_multi_option_rack_tiles
             or rack_candidate.complexity.min_rack_tile_coverage < 1
         ):
-            return _AttemptOutcome(result=None, rejection_reason="rack_proxy_fail")
-        return _AttemptOutcome(result=None, rejection_reason="candidate_cap_reject")
+            return _AttemptOutcome(
+                result=None,
+                rejection_reason="rack_proxy_fail",
+                rack_size=rack_size,
+            )
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="candidate_cap_reject",
+            rack_size=rack_size,
+        )
 
     state = BoardState(board_sets=input_board, rack=rack)
     solution = solve(state, rules=None, timeout_seconds=solve_timeout)
-    if solution.tiles_placed < len(rack):
+    if solution.tiles_placed < rack_size:
         return _AttemptOutcome(
             result=None,
             rejection_reason=f"solve_{solution.solve_status}",
+            rack_size=rack_size,
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+            solve_time_ms=solution.solve_time_ms,
+            chain_depth=solution.chain_depth,
         )
 
     score = compute_disruption_score(input_board, solution.new_sets)
@@ -407,11 +431,38 @@ def _attempt_generate_with_reason(
         effective_min_chain = _MIN_CHAIN_DEPTHS.get(difficulty, 0)
 
     if score < effective_lo_d:
-        return _AttemptOutcome(result=None, rejection_reason="disruption_fail")
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="disruption_fail",
+            rack_size=rack_size,
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+            solve_time_ms=solution.solve_time_ms,
+            disruption_score=score,
+            chain_depth=solution.chain_depth,
+        )
     if effective_hi_d is not None and score > effective_hi_d:
-        return _AttemptOutcome(result=None, rejection_reason="disruption_fail")
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="disruption_fail",
+            rack_size=rack_size,
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+            solve_time_ms=solution.solve_time_ms,
+            disruption_score=score,
+            chain_depth=solution.chain_depth,
+        )
     if solution.chain_depth < effective_min_chain:
-        return _AttemptOutcome(result=None, rejection_reason="chain_fail")
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="chain_fail",
+            rack_size=rack_size,
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+            solve_time_ms=solution.solve_time_ms,
+            disruption_score=score,
+            chain_depth=solution.chain_depth,
+        )
 
     is_unique = True
     if _COMPUTES_UNIQUE.get(difficulty, False):
@@ -429,7 +480,13 @@ def _attempt_generate_with_reason(
             chain_depth=solution.chain_depth,
             is_unique=is_unique,
             joker_count=actual_joker_count,
-        )
+        ),
+        rack_size=rack_size,
+        tiles_placed=solution.tiles_placed,
+        solve_status=solution.solve_status,
+        solve_time_ms=solution.solve_time_ms,
+        disruption_score=score,
+        chain_depth=solution.chain_depth,
     )
 
 
