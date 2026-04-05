@@ -601,7 +601,9 @@ def _extract_rack(
         return _build_rack_candidate(remaining_board, rack)
 
     n_sacrifice = (
-        pregen_profile.sacrifice_count if pregen_profile is not None else _SACRIFICE_COUNTS[difficulty]
+        pregen_profile.sacrifice_count
+        if pregen_profile is not None
+        else _SACRIFICE_COUNTS[difficulty]
     )
     rack_size_range = (
         pregen_profile.rack_size_range if pregen_profile is not None else _RACK_SIZES[difficulty]
@@ -700,29 +702,22 @@ def _better_rack_candidate(
 ) -> bool:
     if current_best is None:
         return True
-    if candidate.complexity.rack_tiles_placeable != current_best.complexity.rack_tiles_placeable:
-        return candidate.complexity.rack_tiles_placeable > current_best.complexity.rack_tiles_placeable
-    if candidate.complexity.multi_option_rack_tiles != current_best.complexity.multi_option_rack_tiles:
-        return candidate.complexity.multi_option_rack_tiles > current_best.complexity.multi_option_rack_tiles
-    if candidate.complexity.total_rack_tile_coverage != current_best.complexity.total_rack_tile_coverage:
-        return candidate.complexity.total_rack_tile_coverage > current_best.complexity.total_rack_tile_coverage
-    if candidate.complexity.min_rack_tile_coverage != current_best.complexity.min_rack_tile_coverage:
-        return candidate.complexity.min_rack_tile_coverage > current_best.complexity.min_rack_tile_coverage
-    if (
-        candidate.complexity.estimated_ilp_columns
-        != current_best.complexity.estimated_ilp_columns
-    ):
-        return (
-            candidate.complexity.estimated_ilp_columns
-            < current_best.complexity.estimated_ilp_columns
-        )
-    if candidate.complexity.estimated_ilp_rows != current_best.complexity.estimated_ilp_rows:
-        return candidate.complexity.estimated_ilp_rows < current_best.complexity.estimated_ilp_rows
-    if candidate.complexity.candidate_set_count != current_best.complexity.candidate_set_count:
-        return (
-            candidate.complexity.candidate_set_count
-            < current_best.complexity.candidate_set_count
-        )
+    cand = candidate.complexity
+    best = current_best.complexity
+    if cand.rack_tiles_placeable != best.rack_tiles_placeable:
+        return cand.rack_tiles_placeable > best.rack_tiles_placeable
+    if cand.multi_option_rack_tiles != best.multi_option_rack_tiles:
+        return cand.multi_option_rack_tiles > best.multi_option_rack_tiles
+    if cand.total_rack_tile_coverage != best.total_rack_tile_coverage:
+        return cand.total_rack_tile_coverage > best.total_rack_tile_coverage
+    if cand.min_rack_tile_coverage != best.min_rack_tile_coverage:
+        return cand.min_rack_tile_coverage > best.min_rack_tile_coverage
+    if cand.estimated_ilp_columns != best.estimated_ilp_columns:
+        return cand.estimated_ilp_columns < best.estimated_ilp_columns
+    if cand.estimated_ilp_rows != best.estimated_ilp_rows:
+        return cand.estimated_ilp_rows < best.estimated_ilp_rows
+    if cand.candidate_set_count != best.candidate_set_count:
+        return cand.candidate_set_count < best.candidate_set_count
     if len(candidate.rack) != len(current_best.rack):
         return len(candidate.rack) > len(current_best.rack)
     candidate_key = [(t.color, t.number, t.copy_id, t.is_joker) for t in candidate.rack]
