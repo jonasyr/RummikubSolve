@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir hatchling && pip install --no-cache-dir .
 COPY solver/ ./solver/
 COPY api/ ./api/
 
+# Create data directory with correct ownership so the puzzle DB volume mount works
+RUN mkdir -p /app/data && chown app:app /app/data
+
 # Switch to non-root user
 USER app
 

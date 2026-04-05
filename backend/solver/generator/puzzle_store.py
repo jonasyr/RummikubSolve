@@ -62,6 +62,7 @@ class PuzzleStore:
     def __init__(self, db_path: Path = DEFAULT_DB_PATH) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(db_path))
+        self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.row_factory = sqlite3.Row
         self._create_tables()
 

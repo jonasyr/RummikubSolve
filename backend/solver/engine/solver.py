@@ -37,6 +37,7 @@ def solve(
     state: BoardState,
     rules: RulesConfig | None = None,
     secondary_objective: Literal["tile_value", "disruption"] = "tile_value",
+    timeout_seconds: float | None = None,
 ) -> Solution:
     """Solve a Rummikub board state optimally.
 
@@ -78,13 +79,17 @@ def solve(
     model = build_ilp_model(solve_state, candidate_sets, rules, secondary_objective)
 
     # 3. Set solver options and run.
-    model.highs.setOptionValue("time_limit", _SOLVE_TIMEOUT_SECONDS)
+    model.highs.setOptionValue(
+        "time_limit",
+        timeout_seconds if timeout_seconds is not None else _SOLVE_TIMEOUT_SECONDS,
+    )
     model.highs.run()
 
     # 4. Extract the solution.
     # For first-turn solves, infeasibility means the rack can't meet the meld
     # threshold — this is a valid "no play" outcome, not an error.
     active_indices: list[int] = []
+    solve_status = "success"
     if rules.is_first_turn:
         try:
             (
@@ -115,6 +120,7 @@ def solve(
             placed_tiles = []
             remaining_rack = list(state.rack)
             is_optimal = False
+            solve_status = "infeasible_fallback"
         # Detect timeout-without-solution: every board tile must appear in new_sets.
         # If any are missing, HiGHS timed out before finding a feasible integer
         # solution. Fall back to no-move (board unchanged, all rack tiles in hand).
@@ -136,6 +142,7 @@ def solve(
             placed_tiles = []
             remaining_rack = list(state.rack)
             is_optimal = False
+            solve_status = "timeout_fallback"
 
     solve_time_ms = (time.monotonic() - t_start) * 1000.0
 
@@ -153,9 +160,17 @@ def solve(
         moves=moves,
         is_optimal=is_optimal,
         solve_time_ms=solve_time_ms,
+        solve_status=solve_status,
         chain_depth=chain_depth,
         active_set_indices=active_indices,
     )
+
+    if (
+        solution.solve_status == "success"
+        and not rules.is_first_turn
+        and solution.tiles_placed < len(state.rack)
+    ):
+        solution.solve_status = "partial_placement"
 
     # 6. Post-solve verification (defense-in-depth per Blueprint §10.4).
     if not verify_solution(state, solution, rules):
@@ -171,6 +186,7 @@ def check_uniqueness(
     state: BoardState,
     solution: Solution,
     rules: RulesConfig | None = None,
+    timeout_seconds: float | None = None,
 ) -> bool:
     """Return True if *solution* is the ONLY arrangement that places solution.tiles_placed tiles.
 
@@ -213,7 +229,10 @@ def check_uniqueness(
         rules,
         excluded_solutions=[solution.active_set_indices],
     )
-    model2.highs.setOptionValue("time_limit", _UNIQUENESS_TIMEOUT_SECONDS)
+    model2.highs.setOptionValue(
+        "time_limit",
+        timeout_seconds if timeout_seconds is not None else _UNIQUENESS_TIMEOUT_SECONDS,
+    )
     model2.highs.run()
 
     try:
