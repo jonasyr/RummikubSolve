@@ -172,6 +172,8 @@
     "commit": "Best\u00e4tigen",
     "revert": "Zur\u00fccksetzen",
     "revertConfirm": "Zum letzten gespeicherten Stand zur\u00fccksetzen? Alle \u00c4nderungen gehen verloren.",
+    "getPuzzle": "Puzzle holen",
+    "loading": "L\u00e4dt\u2026",
     "modeTap": "Tippen",
     "modeDrag": "Ziehen",
     "showValidation": "Hinweise zeigen",

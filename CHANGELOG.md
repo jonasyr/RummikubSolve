@@ -5,6 +5,50 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.35.0] — 2026-04-09 — Play Mode Phase 1: grid rendering & iPad layout
+
+### Frontend — Components (`frontend/src/components/play/`)
+- Add `PlayLayout.tsx`: CSS Grid shell with responsive grid-areas (`controls / board / rack`);
+  portrait = stacked, landscape ≥1024px = rack column beside board
+- Add `ControlBar.tsx`: Undo / Redo / Commit / Revert + validation toggle;
+  all buttons `h-11` (44px touch target); Undo/Redo disabled when history is empty;
+  back-link to solver via `useLocale`
+- Add `PlayGrid.tsx`: 2-D grid renderer — iterates `rows × cols` cells, renders
+  `GridCell` for each position, renders `SetOverlay` after cells (DOM-order stacking)
+- Add `GridCell.tsx`: single memoised cell (`React.memo`); occupied cells render `Tile`;
+  `data-slot-cell` attribute used as e2e selector anchor;
+  selection ring (`ring-blue-500`) and drop-target styling (`border-dashed`)
+- Add `SetOverlay.tsx`: absolute-positioned amber / green / red validation overlay;
+  pixel formula: `width = tiles × cellPx − CELL_GAP_PX`; `pointer-events-none`;
+  shows type label for valid sets, i18n error string for invalid sets
+- Add `PlayRack.tsx`: scrollable rack panel (`play-rack-scroll`);
+  portrait = horizontal wrap, landscape = vertical column; calls `tapRackTile` stub
+- Add `PlayPuzzleControls.tsx`: standalone puzzle loader bound to `usePlayStore`
+  (not `useGameStore`); 5 difficulty buttons; AbortController cleanup on unmount
+
+### Frontend — CSS (`frontend/src/app/globals.css`)
+- Add `.play-surface`: `touch-action:none`, `user-select:none`, `-webkit-*` variants
+- Add `.play-rack-scroll`: `touch-action:pan-y`, `-webkit-overflow-scrolling:touch`
+- Add `.play-layout`: `100dvh` CSS Grid with `safe-area-inset-*` padding;
+  responsive `@media (min-width:1024px)` rule for landscape two-column layout
+
+### Frontend — Route (`frontend/src/app/[locale]/play/page.tsx`)
+- Replace Phase 0 stub with fully wired `PlayLayout + ControlBar + PlayPuzzleControls
+  + PlayGrid + PlayRack`; page owns all `gridArea` assignments
+
+### Frontend — i18n
+- Add `getPuzzle` and `loading` keys to `play.*` namespace in `en.json` and `de.json`
+
+### Frontend — Tests
+- Add `frontend/src/__tests__/components/play/PlayGrid.test.tsx`: 8 unit tests
+  (cell count, occupied rendering, empty rendering, selection ring, drop-target styling,
+  no-selection styling, click callback, touch-hardening class)
+- Add `frontend/e2e/play_load_puzzle.spec.ts`: 5 Playwright specs (chromium +
+  mobile-chrome + mobile-safari): load prompt, puzzle load via mocked API,
+  four control buttons visible, 44px touch target, play-surface class present
+
+---
+
 ## [0.34.0] — 2026-04-09 — Play Mode Phase 0: route, store, and algorithms
 
 ### Frontend — Types (`frontend/src/types/play.ts`)

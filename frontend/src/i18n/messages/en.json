@@ -172,6 +172,8 @@
     "commit": "Commit",
     "revert": "Revert",
     "revertConfirm": "Revert to last committed state? All changes since then will be lost.",
+    "getPuzzle": "Get Puzzle",
+    "loading": "Loading\u2026",
     "modeTap": "Tap",
     "modeDrag": "Drag",
     "showValidation": "Show hints",

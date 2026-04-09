@@ -24,3 +24,45 @@ body {
   /* Prevent horizontal page scroll caused by overflow in child elements */
   overflow-x: hidden;
 }
+
+/* ── Play mode: touch hardening ──────────────────────────────────────────── */
+.play-surface {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.play-rack-scroll {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Play layout (CSS Grid shell) ─────────────────────────────────────────── */
+.play-layout {
+  height: 100dvh;
+  padding:
+    max(8px, env(safe-area-inset-top))
+    max(8px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "controls"
+    "board"
+    "rack";
+  gap: 8px;
+}
+
+/* Landscape / large tablet: rack column beside board */
+@media (min-width: 1024px) {
+  .play-layout {
+    grid-template-columns: 1fr 200px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "controls controls"
+      "board    rack";
+  }
+}

@@ -2,42 +2,57 @@
 
 import { useTranslations } from "next-intl";
 import { usePlayStore } from "../../../store/play";
+import { GRID_COLS } from "../../../types/play";
+import PlayLayout from "../../../components/play/PlayLayout";
+import ControlBar from "../../../components/play/ControlBar";
+import PlayPuzzleControls from "../../../components/play/PlayPuzzleControls";
+import PlayGrid from "../../../components/play/PlayGrid";
+import PlayRack from "../../../components/play/PlayRack";
 
 export default function PlayPage() {
   const t = useTranslations("play");
+
+  const puzzle = usePlayStore((s) => s.puzzle);
   const grid = usePlayStore((s) => s.grid);
-  const rack = usePlayStore((s) => s.rack);
+  const gridRows = usePlayStore((s) => s.gridRows);
   const detectedSets = usePlayStore((s) => s.detectedSets);
-  const isPuzzleLoading = usePlayStore((s) => s.isPuzzleLoading);
-  const error = usePlayStore((s) => s.error);
-  const loadPuzzle = usePlayStore((s) => s.loadPuzzle);
+  const selectedTile = usePlayStore((s) => s.selectedTile);
+  const showValidation = usePlayStore((s) => s.showValidation);
+  const tapCell = usePlayStore((s) => s.tapCell);
 
   return (
-    <main className="h-dvh flex flex-col">
-      <header className="p-2 border-b">
-        <h1 className="text-lg font-bold">{t("title")}</h1>
-      </header>
-
-      {/* Phase 1 replaces this with PlayLayout + PlayGrid + PlayRack + PlayPuzzleControls */}
-      <div className="p-4 space-y-2">
-        <button
-          onClick={() => void loadPuzzle({ difficulty: "easy" })}
-          disabled={isPuzzleLoading}
-          className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
-        >
-          {isPuzzleLoading ? "Loading…" : "Load Easy Puzzle"}
-        </button>
-
-        {error && (
-          <p className="text-red-500 text-sm">{error}</p>
-        )}
-
-        <p className="text-gray-400">
-          {grid.size === 0
-            ? t("loadPuzzlePrompt")
-            : `Grid: ${grid.size} tiles, Rack: ${rack.length} tiles, Sets: ${detectedSets.length}`}
-        </p>
+    <PlayLayout>
+      {/* controls grid area */}
+      <div
+        style={{ gridArea: "controls" }}
+        className="flex flex-col gap-2 border-b px-2 py-2"
+      >
+        <ControlBar />
+        <PlayPuzzleControls />
       </div>
-    </main>
+
+      {/* board grid area */}
+      {puzzle ? (
+        <PlayGrid
+          grid={grid}
+          rows={gridRows}
+          cols={GRID_COLS}
+          detectedSets={detectedSets}
+          selectedTile={selectedTile}
+          showValidation={showValidation}
+          onCellClick={tapCell}
+        />
+      ) : (
+        <div
+          style={{ gridArea: "board" }}
+          className="flex items-center justify-center text-sm text-gray-400"
+        >
+          {t("loadPuzzlePrompt")}
+        </div>
+      )}
+
+      {/* rack grid area */}
+      <PlayRack />
+    </PlayLayout>
   );
 }
