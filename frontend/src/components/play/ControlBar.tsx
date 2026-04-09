@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { usePlayStore } from "../../store/play";
@@ -22,6 +23,16 @@ export default function ControlBar() {
   const toggleValidation = usePlayStore((s) => s.toggleValidation);
   const detectedSets   = usePlayStore((s) => s.detectedSets);
   const puzzle         = usePlayStore((s) => s.puzzle);
+
+  const [commitFlash, setCommitFlash] = useState(false);
+
+  const handleCommit = () => {
+    const result = commit();
+    if (result.ok) {
+      setCommitFlash(true);
+      setTimeout(() => setCommitFlash(false), 2000);
+    }
+  };
 
   // Show "Return to Rack" only when a rack-source grid tile is selected
   const canReturn: boolean = (() => {
@@ -84,15 +95,17 @@ export default function ControlBar() {
         </button>
         <button
           className={`h-11 px-3 rounded text-sm font-medium text-white ${
-            commitTitle
-              ? "bg-blue-600/40 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
+            commitFlash
+              ? "bg-green-600"
+              : commitTitle
+                ? "bg-blue-600/40 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
           }`}
-          onClick={commit}
+          onClick={handleCommit}
           disabled={!!commitTitle}
           title={commitTitle ?? undefined}
         >
-          {t("commit")}
+          {commitFlash ? t("commitSuccess") : t("commit")}
         </button>
         <button className={btnBase} onClick={revert}>
           {t("revert")}

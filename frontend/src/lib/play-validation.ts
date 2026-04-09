@@ -49,9 +49,16 @@ function validateAsRun(tiles: TileInput[]): ValidationResult {
   const colors = new Set(nonJokers.map((t) => t.color));
   if (colors.size > 1) return { valid: false, reason: "play.validation.runMixedColors" };
 
-  const numbers = nonJokers.map((t) => t.number!).sort((a, b) => a - b);
+  const numbers = nonJokers.map((t) => t.number!); // no sort — order matters in play mode
   if (new Set(numbers).size < numbers.length) {
     return { valid: false, reason: "play.validation.runDuplicateNumbers" };
+  }
+
+  // Non-joker tiles must be placed in strictly ascending order left to right.
+  for (let i = 1; i < numbers.length; i++) {
+    if (numbers[i] <= numbers[i - 1]) {
+      return { valid: false, reason: "play.validation.runNotOrdered" };
+    }
   }
 
   const nMin = numbers[0];

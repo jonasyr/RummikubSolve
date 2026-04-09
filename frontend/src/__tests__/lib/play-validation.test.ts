@@ -63,6 +63,12 @@ describe("validateTileGroup — runs", () => {
     expect(result.isValid).toBe(false);
     expect(result.reason).toBe("play.validation.runTooLong");
   });
+
+  it("tiles in wrong order (6, 8, 7) → invalid with runNotOrdered reason", () => {
+    const result = validateTileGroup([red(6), red(8), red(7)]);
+    expect(result.isValid).toBe(false);
+    expect(result.reason).toBe("play.validation.runNotOrdered");
+  });
 });
 
 // ---------------------------------------------------------------------------

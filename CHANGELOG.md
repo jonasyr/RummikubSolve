@@ -5,6 +5,25 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.38.0] — 2026-04-09 — Play Mode: run order enforcement & commit feedback
+
+### Frontend — Validation (`frontend/src/lib/play-validation.ts`)
+- `validateAsRun` now requires non-joker tiles to be placed in strictly ascending
+  left-to-right order. Placing [6, 8, 7] is now invalid ("runNotOrdered"). Previously
+  the validator sorted tiles before checking, so any permutation was accepted.
+
+### Frontend — Components
+- **ControlBar**: commit button flashes green and shows "Committed!" for 2 s on success.
+
+### Frontend — i18n
+- Added `play.validation.runNotOrdered` (en + de) and `play.commitSuccess` (en + de).
+
+### Tests
+- `play-validation.test.ts`: +1 test confirming [6, 8, 7] is invalid with `runNotOrdered`.
+- **Total: 195 passing, 7 todo, 0 failed**
+
+---
+
 ## [0.37.0] — 2026-04-09 — Play Mode Phase 3: commit/revert & solved state
 
 ### Frontend — Store (`frontend/src/store/play.ts`)
