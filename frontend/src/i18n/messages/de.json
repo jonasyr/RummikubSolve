@@ -9,6 +9,7 @@
   "page": {
     "firstTurn": "Erster Zug",
     "reset": "Zurücksetzen",
+    "toPlay": "Spielmodus \u2192",
     "resetConfirm": "Alles zurücksetzen? Alle Steine und Sätze werden gelöscht.",
     "solve": "Lösen",
     "solving": "Wird gelöst…",

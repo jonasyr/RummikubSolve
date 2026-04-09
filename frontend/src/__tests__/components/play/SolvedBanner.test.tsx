@@ -24,7 +24,7 @@ describe("SolvedBanner", () => {
   it("renders the solved message when isSolved is true", () => {
     usePlayStore.setState({ isSolved: true });
     render(<SolvedBanner />);
-    expect(screen.getByText("solved")).toBeInTheDocument();
+    expect(screen.getByText(/solved/)).toBeInTheDocument();
   });
 
   it("shows elapsed time when both start and end times are set", () => {

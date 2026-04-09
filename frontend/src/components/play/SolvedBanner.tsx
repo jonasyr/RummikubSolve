@@ -28,9 +28,9 @@ export default function SolvedBanner() {
       className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
       aria-live="polite"
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-green-200 dark:border-green-800 p-8 text-center pointer-events-auto max-w-sm mx-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-green-200 dark:border-green-800 p-8 text-center pointer-events-auto max-w-sm mx-4 animate-pop-in">
         <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
-          {t("solved")}
+          🎉 {t("solved")} 🎉
         </p>
         {elapsed !== null && (
           <p className="text-sm text-gray-500 dark:text-gray-400">

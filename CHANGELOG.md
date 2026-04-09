@@ -5,6 +5,42 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.39.0] — 2026-04-09 — Play Mode Phase 5.4/6.1/6.3–6.6 + Docker fixes
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Auto-grow grid: placing a tile in the last visible row automatically adds workspace rows
+  (capped at `GRID_MAX_ROWS = 24`). Grid only grows during placement; `revert` recomputes
+  rows from the committed snapshot so the grid can shrink back to fit.
+- `setInteractionMode` now persists the chosen mode to `localStorage("play:interactionMode")`.
+
+### Frontend — Pages
+- **Play page**: hydrates `interactionMode` from localStorage on mount; warns before
+  navigating away when there are uncommitted changes (`beforeunload` event).
+- **Solver page**: "Play Mode →" link added to the header (locale-aware).
+
+### Frontend — Components
+- **SolvedBanner**: 🎉 emojis + `pop-in` scale/fade entrance animation.
+
+### Frontend — i18n
+- Added `page.toPlay` key (en + de).
+
+### Docker
+- Fixed health checks: replaced `curl` (not installed in `python:3.12-slim` or
+  `node:20-alpine`) with Python `urllib` (backend) and `wget` (frontend). Without
+  this fix `depends_on: condition: service_healthy` would never be satisfied and
+  nginx would fail to start.
+- Added named volume `puzzle_data` for the backend SQLite puzzle pool DB so
+  pregenerated puzzles survive container rebuilds.
+
+### Tests
+- `play.test.ts`: +2 auto-grow tests (AAA, happy-path).
+- **Total: 197 passing, 7 todo, 0 failed**
+
+### Versions
+- `frontend/package.json` and `backend/pyproject.toml` bumped to **0.39.0**.
+
+---
+
 ## [0.38.0] — 2026-04-09 — Play Mode: run order enforcement & commit feedback
 
 ### Frontend — Validation (`frontend/src/lib/play-validation.ts`)

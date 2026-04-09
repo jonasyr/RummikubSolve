@@ -9,6 +9,7 @@
   "page": {
     "firstTurn": "First turn",
     "reset": "Reset",
+    "toPlay": "Play Mode \u2192",
     "resetConfirm": "Reset everything? All tiles and sets will be cleared.",
     "solve": "Solve",
     "solving": "Solving…",

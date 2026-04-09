@@ -16,7 +16,7 @@ import type {
   PlaySnapshot,
   TileSelection,
 } from "../types/play";
-import { cellKey, GRID_COLS, UNDO_MAX } from "../types/play";
+import { cellKey, GRID_COLS, GRID_MIN_ROWS, GRID_MAX_ROWS, GRID_WORKSPACE_ROWS, UNDO_MAX } from "../types/play";
 import type { PuzzleRequest, PuzzleResponse, TileInput } from "../types/api";
 
 // ---------------------------------------------------------------------------
@@ -107,6 +107,16 @@ const initialState = {
 // Private helpers (not exported — only used inside the store)
 // ---------------------------------------------------------------------------
 
+function computeGridRows(grid: Map<CellKey, PlacedTile>): number {
+  let lastUsedRow = -1;
+  for (const key of grid.keys()) {
+    const row = parseInt(key.split(":")[0]);
+    if (row > lastUsedRow) lastUsedRow = row;
+  }
+  const neededRows = lastUsedRow + GRID_WORKSPACE_ROWS + 1;
+  return Math.max(GRID_MIN_ROWS, Math.min(neededRows, GRID_MAX_ROWS));
+}
+
 function takeSnapshot(state: {
   grid: Map<CellKey, PlacedTile>;
   rack: TileInput[];
@@ -157,6 +167,7 @@ function placeTile(
     isSolved: solved,
     past: [...state.past, snapshot].slice(-UNDO_MAX),
     future: [],                              // New action always clears redo stack
+    gridRows: Math.max(state.gridRows, computeGridRows(newGrid)), // only grow, never shrink
     solveStartTime: state.solveStartTime ?? Date.now(), // Start timer on first placement
     solveEndTime: solved ? Date.now() : null,
   };
@@ -358,10 +369,18 @@ export const usePlayStore = create<PlayState>((set, get) => ({
         past: [],
         future: [],
         selectedTile: null,
+        gridRows: computeGridRows(snap.cells), // recompute from snapshot (may shrink)
       };
     }),
 
-  setInteractionMode: (mode) => set({ interactionMode: mode }),
+  setInteractionMode: (mode) => {
+    try {
+      localStorage.setItem("play:interactionMode", mode);
+    } catch {
+      // localStorage unavailable (SSR or restricted environment)
+    }
+    set({ interactionMode: mode });
+  },
   toggleValidation: () => set((s) => ({ showValidation: !s.showValidation })),
   reset: () => set(initialState),
 }));

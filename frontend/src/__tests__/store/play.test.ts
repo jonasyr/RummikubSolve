@@ -559,3 +559,38 @@ describe("isSolved — Phase 3", () => {
     expect(result).toEqual({ ok: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 5 — auto-grow
+// ---------------------------------------------------------------------------
+
+describe("auto-grow — Phase 5", () => {
+  it("happy path: placing a tile in the last visible row grows gridRows", async () => {
+    // Arrange
+    await setupRackOnly(); // empty board, gridRows = GRID_MIN_ROWS (6)
+    const rowsBefore = store().gridRows;
+
+    // Act — place into the last row
+    store().tapRackTile(0);
+    store().tapCell(rowsBefore - 1, 0);
+
+    // Assert
+    expect(store().gridRows).toBeGreaterThan(rowsBefore);
+  });
+
+  it("revert recomputes gridRows from committedSnapshot (grid shrinks back)", async () => {
+    // Arrange — grow the grid by placing all rack tiles into the last row
+    await setupRackOnly(); // gridRows starts at 6
+    const rowsBefore = store().gridRows;
+    store().tapRackTile(0); store().tapCell(rowsBefore - 1, 0);
+    store().tapRackTile(0); store().tapCell(rowsBefore - 1, 1);
+    store().tapRackTile(0); store().tapCell(rowsBefore - 1, 2);
+    expect(store().gridRows).toBeGreaterThan(rowsBefore); // growth confirmed
+
+    // Act
+    store().revert();
+
+    // Assert — back to committed (empty board) → rows recomputed to initial value
+    expect(store().gridRows).toBe(rowsBefore);
+  });
+});

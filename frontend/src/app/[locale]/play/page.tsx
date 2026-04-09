@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { usePlayStore } from "../../../store/play";
 import { GRID_COLS } from "../../../types/play";
@@ -13,13 +14,33 @@ import SolvedBanner from "../../../components/play/SolvedBanner";
 export default function PlayPage() {
   const t = useTranslations("play");
 
-  const puzzle = usePlayStore((s) => s.puzzle);
-  const grid = usePlayStore((s) => s.grid);
-  const gridRows = usePlayStore((s) => s.gridRows);
-  const detectedSets = usePlayStore((s) => s.detectedSets);
-  const selectedTile = usePlayStore((s) => s.selectedTile);
-  const showValidation = usePlayStore((s) => s.showValidation);
-  const tapCell = usePlayStore((s) => s.tapCell);
+  const puzzle           = usePlayStore((s) => s.puzzle);
+  const grid             = usePlayStore((s) => s.grid);
+  const gridRows         = usePlayStore((s) => s.gridRows);
+  const detectedSets     = usePlayStore((s) => s.detectedSets);
+  const selectedTile     = usePlayStore((s) => s.selectedTile);
+  const showValidation   = usePlayStore((s) => s.showValidation);
+  const tapCell          = usePlayStore((s) => s.tapCell);
+  const past             = usePlayStore((s) => s.past);
+  const setInteractionMode = usePlayStore((s) => s.setInteractionMode);
+
+  // Hydrate interactionMode from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("play:interactionMode");
+    if (saved === "tap" || saved === "drag") setInteractionMode(saved);
+  }, [setInteractionMode]);
+
+  // Warn before navigating away if there are uncommitted changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (past.length > 0) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [past]);
 
   return (
     <PlayLayout>
