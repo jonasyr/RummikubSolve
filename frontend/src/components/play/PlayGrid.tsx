@@ -28,7 +28,7 @@ export default function PlayGrid({
 
   return (
     <div
-      className="play-surface overflow-auto"
+      className="play-surface overflow-auto min-h-0"
       style={{ gridArea: "board" }}
       role="region"
       aria-label="Puzzle board grid"

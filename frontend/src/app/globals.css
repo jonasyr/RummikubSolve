@@ -27,7 +27,7 @@ body {
 
 /* ── Play mode: touch hardening ──────────────────────────────────────────── */
 .play-surface {
-  touch-action: none;
+  touch-action: pan-x pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;

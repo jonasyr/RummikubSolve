@@ -5,6 +5,23 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.36.1] — 2026-04-09 — Layout hotfix: touch scrollability & grid containment
+
+### Fixed
+- **Play mode — board scrollable on all touch devices:** Changed `touch-action: none` to
+  `touch-action: pan-x pan-y` on `.play-surface`. The board had `overflow: auto` but
+  `touch-action: none` silently blocked browser pan gestures, making the 800 px-wide grid
+  inaccessible on phones and tablets without a hardware mouse.
+- **Play mode — grid stays within CSS grid track:** Added `min-height: 0` to both the board
+  and rack grid-area divs. Without it, CSS grid items with `min-height: auto` grow beyond
+  their `1fr` track and `overflow: auto` never triggers. This caused the bottom rows to
+  overflow the viewport on iPad landscape instead of scrolling.
+- **Known dev-only artifact:** The Next.js dev overlay button ("N") is fixed at the
+  bottom-left corner and overlaps the first rack tile in iPad portrait orientation. This only
+  appears in development mode; production builds are unaffected.
+
+---
+
 ## [0.36.0] — 2026-04-09 — Play Mode Phase 2: tap interaction & undo/redo
 
 ### Frontend — Store (`frontend/src/store/play.ts`)

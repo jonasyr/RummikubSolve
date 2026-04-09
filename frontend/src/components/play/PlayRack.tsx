@@ -10,7 +10,7 @@ export default function PlayRack() {
 
   return (
     <div
-      className="play-rack-scroll border-t lg:border-t-0 lg:border-l overflow-auto p-2"
+      className="play-rack-scroll border-t lg:border-t-0 lg:border-l overflow-auto min-h-0 p-2"
       style={{ gridArea: "rack" }}
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
