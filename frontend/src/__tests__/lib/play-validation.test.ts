@@ -94,10 +94,14 @@ describe("validateTileGroup — groups", () => {
     expect(result.reason).toBe("play.validation.groupDuplicateColors");
   });
 
-  it("mixed numbers → invalid with groupMixedNumbers reason", () => {
+  it("mixed numbers AND mixed colors → invalid (heuristic returns run reason)", () => {
+    // [red(8), blue(9), black(8)] fails both run (mixed colors) and group
+    // (mixed numbers). Since numbers aren't all equal the heuristic treats
+    // this as a run attempt and returns the run reason.
     const result = validateTileGroup([red(8), blue(9), black(8)]);
     expect(result.isValid).toBe(false);
-    expect(result.reason).toBe("play.validation.groupMixedNumbers");
+    expect(result.type).toBeNull();
+    expect(result.reason).toBe("play.validation.runMixedColors");
   });
 
   it("5 tiles → invalid with groupTooLarge reason", () => {

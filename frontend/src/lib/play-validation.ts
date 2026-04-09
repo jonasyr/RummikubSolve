@@ -16,11 +16,19 @@ export function validateTileGroup(placed: PlacedTile[]): SetValidation {
   const groupResult = validateAsGroup(tiles);
   if (groupResult.valid) return { isValid: true, type: "group" };
 
-  return {
-    isValid: false,
-    type: null,
-    reason: runResult.reason ?? groupResult.reason ?? "play.validation.invalid",
-  };
+  // Choose the most informative reason based on likely user intent.
+  // If all non-joker tiles share the same number the user is clearly
+  // attempting a group (not a run), so the group reason is more helpful.
+  const nonJokerNumbers = tiles.filter((t) => !t.joker).map((t) => t.number);
+  const isGroupAttempt =
+    nonJokerNumbers.length > 0 &&
+    new Set(nonJokerNumbers).size === 1;
+
+  const reason = isGroupAttempt
+    ? (groupResult.reason ?? runResult.reason ?? "play.validation.invalid")
+    : (runResult.reason ?? groupResult.reason ?? "play.validation.invalid");
+
+  return { isValid: false, type: null, reason };
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────

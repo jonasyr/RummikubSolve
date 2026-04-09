@@ -1,7 +1,6 @@
 import type { TileInput, PuzzleResponse } from "../types/api";
 import {
   cellKey,
-  GRID_COLS,
   GRID_MIN_ROWS,
   GRID_MAX_ROWS,
   GRID_WORKSPACE_ROWS,

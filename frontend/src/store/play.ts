@@ -8,7 +8,8 @@
 import { create } from "zustand";
 
 import { fetchPuzzle } from "../lib/api";
-import { puzzleToGrid, detectSets, checkSolved } from "../lib/grid-utils";
+// Phase 2: add checkSolved to this import when implementing undo/redo/tapCell
+import { puzzleToGrid, detectSets } from "../lib/grid-utils";
 import type {
   CellKey,
   DetectedSet,

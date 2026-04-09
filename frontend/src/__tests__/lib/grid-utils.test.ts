@@ -4,17 +4,14 @@ import {
   detectSets,
   checkSolved,
   validateTileConservation,
-  insertTileIntoRow,
-  compactGrid,
 } from "../../lib/grid-utils";
 import {
   cellKey,
   GRID_MIN_ROWS,
   GRID_MAX_ROWS,
-  GRID_WORKSPACE_ROWS,
   GRID_COLS,
 } from "../../types/play";
-import type { PlacedTile, DetectedSet } from "../../types/play";
+import type { PlacedTile } from "../../types/play";
 import type { PuzzleResponse, TileInput } from "../../types/api";
 
 // ---------------------------------------------------------------------------
@@ -39,9 +36,6 @@ const makePuzzle = (
 });
 
 const boardPlaced = (tile: TileInput): PlacedTile => ({ tile, source: "board" });
-const rackPlaced = (tile: TileInput): PlacedTile => ({ tile, source: "rack" });
-
-const validSetResult: DetectedSet["validation"] = { isValid: true, type: "run" };
 
 // ---------------------------------------------------------------------------
 // puzzleToGrid
