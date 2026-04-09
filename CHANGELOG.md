@@ -5,6 +5,45 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.34.0] — 2026-04-09 — Play Mode Phase 0: route, store, and algorithms
+
+### Frontend — Types (`frontend/src/types/play.ts`)
+- Add `PlacedTile`, `CellKey`, `cellKey()`, `DetectedSet`, `SetValidation`,
+  `TileSelection`, `PlaySnapshot`, `DragState` interfaces
+- Add grid constants: `GRID_COLS=16`, `GRID_MIN_ROWS=6`, `GRID_MAX_ROWS=24`,
+  `GRID_WORKSPACE_ROWS=3`, `UNDO_MAX=50`, `CELL_SIZE_PX=48`, `CELL_GAP_PX=2`
+
+### Frontend — Library
+- Add `frontend/src/lib/grid-utils.ts`: `puzzleToGrid`, `detectSets`, `checkSolved`,
+  `validateTileConservation`; Phase-5 implementations `insertTileIntoRow`, `compactGrid`
+- Add `frontend/src/lib/play-validation.ts`: `validateTileGroup`, private `validateAsRun`,
+  `validateAsGroup`; all validation error reasons are `play.validation.*` i18n keys
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Add isolated `usePlayStore` (Zustand); fully separated from `useGameStore` (zero coupling)
+- `loadPuzzle` implemented: calls `fetchPuzzle`, maps puzzle to grid, detects sets,
+  initialises `committedSnapshot`; mirrors `game.ts` abort/error/loading-guard pattern
+- Phase 2 actions (`tapCell`, `tapRackTile`, `undo`, `redo`, `returnToRack`) stubbed as no-ops
+- Phase 3 actions (`commit`, `revert`) stubbed
+
+### Frontend — Route (`frontend/src/app/[locale]/play/page.tsx`)
+- Add `/play` route: minimal shell with inline "Load Easy Puzzle" button;
+  Phase 1 will replace with `PlayLayout + PlayGrid + PlayRack + PlayPuzzleControls`
+
+### Frontend — i18n
+- Add `play.*` namespace (40 keys) to `en.json` and `de.json`:
+  navigation, validation errors, aria labels, control bar labels, commit/revert UI
+
+### Frontend — Tests
+- Add `frontend/src/__tests__/lib/grid-utils.test.ts`: 20 tests (Phase 0 happy paths +
+  edge cases) + Phase 5 scaffolds (`it.todo`)
+- Add `frontend/src/__tests__/lib/play-validation.test.ts`: 16 tests covering valid/invalid
+  runs and groups, joker handling, incomplete sets (<3 tiles, no reason string)
+- Add `frontend/src/__tests__/store/play.test.ts`: 14 Phase-0 tests (initial state,
+  loadPuzzle, error handling, simple actions) + Phase 2/3 scaffolds (`it.todo`)
+
+---
+
 ## [0.33.0] — 2026-04-01 — UI rework: set-centric solution view (ui_rework phases 1–4)
 
 ### Backend — Per-set change manifest (`backend/api/`, `backend/solver/generator/set_changes.py`)
