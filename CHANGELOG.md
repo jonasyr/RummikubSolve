@@ -5,6 +5,225 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.39.0] — 2026-04-09 — Play Mode Phase 5.4/6.1/6.3–6.6 + Docker fixes
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Auto-grow grid: placing a tile in the last visible row automatically adds workspace rows
+  (capped at `GRID_MAX_ROWS = 24`). Grid only grows during placement; `revert` recomputes
+  rows from the committed snapshot so the grid can shrink back to fit.
+- `setInteractionMode` now persists the chosen mode to `localStorage("play:interactionMode")`.
+
+### Frontend — Pages
+- **Play page**: hydrates `interactionMode` from localStorage on mount; warns before
+  navigating away when there are uncommitted changes (`beforeunload` event).
+- **Solver page**: "Play Mode →" link added to the header (locale-aware).
+
+### Frontend — Components
+- **SolvedBanner**: 🎉 emojis + `pop-in` scale/fade entrance animation.
+
+### Frontend — i18n
+- Added `page.toPlay` key (en + de).
+
+### Docker
+- Fixed health checks: replaced `curl` (not installed in `python:3.12-slim` or
+  `node:20-alpine`) with Python `urllib` (backend) and `wget` (frontend). Without
+  this fix `depends_on: condition: service_healthy` would never be satisfied and
+  nginx would fail to start.
+- Added named volume `puzzle_data` for the backend SQLite puzzle pool DB so
+  pregenerated puzzles survive container rebuilds.
+
+### Tests
+- `play.test.ts`: +2 auto-grow tests (AAA, happy-path).
+- **Total: 197 passing, 7 todo, 0 failed**
+
+### Versions
+- `frontend/package.json` and `backend/pyproject.toml` bumped to **0.39.0**.
+
+---
+
+## [0.38.0] — 2026-04-09 — Play Mode: run order enforcement & commit feedback
+
+### Frontend — Validation (`frontend/src/lib/play-validation.ts`)
+- `validateAsRun` now requires non-joker tiles to be placed in strictly ascending
+  left-to-right order. Placing [6, 8, 7] is now invalid ("runNotOrdered"). Previously
+  the validator sorted tiles before checking, so any permutation was accepted.
+
+### Frontend — Components
+- **ControlBar**: commit button flashes green and shows "Committed!" for 2 s on success.
+
+### Frontend — i18n
+- Added `play.validation.runNotOrdered` (en + de) and `play.commitSuccess` (en + de).
+
+### Tests
+- `play-validation.test.ts`: +1 test confirming [6, 8, 7] is invalid with `runNotOrdered`.
+- **Total: 195 passing, 7 todo, 0 failed**
+
+---
+
+## [0.37.0] — 2026-04-09 — Play Mode Phase 3: commit/revert & solved state
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Implement `commit`: three sequential validation gates — (0) tile conservation check
+  using `validateTileConservation`; (1) no ≥3-tile sets with failing validation; (2) no
+  orphan 1-2 tile groups. On success: advances `committedSnapshot`, clears `past`/`future`,
+  clears `selectedTile`. Returns typed `CommitResult`.
+- Implement `revert`: restores `grid` and `rack` from `committedSnapshot` (shallow copies),
+  recomputes `detectedSets` and `isSolved`, clears `past`/`future`/`selectedTile`.
+- Extend `CommitResult` type with `"tile_conservation"` reason.
+
+### Frontend — Components
+- **ControlBar**: commit button now disabled (with tooltip) when the board has invalid or
+  incomplete sets. Derived from `detectedSets` without calling `commit()` proactively.
+- **SolvedBanner** (new): fixed-position overlay rendered when `isSolved` is true. Displays
+  solved message and elapsed solve time. Self-contained — reads from store, no props.
+
+### Frontend — Page
+- `play/page.tsx`: renders `<SolvedBanner />` as the last child of `PlayLayout`.
+
+### Tests
+- `play.test.ts`: 6 Phase 3 todos converted to real tests + 4 additional = 10 new tests
+- `SolvedBanner.test.tsx`: 3 new tests (hidden/visible/time display)
+- **Total: 194 passing, 7 todo (grid-utils), 0 failed**
+
+---
+
+## [0.36.1] — 2026-04-09 — Layout hotfix: touch scrollability & grid containment
+
+### Fixed
+- **Play mode — board scrollable on all touch devices:** Changed `touch-action: none` to
+  `touch-action: pan-x pan-y` on `.play-surface`. The board had `overflow: auto` but
+  `touch-action: none` silently blocked browser pan gestures, making the 800 px-wide grid
+  inaccessible on phones and tablets without a hardware mouse.
+- **Play mode — grid stays within CSS grid track:** Added `min-height: 0` to both the board
+  and rack grid-area divs. Without it, CSS grid items with `min-height: auto` grow beyond
+  their `1fr` track and `overflow: auto` never triggers. This caused the bottom rows to
+  overflow the viewport on iPad landscape instead of scrolling.
+- **Known dev-only artifact:** The Next.js dev overlay button ("N") is fixed at the
+  bottom-left corner and overlaps the first rack tile in iPad portrait orientation. This only
+  appears in development mode; production builds are unaffected.
+
+---
+
+## [0.36.0] — 2026-04-09 — Play Mode Phase 2: tap interaction & undo/redo
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Implement `tapRackTile`: toggle rack tile selection; tapping same tile deselects, tapping
+  different tile switches selection
+- Implement `tapCell`: state machine — no selection + occupied cell = pick up; no selection +
+  empty cell = no-op; selection + occupied same cell = deselect; selection + occupied other
+  cell = switch; selection + empty cell = place (calls `placeTile` helper)
+- Implement `returnToRack`: removes rack-source grid tile from grid and appends to rack;
+  board-source tiles are no-ops (permanently locked)
+- Implement `undo`: pops past stack, pushes current state to future stack, restores snapshot,
+  recomputes derived state, clears selection
+- Implement `redo`: pops future stack, pushes current state to past stack, restores snapshot,
+  recomputes derived state, clears selection
+- Add private `takeSnapshot` helper: shallow-copies grid Map and rack array
+- Add private `placeTile` helper: handles rack-by-index removal and grid-tile moves; preserves
+  `PlacedTile.source`; pushes undo snapshot; starts `solveStartTime` on first placement;
+  sets `solveEndTime` if `checkSolved` returns true; clears redo stack on new action
+- Fix import: add `checkSolved` to `grid-utils` import
+
+### Frontend — Component (`frontend/src/components/play/ControlBar.tsx`)
+- Add conditional "Return to Rack" button: visible only when a rack-source grid tile is
+  selected (derived via `cellKey` lookup on `selectedTile`); calls `returnToRack` action
+
+### Frontend — Tests (`frontend/src/__tests__/store/play.test.ts`)
+- Implement all 17 Phase 2 `it.todo` scaffolds: `tapRackTile` (3), `tapCell` (7),
+  `returnToRack` (2), `undo/redo` (5); each describe block has a shared `setupPuzzle`
+  `beforeEach` (board row 0 = red 5/6/7, rack = red 1 + blue 2)
+- Test count: 164 → **181 passing**, 30 → **13 todo**, 0 failed
+
+### Frontend — e2e (`frontend/e2e/play_interact.spec.ts`)
+- Add 7 new Playwright specs: rack tile selection ring, deselect on double-tap, place on
+  empty cell, pick up grid tile, move grid tile, undo placement, return-to-rack flow
+- All specs mock `**/api/puzzle` — backend not required
+
+---
+
+## [0.35.0] — 2026-04-09 — Play Mode Phase 1: grid rendering & iPad layout
+
+### Frontend — Components (`frontend/src/components/play/`)
+- Add `PlayLayout.tsx`: CSS Grid shell with responsive grid-areas (`controls / board / rack`);
+  portrait = stacked, landscape ≥1024px = rack column beside board
+- Add `ControlBar.tsx`: Undo / Redo / Commit / Revert + validation toggle;
+  all buttons `h-11` (44px touch target); Undo/Redo disabled when history is empty;
+  back-link to solver via `useLocale`
+- Add `PlayGrid.tsx`: 2-D grid renderer — iterates `rows × cols` cells, renders
+  `GridCell` for each position, renders `SetOverlay` after cells (DOM-order stacking)
+- Add `GridCell.tsx`: single memoised cell (`React.memo`); occupied cells render `Tile`;
+  `data-slot-cell` attribute used as e2e selector anchor;
+  selection ring (`ring-blue-500`) and drop-target styling (`border-dashed`)
+- Add `SetOverlay.tsx`: absolute-positioned amber / green / red validation overlay;
+  pixel formula: `width = tiles × cellPx − CELL_GAP_PX`; `pointer-events-none`;
+  shows type label for valid sets, i18n error string for invalid sets
+- Add `PlayRack.tsx`: scrollable rack panel (`play-rack-scroll`);
+  portrait = horizontal wrap, landscape = vertical column; calls `tapRackTile` stub
+- Add `PlayPuzzleControls.tsx`: standalone puzzle loader bound to `usePlayStore`
+  (not `useGameStore`); 5 difficulty buttons; AbortController cleanup on unmount
+
+### Frontend — CSS (`frontend/src/app/globals.css`)
+- Add `.play-surface`: `touch-action:none`, `user-select:none`, `-webkit-*` variants
+- Add `.play-rack-scroll`: `touch-action:pan-y`, `-webkit-overflow-scrolling:touch`
+- Add `.play-layout`: `100dvh` CSS Grid with `safe-area-inset-*` padding;
+  responsive `@media (min-width:1024px)` rule for landscape two-column layout
+
+### Frontend — Route (`frontend/src/app/[locale]/play/page.tsx`)
+- Replace Phase 0 stub with fully wired `PlayLayout + ControlBar + PlayPuzzleControls
+  + PlayGrid + PlayRack`; page owns all `gridArea` assignments
+
+### Frontend — i18n
+- Add `getPuzzle` and `loading` keys to `play.*` namespace in `en.json` and `de.json`
+
+### Frontend — Tests
+- Add `frontend/src/__tests__/components/play/PlayGrid.test.tsx`: 8 unit tests
+  (cell count, occupied rendering, empty rendering, selection ring, drop-target styling,
+  no-selection styling, click callback, touch-hardening class)
+- Add `frontend/e2e/play_load_puzzle.spec.ts`: 5 Playwright specs (chromium +
+  mobile-chrome + mobile-safari): load prompt, puzzle load via mocked API,
+  four control buttons visible, 44px touch target, play-surface class present
+
+---
+
+## [0.34.0] — 2026-04-09 — Play Mode Phase 0: route, store, and algorithms
+
+### Frontend — Types (`frontend/src/types/play.ts`)
+- Add `PlacedTile`, `CellKey`, `cellKey()`, `DetectedSet`, `SetValidation`,
+  `TileSelection`, `PlaySnapshot`, `DragState` interfaces
+- Add grid constants: `GRID_COLS=16`, `GRID_MIN_ROWS=6`, `GRID_MAX_ROWS=24`,
+  `GRID_WORKSPACE_ROWS=3`, `UNDO_MAX=50`, `CELL_SIZE_PX=48`, `CELL_GAP_PX=2`
+
+### Frontend — Library
+- Add `frontend/src/lib/grid-utils.ts`: `puzzleToGrid`, `detectSets`, `checkSolved`,
+  `validateTileConservation`; Phase-5 implementations `insertTileIntoRow`, `compactGrid`
+- Add `frontend/src/lib/play-validation.ts`: `validateTileGroup`, private `validateAsRun`,
+  `validateAsGroup`; all validation error reasons are `play.validation.*` i18n keys
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Add isolated `usePlayStore` (Zustand); fully separated from `useGameStore` (zero coupling)
+- `loadPuzzle` implemented: calls `fetchPuzzle`, maps puzzle to grid, detects sets,
+  initialises `committedSnapshot`; mirrors `game.ts` abort/error/loading-guard pattern
+- Phase 2 actions (`tapCell`, `tapRackTile`, `undo`, `redo`, `returnToRack`) stubbed as no-ops
+- Phase 3 actions (`commit`, `revert`) stubbed
+
+### Frontend — Route (`frontend/src/app/[locale]/play/page.tsx`)
+- Add `/play` route: minimal shell with inline "Load Easy Puzzle" button;
+  Phase 1 will replace with `PlayLayout + PlayGrid + PlayRack + PlayPuzzleControls`
+
+### Frontend — i18n
+- Add `play.*` namespace (40 keys) to `en.json` and `de.json`:
+  navigation, validation errors, aria labels, control bar labels, commit/revert UI
+
+### Frontend — Tests
+- Add `frontend/src/__tests__/lib/grid-utils.test.ts`: 20 tests (Phase 0 happy paths +
+  edge cases) + Phase 5 scaffolds (`it.todo`)
+- Add `frontend/src/__tests__/lib/play-validation.test.ts`: 16 tests covering valid/invalid
+  runs and groups, joker handling, incomplete sets (<3 tiles, no reason string)
+- Add `frontend/src/__tests__/store/play.test.ts`: 14 Phase-0 tests (initial state,
+  loadPuzzle, error handling, simple actions) + Phase 2/3 scaffolds (`it.todo`)
+
+---
+
 ## [0.33.0] — 2026-04-01 — UI rework: set-centric solution view (ui_rework phases 1–4)
 
 ### Backend — Per-set change manifest (`backend/api/`, `backend/solver/generator/set_changes.py`)

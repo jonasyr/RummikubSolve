@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { useGameStore } from "../../store/game";
 import { solvePuzzle } from "../../lib/api";
 import RackSection from "../../components/RackSection";
@@ -14,6 +15,7 @@ import LocaleSwitcher from "../../components/LocaleSwitcher";
 
 export default function Home() {
   const t = useTranslations("page");
+  const locale = useLocale();
 
   const boardSets = useGameStore((s) => s.boardSets);
   const rack = useGameStore((s) => s.rack);
@@ -81,6 +83,12 @@ export default function Home() {
       <div className="flex flex-wrap items-center justify-between gap-y-2">
         <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">RummikubSolve</h1>
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          <Link
+            href={`/${locale}/play`}
+            className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 whitespace-nowrap"
+          >
+            {t("toPlay")}
+          </Link>
           <LocaleSwitcher />
           <label className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400 cursor-pointer whitespace-nowrap">
             <input

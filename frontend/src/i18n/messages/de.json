@@ -9,6 +9,7 @@
   "page": {
     "firstTurn": "Erster Zug",
     "reset": "Zurücksetzen",
+    "toPlay": "Spielmodus \u2192",
     "resetConfirm": "Alles zurücksetzen? Alle Steine und Sätze werden gelöscht.",
     "solve": "Lösen",
     "solving": "Wird gelöst…",
@@ -160,5 +161,52 @@
   },
   "localeSwitcher": {
     "label": "Sprache"
+  },
+  "play": {
+    "title": "Spielmodus",
+    "loadPuzzlePrompt": "Lade ein R\u00e4tsel, um zu beginnen.",
+    "solved": "R\u00e4tsel gel\u00f6st!",
+    "solveTime": "Gel\u00f6st in {time}",
+    "compareWithSolver": "Mit optimaler L\u00f6sung vergleichen",
+    "undo": "R\u00fckg\u00e4ngig",
+    "redo": "Wiederholen",
+    "commit": "Best\u00e4tigen",
+    "commitSuccess": "Gespeichert!",
+    "revert": "Zur\u00fccksetzen",
+    "revertConfirm": "Zum letzten gespeicherten Stand zur\u00fccksetzen? Alle \u00c4nderungen gehen verloren.",
+    "getPuzzle": "Puzzle holen",
+    "loading": "L\u00e4dt\u2026",
+    "modeTap": "Tippen",
+    "modeDrag": "Ziehen",
+    "showValidation": "Hinweise zeigen",
+    "hideValidation": "Hinweise verbergen",
+    "returnToRack": "Zur\u00fcck aufs Gestell",
+    "cannotReturnBoardTile": "Tischsteine m\u00fcssen auf dem Tisch bleiben.",
+    "commitBlocked": {
+      "invalidSets": "Ung\u00fcltige Gruppen korrigieren, bevor du best\u00e4tigst.",
+      "incompleteSets": "Alle Gruppen vervollst\u00e4ndigen (min. 3 Steine), bevor du best\u00e4tigst."
+    },
+    "validation": {
+      "invalid": "Ung\u00fcltige Gruppe",
+      "runMixedColors": "Folge: alle Steine m\u00fcssen dieselbe Farbe haben",
+      "runDuplicateNumbers": "Folge: keine doppelten Zahlen",
+      "runGapsTooLarge": "Folge: nicht genug Joker f\u00fcr die L\u00fccken",
+      "runOutOfRange": "Folge: Steine passen nicht in den Bereich 1\u201313",
+      "runNotOrdered": "Folge: Steine m\u00fcssen in aufsteigender Reihenfolge gelegt werden",
+      "runTooLong": "Folge: maximal 13 Steine",
+      "groupMixedNumbers": "Gruppe: alle Steine m\u00fcssen dieselbe Zahl haben",
+      "groupDuplicateColors": "Gruppe: keine doppelten Farben",
+      "groupTooManyJokers": "Gruppe: zu viele Joker",
+      "groupTooLarge": "Gruppe: maximal 4 Steine"
+    },
+    "nav": {
+      "toSolver": "\u2190 L\u00f6ser",
+      "toPlay": "Spielmodus \u2192"
+    },
+    "aria": {
+      "emptyCell": "Leeres Feld, Zeile {row}, Spalte {col}",
+      "occupiedCell": "{tile} in Zeile {row}, Spalte {col}",
+      "gridRegion": "R\u00e4tsel-Spielfeld"
+    }
   }
 }

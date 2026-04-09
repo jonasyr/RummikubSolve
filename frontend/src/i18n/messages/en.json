@@ -9,6 +9,7 @@
   "page": {
     "firstTurn": "First turn",
     "reset": "Reset",
+    "toPlay": "Play Mode \u2192",
     "resetConfirm": "Reset everything? All tiles and sets will be cleared.",
     "solve": "Solve",
     "solving": "Solving…",
@@ -160,5 +161,52 @@
   },
   "localeSwitcher": {
     "label": "Language"
+  },
+  "play": {
+    "title": "Play Mode",
+    "loadPuzzlePrompt": "Load a puzzle to start playing.",
+    "solved": "Puzzle Solved!",
+    "solveTime": "Solved in {time}",
+    "compareWithSolver": "Compare with optimal solution",
+    "undo": "Undo",
+    "redo": "Redo",
+    "commit": "Commit",
+    "commitSuccess": "Committed!",
+    "revert": "Revert",
+    "revertConfirm": "Revert to last committed state? All changes since then will be lost.",
+    "getPuzzle": "Get Puzzle",
+    "loading": "Loading\u2026",
+    "modeTap": "Tap",
+    "modeDrag": "Drag",
+    "showValidation": "Show hints",
+    "hideValidation": "Hide hints",
+    "returnToRack": "Return to rack",
+    "cannotReturnBoardTile": "Board tiles must stay on the table.",
+    "commitBlocked": {
+      "invalidSets": "Fix invalid sets before committing.",
+      "incompleteSets": "Complete all sets (min 3 tiles) before committing."
+    },
+    "validation": {
+      "invalid": "Invalid set",
+      "runMixedColors": "Run: all tiles must be the same color",
+      "runDuplicateNumbers": "Run: no duplicate numbers",
+      "runGapsTooLarge": "Run: not enough jokers to fill gaps",
+      "runOutOfRange": "Run: tiles don't fit in 1\u201313 range",
+      "runNotOrdered": "Run: tiles must be placed in ascending order",
+      "runTooLong": "Run: maximum 13 tiles",
+      "groupMixedNumbers": "Group: all tiles must have the same number",
+      "groupDuplicateColors": "Group: no duplicate colors",
+      "groupTooManyJokers": "Group: too many jokers",
+      "groupTooLarge": "Group: maximum 4 tiles"
+    },
+    "nav": {
+      "toSolver": "\u2190 Solver",
+      "toPlay": "Play Mode \u2192"
+    },
+    "aria": {
+      "emptyCell": "Empty cell, row {row}, column {col}",
+      "occupiedCell": "{tile} at row {row}, column {col}",
+      "gridRegion": "Puzzle board grid"
+    }
   }
 }
