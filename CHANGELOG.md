@@ -5,6 +5,33 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.37.0] — 2026-04-09 — Play Mode Phase 3: commit/revert & solved state
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Implement `commit`: three sequential validation gates — (0) tile conservation check
+  using `validateTileConservation`; (1) no ≥3-tile sets with failing validation; (2) no
+  orphan 1-2 tile groups. On success: advances `committedSnapshot`, clears `past`/`future`,
+  clears `selectedTile`. Returns typed `CommitResult`.
+- Implement `revert`: restores `grid` and `rack` from `committedSnapshot` (shallow copies),
+  recomputes `detectedSets` and `isSolved`, clears `past`/`future`/`selectedTile`.
+- Extend `CommitResult` type with `"tile_conservation"` reason.
+
+### Frontend — Components
+- **ControlBar**: commit button now disabled (with tooltip) when the board has invalid or
+  incomplete sets. Derived from `detectedSets` without calling `commit()` proactively.
+- **SolvedBanner** (new): fixed-position overlay rendered when `isSolved` is true. Displays
+  solved message and elapsed solve time. Self-contained — reads from store, no props.
+
+### Frontend — Page
+- `play/page.tsx`: renders `<SolvedBanner />` as the last child of `PlayLayout`.
+
+### Tests
+- `play.test.ts`: 6 Phase 3 todos converted to real tests + 4 additional = 10 new tests
+- `SolvedBanner.test.tsx`: 3 new tests (hidden/visible/time display)
+- **Total: 194 passing, 7 todo (grid-utils), 0 failed**
+
+---
+
 ## [0.36.1] — 2026-04-09 — Layout hotfix: touch scrollability & grid containment
 
 ### Fixed

@@ -408,14 +408,154 @@ describe("undo / redo — Phase 2", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Phase 3 — commit / revert scaffolds
+// Phase 3 — commit / revert
 // ---------------------------------------------------------------------------
 
-describe("commit / revert — Phase 3", () => {
-  it.todo("commit with all valid ≥3-tile sets returns { ok: true }");
-  it.todo("commit blocked when any set is invalid: returns { ok: false, reason: 'invalid_sets' }");
-  it.todo("commit blocked when any set has <3 tiles: returns { ok: false, reason: 'incomplete_sets' }");
-  it.todo("commit runs validateTileConservation and blocks if tiles are missing");
-  it.todo("revert restores grid and rack to the last committedSnapshot");
-  it.todo("isSolved becomes true when rack empty and all sets valid after placement");
+// Setup A: valid board, no rack tiles (commit should succeed immediately)
+const setupValidBoard = async () => {
+  mockFetchPuzzle.mockResolvedValueOnce(
+    makePuzzleResponse([[redTile(5), redTile(6), redTile(7)]]),
+  );
+  await store().loadPuzzle({ difficulty: "easy" });
+};
+
+// Setup B: valid board + rack tiles
+const setupBoardAndRack = async () => {
+  mockFetchPuzzle.mockResolvedValueOnce(
+    makePuzzleResponse(
+      [[redTile(5), redTile(6), redTile(7)]],
+      [redTile(1), blueTile(2)],
+    ),
+  );
+  await store().loadPuzzle({ difficulty: "easy" });
+};
+
+// Setup C: empty board, rack only (for isSolved test)
+const setupRackOnly = async () => {
+  mockFetchPuzzle.mockResolvedValueOnce(
+    makePuzzleResponse([], [redTile(5), redTile(6), redTile(7)]),
+  );
+  await store().loadPuzzle({ difficulty: "easy" });
+};
+
+describe("commit — Phase 3", () => {
+  it("happy path: all valid ≥3-tile sets → returns { ok: true }", async () => {
+    await setupValidBoard();
+    const result = store().commit();
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("blocked when any set is invalid: returns { ok: false, reason: 'invalid_sets' }", async () => {
+    // Board: red5,red6,red7. Rack: red1, blue2.
+    // Place blue2 at (0,3) → row 0 = [red5,red6,red7,blue2] (mixed colors = invalid run)
+    await setupBoardAndRack();
+    store().tapRackTile(1);           // select blue 2
+    store().tapCell(0, 3);            // place adjacent to red run
+    const result = store().commit();
+    expect(result).toEqual({ ok: false, reason: "invalid_sets" });
+  });
+
+  it("blocked when any set has <3 tiles: returns { ok: false, reason: 'incomplete_sets' }", async () => {
+    // Move red5 out of the run → row 0 = [red6,red7] (2 tiles = incomplete)
+    await setupValidBoard();
+    store().tapCell(0, 0);            // pick up red 5
+    store().tapCell(2, 0);            // place on empty row 2
+    // row 0 now has 2 tiles, row 2 has 1 tile — both incomplete
+    const result = store().commit();
+    expect(result).toEqual({ ok: false, reason: "incomplete_sets" });
+  });
+
+  it("runs validateTileConservation: blocks when tiles are missing", async () => {
+    await setupValidBoard();
+    // Artificially drain grid and rack to simulate data corruption
+    usePlayStore.setState({ grid: new Map(), rack: [] });
+    const result = store().commit();
+    expect(result).toEqual({ ok: false, reason: "tile_conservation" });
+  });
+
+  it("successful commit clears past and future stacks", async () => {
+    await setupValidBoard();
+    // Seed past/future manually to confirm they are cleared
+    usePlayStore.setState({
+      past:   [{ cells: new Map(), rack: [] }],
+      future: [{ cells: new Map(), rack: [] }],
+    });
+    store().commit();
+    expect(store().past).toHaveLength(0);
+    expect(store().future).toHaveLength(0);
+  });
+
+  it("successful commit advances committedSnapshot to current state", async () => {
+    // Board: red5,6,7. Rack: red8.
+    // Placing red8 at (0,3) extends the run to 4 tiles — still valid, rack empties.
+    mockFetchPuzzle.mockResolvedValueOnce(
+      makePuzzleResponse([[redTile(5), redTile(6), redTile(7)]], [redTile(8)]),
+    );
+    await store().loadPuzzle({ difficulty: "easy" });
+    expect(store().committedSnapshot.rack).toHaveLength(1); // initial snapshot has red8
+
+    store().tapRackTile(0);
+    store().tapCell(0, 3);            // extend run: red5,6,7,8 — valid 4-tile run
+    expect(store().rack).toHaveLength(0);
+
+    const result = store().commit();
+    expect(result).toEqual({ ok: true });
+    // Committed snapshot should reflect post-placement state
+    expect(store().committedSnapshot.rack).toHaveLength(0);
+    expect(store().committedSnapshot.cells.has("0:3")).toBe(true);
+  });
+});
+
+describe("revert — Phase 3", () => {
+  it("restores grid and rack to the last committedSnapshot", async () => {
+    await setupBoardAndRack();
+    // Initial committedSnapshot = loadPuzzle state (3 board tiles, 2 rack tiles)
+    store().tapRackTile(0);
+    store().tapCell(1, 0);           // place red 1 — now 1 rack tile
+    expect(store().rack).toHaveLength(1);
+
+    store().revert();
+    expect(store().rack).toHaveLength(2);       // rack restored
+    expect(store().grid.has("1:0")).toBe(false); // placed tile removed
+    expect(store().grid.has("0:0")).toBe(true);  // board tile intact
+  });
+
+  it("clears past and future stacks", async () => {
+    await setupBoardAndRack();
+    store().tapRackTile(0);
+    store().tapCell(1, 0);           // creates 1 past entry
+    expect(store().past).toHaveLength(1);
+
+    store().revert();
+    expect(store().past).toHaveLength(0);
+    expect(store().future).toHaveLength(0);
+  });
+
+  it("clears selectedTile", async () => {
+    await setupBoardAndRack();
+    store().tapCell(0, 0);           // select board tile
+    expect(store().selectedTile).not.toBeNull();
+
+    store().revert();
+    expect(store().selectedTile).toBeNull();
+  });
+});
+
+describe("isSolved — Phase 3", () => {
+  it("becomes true when rack is empty and all sets are valid after placement", async () => {
+    await setupRackOnly();
+    expect(store().isSolved).toBe(false);
+
+    // Place all three rack tiles to form a valid run in row 0
+    store().tapRackTile(0); store().tapCell(0, 0); // red 5
+    store().tapRackTile(0); store().tapCell(0, 1); // red 6 (now index 0)
+    store().tapRackTile(0); store().tapCell(0, 2); // red 7 (now index 0)
+
+    expect(store().rack).toHaveLength(0);
+    expect(store().isSolved).toBe(true);
+
+    // Commit should also succeed at this point
+    const result = store().commit();
+    expect(result).toEqual({ ok: true });
+  });
 });

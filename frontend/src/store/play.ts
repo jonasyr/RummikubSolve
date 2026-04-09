@@ -8,7 +8,7 @@
 import { create } from "zustand";
 
 import { fetchPuzzle } from "../lib/api";
-import { puzzleToGrid, detectSets, checkSolved } from "../lib/grid-utils";
+import { puzzleToGrid, detectSets, checkSolved, validateTileConservation } from "../lib/grid-utils";
 import type {
   CellKey,
   DetectedSet,
@@ -25,7 +25,7 @@ import type { PuzzleRequest, PuzzleResponse, TileInput } from "../types/api";
 
 export type CommitResult =
   | { ok: true }
-  | { ok: false; reason: "invalid_sets" | "incomplete_sets" };
+  | { ok: false; reason: "invalid_sets" | "incomplete_sets" | "tile_conservation" };
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -311,9 +311,55 @@ export const usePlayStore = create<PlayState>((set, get) => ({
       };
     }),
 
-  // Phase 3 — stub replaced in Phase 3 implementation
-  commit: () => ({ ok: false, reason: "invalid_sets" } as const),
-  revert: () => {},
+  commit: () => {
+    const state = get();
+
+    // Gate 0: tile conservation — only checked when a puzzle is loaded
+    // Defensive guard: ensures no tiles were lost or duplicated by store logic bugs.
+    if (
+      state.puzzle &&
+      !validateTileConservation(state.puzzle, state.grid, state.rack)
+    ) {
+      return { ok: false as const, reason: "tile_conservation" as const };
+    }
+
+    // Gate 1: no set of ≥3 tiles that fails validation
+    const hasInvalid = state.detectedSets.some(
+      (ds) => ds.tiles.length >= 3 && !ds.validation.isValid,
+    );
+    if (hasInvalid) return { ok: false as const, reason: "invalid_sets" as const };
+
+    // Gate 2: no orphan groups of 1 or 2 tiles
+    const hasIncomplete = state.detectedSets.some(
+      (ds) => ds.tiles.length > 0 && ds.tiles.length < 3,
+    );
+    if (hasIncomplete) return { ok: false as const, reason: "incomplete_sets" as const };
+
+    // All gates passed — advance the committed snapshot and clear undo history
+    set({
+      committedSnapshot: takeSnapshot(state),
+      past: [],
+      future: [],
+      selectedTile: null,
+    });
+
+    return { ok: true as const };
+  },
+
+  revert: () =>
+    set((state) => {
+      const snap = state.committedSnapshot;
+      const detected = detectSets(snap.cells, state.gridRows, state.gridCols);
+      return {
+        grid: new Map(snap.cells),
+        rack: [...snap.rack],
+        detectedSets: detected,
+        isSolved: checkSolved(snap.cells, snap.rack, detected),
+        past: [],
+        future: [],
+        selectedTile: null,
+      };
+    }),
 
   setInteractionMode: (mode) => set({ interactionMode: mode }),
   toggleValidation: () => set((s) => ({ showValidation: !s.showValidation })),

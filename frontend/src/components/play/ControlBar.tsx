@@ -20,12 +20,26 @@ export default function ControlBar() {
   const revert         = usePlayStore((s) => s.revert);
   const returnToRack   = usePlayStore((s) => s.returnToRack);
   const toggleValidation = usePlayStore((s) => s.toggleValidation);
+  const detectedSets   = usePlayStore((s) => s.detectedSets);
+  const puzzle         = usePlayStore((s) => s.puzzle);
 
   // Show "Return to Rack" only when a rack-source grid tile is selected
   const canReturn: boolean = (() => {
     if (selectedTile?.source !== "grid") return false;
     const placed = grid.get(cellKey(selectedTile.row, selectedTile.col));
     return placed?.source === "rack";
+  })();
+
+  // Translate the commit-blocked reason to a tooltip string (null = not blocked)
+  const commitTitle: string | null = (() => {
+    if (!puzzle) return null;
+    if (detectedSets.some((ds) => ds.tiles.length >= 3 && !ds.validation.isValid)) {
+      return t("commitBlocked.invalidSets");
+    }
+    if (detectedSets.some((ds) => ds.tiles.length > 0 && ds.tiles.length < 3)) {
+      return t("commitBlocked.incompleteSets");
+    }
+    return null;
   })();
 
   const btnBase =
@@ -69,10 +83,14 @@ export default function ControlBar() {
           {showValidation ? t("hideValidation") : t("showValidation")}
         </button>
         <button
-          className="h-11 px-3 rounded text-sm font-medium bg-blue-600 text-white hover:bg-blue-700"
-          onClick={() => {
-            commit();
-          }}
+          className={`h-11 px-3 rounded text-sm font-medium text-white ${
+            commitTitle
+              ? "bg-blue-600/40 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700"
+          }`}
+          onClick={commit}
+          disabled={!!commitTitle}
+          title={commitTitle ?? undefined}
         >
           {t("commit")}
         </button>

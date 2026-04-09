@@ -8,6 +8,7 @@ import ControlBar from "../../../components/play/ControlBar";
 import PlayPuzzleControls from "../../../components/play/PlayPuzzleControls";
 import PlayGrid from "../../../components/play/PlayGrid";
 import PlayRack from "../../../components/play/PlayRack";
+import SolvedBanner from "../../../components/play/SolvedBanner";
 
 export default function PlayPage() {
   const t = useTranslations("play");
@@ -53,6 +54,8 @@ export default function PlayPage() {
 
       {/* rack grid area */}
       <PlayRack />
+
+      <SolvedBanner />
     </PlayLayout>
   );
 }
