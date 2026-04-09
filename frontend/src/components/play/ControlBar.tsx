@@ -3,19 +3,30 @@
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { usePlayStore } from "../../store/play";
+import { cellKey } from "../../types/play";
 
 export default function ControlBar() {
   const t = useTranslations("play");
   const locale = useLocale();
 
-  const past = usePlayStore((s) => s.past);
-  const future = usePlayStore((s) => s.future);
+  const past           = usePlayStore((s) => s.past);
+  const future         = usePlayStore((s) => s.future);
   const showValidation = usePlayStore((s) => s.showValidation);
-  const undo = usePlayStore((s) => s.undo);
-  const redo = usePlayStore((s) => s.redo);
-  const commit = usePlayStore((s) => s.commit);
-  const revert = usePlayStore((s) => s.revert);
+  const selectedTile   = usePlayStore((s) => s.selectedTile);
+  const grid           = usePlayStore((s) => s.grid);
+  const undo           = usePlayStore((s) => s.undo);
+  const redo           = usePlayStore((s) => s.redo);
+  const commit         = usePlayStore((s) => s.commit);
+  const revert         = usePlayStore((s) => s.revert);
+  const returnToRack   = usePlayStore((s) => s.returnToRack);
   const toggleValidation = usePlayStore((s) => s.toggleValidation);
+
+  // Show "Return to Rack" only when a rack-source grid tile is selected
+  const canReturn: boolean = (() => {
+    if (selectedTile?.source !== "grid") return false;
+    const placed = grid.get(cellKey(selectedTile.row, selectedTile.col));
+    return placed?.source === "rack";
+  })();
 
   const btnBase =
     "h-11 px-3 rounded text-sm font-medium border border-gray-300 dark:border-gray-600 " +
@@ -46,6 +57,12 @@ export default function ControlBar() {
           {t("redo")}
         </button>
       </div>
+
+      {canReturn && (
+        <button className={btnBase} onClick={returnToRack}>
+          {t("returnToRack")}
+        </button>
+      )}
 
       <div className="flex gap-1 ml-auto">
         <button className={btnBase} onClick={toggleValidation}>

@@ -240,36 +240,171 @@ describe("reset", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Phase 2 — tap / undo / redo scaffolds
+// Phase 2 — tap / undo / redo
 // ---------------------------------------------------------------------------
 
+// Shared puzzle setup for all Phase 2 tests:
+//   Board row 0: red 5, red 6, red 7  (source: "board")
+//   Rack:        red 1, blue 2
+
+const setupPuzzle = async () => {
+  mockFetchPuzzle.mockResolvedValueOnce(
+    makePuzzleResponse(
+      [[redTile(5), redTile(6), redTile(7)]],
+      [redTile(1), blueTile(2)],
+    ),
+  );
+  await store().loadPuzzle({ difficulty: "easy" });
+};
+
 describe("tapRackTile — Phase 2", () => {
-  it.todo("selects tile (sets selectedTile to { source: 'rack', index })");
-  it.todo("tapping already-selected tile deselects it");
-  it.todo("tapping a different rack tile switches selection");
+  beforeEach(setupPuzzle);
+
+  it("selects tile (sets selectedTile to { source: 'rack', index })", () => {
+    store().tapRackTile(0);
+    expect(store().selectedTile).toEqual({ source: "rack", index: 0 });
+  });
+
+  it("tapping already-selected tile deselects it", () => {
+    store().tapRackTile(0);
+    store().tapRackTile(0);
+    expect(store().selectedTile).toBeNull();
+  });
+
+  it("tapping a different rack tile switches selection", () => {
+    store().tapRackTile(0);
+    store().tapRackTile(1);
+    expect(store().selectedTile).toEqual({ source: "rack", index: 1 });
+  });
 });
 
 describe("tapCell — Phase 2", () => {
-  it.todo("happy path: places selected rack tile onto empty cell");
-  it.todo("removes placed tile from rack array");
-  it.todo("placed tile appears in grid at correct cellKey");
-  it.todo("tapping occupied cell with no selection picks it up");
-  it.todo("tapping a different occupied cell switches selection");
-  it.todo("moving a grid tile preserves its source property");
-  it.todo("board-source tile: returnToRack is a no-op");
+  beforeEach(setupPuzzle);
+
+  it("happy path: places selected rack tile onto empty cell", () => {
+    store().tapRackTile(0);          // select red 1
+    store().tapCell(1, 0);           // row 1 is empty
+    expect(store().grid.get("1:0")?.tile.number).toBe(1);
+  });
+
+  it("removes placed tile from rack array", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);
+    expect(store().rack).toHaveLength(1);
+    expect(store().rack[0].color).toBe("blue"); // only blue 2 remains
+  });
+
+  it("placed tile appears in grid at correct cellKey", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);
+    const placed = store().grid.get("1:0");
+    expect(placed).toBeDefined();
+    expect(placed?.source).toBe("rack");
+    expect(placed?.tile.number).toBe(1);
+  });
+
+  it("tapping occupied cell with no selection picks it up", () => {
+    // Row 0 has board tiles from the puzzle
+    store().tapCell(0, 0);
+    expect(store().selectedTile).toEqual({ source: "grid", row: 0, col: 0 });
+  });
+
+  it("tapping a different occupied cell switches selection", () => {
+    store().tapCell(0, 0); // pick up red 5
+    store().tapCell(0, 1); // switch to red 6
+    expect(store().selectedTile).toEqual({ source: "grid", row: 0, col: 1 });
+  });
+
+  it("moving a grid tile preserves its source property", () => {
+    // Board tile starts as "board"; moving it must keep source "board"
+    store().tapCell(0, 0);  // select board tile at (0,0)
+    store().tapCell(2, 0);  // move to empty row 2
+    const moved = store().grid.get("2:0");
+    expect(moved?.source).toBe("board");
+    expect(store().grid.has("0:0")).toBe(false);
+  });
+
+  it("board-source tile: returnToRack is a no-op", () => {
+    store().tapCell(0, 0);   // select board tile (source: "board")
+    store().returnToRack();  // should be blocked
+    // Tile must still be on grid; rack unchanged (length 2)
+    expect(store().grid.has("0:0")).toBe(true);
+    expect(store().rack).toHaveLength(2);
+  });
 });
 
 describe("returnToRack — Phase 2", () => {
-  it.todo("rack-source grid tile returns to rack");
-  it.todo("board-source grid tile is a no-op");
+  beforeEach(setupPuzzle);
+
+  it("rack-source grid tile returns to rack", () => {
+    store().tapRackTile(0);      // select red 1
+    store().tapCell(1, 0);       // place on grid
+    expect(store().rack).toHaveLength(1);
+
+    store().tapCell(1, 0);       // pick it back up (grid selection)
+    store().returnToRack();
+    expect(store().rack).toHaveLength(2);
+    expect(store().grid.has("1:0")).toBe(false);
+  });
+
+  it("board-source grid tile is a no-op", () => {
+    store().tapCell(0, 0);  // select board tile
+    const rackBefore = store().rack.length;
+    store().returnToRack();
+    expect(store().rack).toHaveLength(rackBefore);
+    expect(store().grid.has("0:0")).toBe(true);
+  });
 });
 
 describe("undo / redo — Phase 2", () => {
-  it.todo("undo reverses last tile placement (tile back in rack, cell empty)");
-  it.todo("redo re-applies the undone placement");
-  it.todo("new action after undo clears the future stack");
-  it.todo("undo is a no-op when past is empty");
-  it.todo("redo is a no-op when future is empty");
+  beforeEach(setupPuzzle);
+
+  it("undo reverses last tile placement (tile back in rack, cell empty)", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);
+    expect(store().rack).toHaveLength(1);
+
+    store().undo();
+    expect(store().rack).toHaveLength(2);
+    expect(store().grid.has("1:0")).toBe(false);
+  });
+
+  it("redo re-applies the undone placement", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);
+    store().undo();
+    expect(store().rack).toHaveLength(2);
+
+    store().redo();
+    expect(store().rack).toHaveLength(1);
+    expect(store().grid.get("1:0")?.tile.number).toBe(1);
+  });
+
+  it("new action after undo clears the future stack", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);  // place red 1
+    store().undo();
+    expect(store().future).toHaveLength(1);
+
+    // New action: place blue 2 instead
+    store().tapRackTile(1);
+    store().tapCell(1, 0);
+    expect(store().future).toHaveLength(0);
+  });
+
+  it("undo is a no-op when past is empty", () => {
+    expect(store().past).toHaveLength(0);
+    store().undo();
+    expect(store().grid.size).toBe(3);  // board tiles still there
+    expect(store().rack).toHaveLength(2);
+  });
+
+  it("redo is a no-op when future is empty", () => {
+    expect(store().future).toHaveLength(0);
+    store().redo();
+    expect(store().grid.size).toBe(3);
+    expect(store().rack).toHaveLength(2);
+  });
 });
 
 // ---------------------------------------------------------------------------

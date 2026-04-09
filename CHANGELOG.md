@@ -5,6 +5,43 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.36.0] — 2026-04-09 — Play Mode Phase 2: tap interaction & undo/redo
+
+### Frontend — Store (`frontend/src/store/play.ts`)
+- Implement `tapRackTile`: toggle rack tile selection; tapping same tile deselects, tapping
+  different tile switches selection
+- Implement `tapCell`: state machine — no selection + occupied cell = pick up; no selection +
+  empty cell = no-op; selection + occupied same cell = deselect; selection + occupied other
+  cell = switch; selection + empty cell = place (calls `placeTile` helper)
+- Implement `returnToRack`: removes rack-source grid tile from grid and appends to rack;
+  board-source tiles are no-ops (permanently locked)
+- Implement `undo`: pops past stack, pushes current state to future stack, restores snapshot,
+  recomputes derived state, clears selection
+- Implement `redo`: pops future stack, pushes current state to past stack, restores snapshot,
+  recomputes derived state, clears selection
+- Add private `takeSnapshot` helper: shallow-copies grid Map and rack array
+- Add private `placeTile` helper: handles rack-by-index removal and grid-tile moves; preserves
+  `PlacedTile.source`; pushes undo snapshot; starts `solveStartTime` on first placement;
+  sets `solveEndTime` if `checkSolved` returns true; clears redo stack on new action
+- Fix import: add `checkSolved` to `grid-utils` import
+
+### Frontend — Component (`frontend/src/components/play/ControlBar.tsx`)
+- Add conditional "Return to Rack" button: visible only when a rack-source grid tile is
+  selected (derived via `cellKey` lookup on `selectedTile`); calls `returnToRack` action
+
+### Frontend — Tests (`frontend/src/__tests__/store/play.test.ts`)
+- Implement all 17 Phase 2 `it.todo` scaffolds: `tapRackTile` (3), `tapCell` (7),
+  `returnToRack` (2), `undo/redo` (5); each describe block has a shared `setupPuzzle`
+  `beforeEach` (board row 0 = red 5/6/7, rack = red 1 + blue 2)
+- Test count: 164 → **181 passing**, 30 → **13 todo**, 0 failed
+
+### Frontend — e2e (`frontend/e2e/play_interact.spec.ts`)
+- Add 7 new Playwright specs: rack tile selection ring, deselect on double-tap, place on
+  empty cell, pick up grid tile, move grid tile, undo placement, return-to-rack flow
+- All specs mock `**/api/puzzle` — backend not required
+
+---
+
 ## [0.35.0] — 2026-04-09 — Play Mode Phase 1: grid rendering & iPad layout
 
 ### Frontend — Components (`frontend/src/components/play/`)
