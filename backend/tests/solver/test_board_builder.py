@@ -15,15 +15,13 @@ from solver.generator.board_builder import (
     BoardBuilder,
     build_overlap_graph,
     score_set_overlap,
-    select_high_overlap_sets,
 )
-from solver.generator.tile_pool import assign_copy_ids, make_tile_pool
 from solver.generator.set_enumerator import enumerate_groups, enumerate_runs
+from solver.generator.tile_pool import assign_copy_ids, make_tile_pool
 from solver.models.board_state import BoardState
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
 from solver.validator.rule_checker import is_valid_board, is_valid_set
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -111,7 +109,7 @@ def test_deterministic_with_seed():
     board_a = _build(seed=123)
     board_b = _build(seed=123)
     assert len(board_a) == len(board_b)
-    for ts_a, ts_b in zip(board_a, board_b):
+    for ts_a, ts_b in zip(board_a, board_b, strict=True):
         assert ts_a.type == ts_b.type
         assert [(t.color, t.number, t.copy_id) for t in ts_a.tiles] == [
             (t.color, t.number, t.copy_id) for t in ts_b.tiles

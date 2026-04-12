@@ -17,7 +17,7 @@ from __future__ import annotations
 import random
 from collections import Counter, defaultdict
 
-from ..models.tile import Color, Tile
+from ..models.tile import Color
 from ..models.tileset import TileSet
 from .set_enumerator import enumerate_groups, enumerate_runs
 from .tile_pool import assign_copy_ids, make_tile_pool

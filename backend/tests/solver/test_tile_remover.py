@@ -10,25 +10,19 @@ Strategy:
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
-
+from solver.generator.board_builder import BoardBuilder
 from solver.generator.tile_remover import (
     RemovalCandidate,
-    RemovalStep,
     TileRemover,
     _apply_removal,
     _score_all_candidates,
     estimate_cascade_depth,
 )
-from solver.generator.board_builder import BoardBuilder
-from solver.models.board_state import BoardState, Solution
+from solver.models.board_state import Solution
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
-from solver.validator.rule_checker import is_valid_set
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
