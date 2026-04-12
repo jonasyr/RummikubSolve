@@ -15,6 +15,7 @@ Blueprint: "Puzzle Generation System — Full Rebuild Implementation Plan"
 
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass
 
@@ -252,7 +253,7 @@ class TileRemover:
     @staticmethod
     def remove(
         board_sets: list[TileSet],
-        rng,
+        rng: random.Random,
         rack_size_range: tuple[int, int],
         strategy: str = "maximize_cascade",
         solve_timeout: float = _REMOVAL_STEP_TIMEOUT,
