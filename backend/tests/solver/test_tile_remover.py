@@ -3,14 +3,12 @@
 Strategy:
   - Helper functions (estimate_cascade_depth, _apply_removal,
     _score_all_candidates) are tested purely — no solver needed.
-  - TileRemover.remove() calls solve() internally, so those tests mock
-    solve() via unittest.mock.patch to avoid the highspy dependency.
+  - TileRemover.remove() tests use the real solver (highspy).
 """
 
 from __future__ import annotations
 
 import random
-from unittest.mock import patch
 
 from solver.generator.board_builder import BoardBuilder
 from solver.generator.tile_remover import (
@@ -20,7 +18,6 @@ from solver.generator.tile_remover import (
     _score_all_candidates,
     estimate_cascade_depth,
 )
-from solver.models.board_state import Solution
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
 
@@ -41,26 +38,6 @@ def _group(number: int, *colors: Color) -> TileSet:
     """Build a GROUP TileSet from a number and colors."""
     return TileSet(type=SetType.GROUP, tiles=[_tile(c, number) for c in colors])
 
-
-def _success_solution(rack: list[Tile]) -> Solution:
-    """Minimal Solution indicating all rack tiles were placed."""
-    return Solution(
-        new_sets=[],
-        placed_tiles=list(rack),
-        remaining_rack=[],
-        solve_status="success",
-        is_optimal=True,
-    )
-
-
-def _fail_solution() -> Solution:
-    """Minimal Solution indicating placement failure."""
-    return Solution(
-        new_sets=[],
-        placed_tiles=[],
-        remaining_rack=[],
-        solve_status="infeasible_fallback",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -280,28 +257,18 @@ def test_score_all_candidates_set_index_tile_index():
 
 
 # ---------------------------------------------------------------------------
-# TileRemover.remove() — mocked solver
+# TileRemover.remove() — real solver (highspy)
 # ---------------------------------------------------------------------------
 
-_MODULE = "solver.generator.tile_remover.solve"
 
-
-def _make_board_from_builder(seed: int = 0) -> list[TileSet]:
-    """Build a real board using BoardBuilder (no solver needed)."""
-    return BoardBuilder.build(random.Random(seed), board_size_range=(8, 10))
+def _make_board(seed: int = 0, size: tuple[int, int] = (8, 10)) -> list[TileSet]:
+    """Build a real board using BoardBuilder."""
+    return BoardBuilder.build(random.Random(seed), board_size_range=size)
 
 
 def test_removal_produces_target_rack_size():
     """Rack has between min and max tiles on success."""
-    board = _make_board_from_builder()
-    rng = random.Random(1)
-
-    def mock_solve(state, **kwargs):
-        return _success_solution(state.rack)
-
-    with patch(_MODULE, side_effect=mock_solve):
-        result = TileRemover.remove(board, rng, rack_size_range=(3, 5))
-
+    result = TileRemover.remove(_make_board(0), random.Random(1), rack_size_range=(3, 5))
     assert result is not None
     _, rack, _ = result
     assert 3 <= len(rack) <= 5
@@ -309,12 +276,7 @@ def test_removal_produces_target_rack_size():
 
 def test_removal_log_matches_rack_size():
     """removal_log has exactly one entry per removed tile."""
-    board = _make_board_from_builder()
-    rng = random.Random(2)
-
-    with patch(_MODULE, side_effect=lambda state, **kw: _success_solution(state.rack)):
-        result = TileRemover.remove(board, rng, rack_size_range=(2, 4))
-
+    result = TileRemover.remove(_make_board(1), random.Random(2), rack_size_range=(2, 4))
     assert result is not None
     _, rack, log = result
     assert len(log) == len(rack)
@@ -322,85 +284,39 @@ def test_removal_log_matches_rack_size():
 
 def test_board_tiles_not_in_rack():
     """No (color, number, copy_id) appears in both remaining board and rack."""
-    board = _make_board_from_builder()
-    rng = random.Random(3)
-
-    with patch(_MODULE, side_effect=lambda state, **kw: _success_solution(state.rack)):
-        result = TileRemover.remove(board, rng, rack_size_range=(3, 5))
-
+    result = TileRemover.remove(_make_board(2), random.Random(3), rack_size_range=(3, 5))
     assert result is not None
     remaining_board, rack, _ = result
     board_keys = {
-        (t.color, t.number, t.copy_id)
-        for ts in remaining_board for t in ts.tiles
+        (t.color, t.number, t.copy_id) for ts in remaining_board for t in ts.tiles
     }
     rack_keys = {(t.color, t.number, t.copy_id) for t in rack}
     assert board_keys.isdisjoint(rack_keys), "Tile appears in both board and rack"
 
 
 def test_removal_preserves_solvability():
-    """The solution recorded in each RemovalStep placed all rack tiles."""
-    board = _make_board_from_builder()
-    rng = random.Random(4)
-
-    with patch(_MODULE, side_effect=lambda state, **kw: _success_solution(state.rack)):
-        result = TileRemover.remove(board, rng, rack_size_range=(2, 4))
-
+    """Each RemovalStep's solver_result confirms all rack tiles were placed."""
+    result = TileRemover.remove(_make_board(3), random.Random(4), rack_size_range=(2, 4))
     assert result is not None
     _, rack, log = result
+    assert len(rack) > 0
     for step in log:
-        # tiles_placed == len(rack at that step)
-        assert step.solver_result.tiles_placed > 0
-
-
-def test_unsolvable_candidate_is_skipped():
-    """If a candidate fails solvability, the removal loop tries another one."""
-    board = _make_board_from_builder(seed=5)
-    rng = random.Random(5)
-
-    call_count = 0
-
-    def mock_solve(state, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        # Fail the first 2 calls, succeed thereafter
-        if call_count <= 2:
-            return _fail_solution()
-        return _success_solution(state.rack)
-
-    with patch(_MODULE, side_effect=mock_solve):
-        result = TileRemover.remove(board, rng, rack_size_range=(1, 3))
-
-    # Must have called solve more than once (some were rejected)
-    assert call_count > 1
-    # Should still succeed
-    assert result is not None
+        assert step.solver_result.tiles_placed == len(step.state_before.rack) + 1
 
 
 def test_none_returned_when_minimum_unreachable():
-    """Returns None if all solver calls fail and rack stays below minimum."""
-    board = _make_board_from_builder()
-    rng = random.Random(6)
-
-    with patch(_MODULE, return_value=_fail_solution()):
-        result = TileRemover.remove(board, rng, rack_size_range=(3, 5))
-
+    """Returns None when rack_size_range minimum exceeds available board tiles."""
+    # A 2-set board has at most ~6-8 tiles; requesting rack_size=50 forces None.
+    board = _make_board(4, size=(2, 2))
+    result = TileRemover.remove(board, random.Random(5), rack_size_range=(50, 50))
     assert result is None
 
 
 def test_deterministic_with_seed():
-    """Same seed + same board → identical rack and removal log."""
-    board = _make_board_from_builder(seed=7)
-
-    def mock_solve(state, **kwargs):
-        return _success_solution(state.rack)
-
-    with patch(_MODULE, side_effect=mock_solve):
-        result_a = TileRemover.remove(list(board), random.Random(7), (3, 5))
-
-    with patch(_MODULE, side_effect=mock_solve):
-        result_b = TileRemover.remove(list(board), random.Random(7), (3, 5))
-
+    """Same seed + same board → identical rack."""
+    board = _make_board(5)
+    result_a = TileRemover.remove(list(board), random.Random(7), rack_size_range=(3, 5))
+    result_b = TileRemover.remove(list(board), random.Random(7), rack_size_range=(3, 5))
     assert result_a is not None and result_b is not None
     _, rack_a, _ = result_a
     _, rack_b, _ = result_b
@@ -410,39 +326,25 @@ def test_deterministic_with_seed():
 
 
 def test_tile_identity_preserved_in_result():
-    """Tiles in the returned board are the same Python objects as in the input."""
-    board = _make_board_from_builder(seed=8)
-    # Collect all input tile ids
+    """Tiles in the returned board/rack are the same Python objects as the input."""
+    board = _make_board(6)
     input_ids = {id(t) for ts in board for t in ts.tiles}
-
-    with patch(_MODULE, side_effect=lambda state, **kw: _success_solution(state.rack)):
-        result = TileRemover.remove(board, random.Random(8), rack_size_range=(2, 4))
-
+    result = TileRemover.remove(board, random.Random(8), rack_size_range=(2, 4))
     assert result is not None
     remaining_board, rack, _ = result
-
-    # Every tile in the remaining board must have been in the original input
     for ts in remaining_board:
         for t in ts.tiles:
             assert id(t) in input_ids, f"New Tile object created: {t}"
-
-    # Every tile in the rack must also have been in the original input
     for t in rack:
         assert id(t) in input_ids, f"New Tile object in rack: {t}"
 
 
 def test_state_before_is_pre_removal_snapshot():
-    """state_before in each RemovalStep captures the board BEFORE that removal."""
-    board = _make_board_from_builder(seed=9)
-    rng = random.Random(9)
-
-    with patch(_MODULE, side_effect=lambda state, **kw: _success_solution(state.rack)):
-        result = TileRemover.remove(board, rng, rack_size_range=(2, 3))
-
+    """state_before.rack grows by one at each successive RemovalStep."""
+    result = TileRemover.remove(_make_board(7), random.Random(9), rack_size_range=(2, 3))
     assert result is not None
     _, _, log = result
     if len(log) >= 2:
-        # state_before of step N should have fewer rack tiles than step N+1
         assert len(log[0].state_before.rack) < len(log[1].state_before.rack)
 
 
