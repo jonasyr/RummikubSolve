@@ -38,6 +38,8 @@ from ..validator.rule_checker import is_valid_set
 from .board_builder import BoardBuilder
 from .difficulty_evaluator import DifficultyEvaluator
 from .set_enumerator import enumerate_groups, enumerate_runs, enumerate_valid_sets
+from .tile_pool import assign_copy_ids as _assign_copy_ids
+from .tile_pool import make_tile_pool as _make_pool
 from .tile_remover import TileRemover
 
 Difficulty = Literal["easy", "medium", "hard", "expert", "nightmare", "custom"]
@@ -673,32 +675,6 @@ def _attempt_generate_with_reason(
     )
 
 
-def _make_full_pool() -> BoardState:
-    """104 non-joker tiles (4 colors × 13 numbers × 2 copies), no jokers."""
-    rack = [
-        Tile(color, n, copy_id)
-        for color in Color
-        for n in range(1, 14)
-        for copy_id in (0, 1)
-    ]
-    return BoardState(board_sets=[], rack=rack)
-
-
-def _make_pool(n_jokers: int = 0) -> BoardState:
-    """104 non-joker tiles plus n_jokers joker tiles."""
-    if not (0 <= n_jokers <= 2):
-        raise ValueError(f"n_jokers must be 0, 1, or 2; got {n_jokers}")
-    rack: list[Tile] = [
-        Tile(color, n, copy_id)
-        for color in Color
-        for n in range(1, 14)
-        for copy_id in (0, 1)
-    ]
-    for j in range(n_jokers):
-        rack.append(Tile.joker(copy_id=j))
-    return BoardState(board_sets=[], rack=rack)
-
-
 def _inject_jokers_into_board(
     board_sets: list[TileSet],
     n_jokers: int,
@@ -751,23 +727,6 @@ def _pick_compatible_sets(all_sets: list[TileSet], n: int) -> list[TileSet]:
                 avail[k] -= v
 
     return selected
-
-
-def _assign_copy_ids(board_sets: list[TileSet]) -> list[TileSet]:
-    """Assign copy_ids 0/1 to distinguish duplicate (color, number) tiles."""
-    seen: Counter[tuple[Color | None, int | None]] = Counter()
-    result: list[TileSet] = []
-    for ts in board_sets:
-        new_tiles: list[Tile] = []
-        for t in ts.tiles:
-            if t.is_joker:
-                new_tiles.append(t)
-            else:
-                copy_id = seen[(t.color, t.number)]
-                new_tiles.append(Tile(color=t.color, number=t.number, copy_id=copy_id))
-                seen[(t.color, t.number)] += 1
-        result.append(TileSet(type=ts.type, tiles=new_tiles))
-    return result
 
 
 def _extract_rack(
