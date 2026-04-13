@@ -172,6 +172,10 @@ class PuzzleResponse(BaseModel):
     difficulty: str
     tile_count: int
     disruption_score: int
-    chain_depth: int = 0    # Phase 3: longest rearrangement chain depth
-    is_unique: bool = True  # Phase 3: solution uniqueness verified for Expert/Nightmare
-    puzzle_id: str = ""     # Phase 5: UUID for pool-drawn puzzles; "" for live-generated
+    chain_depth: int = 0          # Phase 3: longest rearrangement chain depth
+    is_unique: bool = True         # Phase 3: solution uniqueness verified for Expert/Nightmare
+    puzzle_id: str = ""            # Phase 5: UUID for pool-drawn puzzles; "" for live-generated
+    # Phase 4 (v2 generator) — populated when generator_version="v2"; 0.0/"v1" otherwise.
+    composite_score: float = 0.0
+    branching_factor: float = 0.0
+    generator_version: str = "v1"

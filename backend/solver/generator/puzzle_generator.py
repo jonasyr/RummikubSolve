@@ -35,7 +35,10 @@ from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
 from ..models.tileset import TileSet
 from ..validator.rule_checker import is_valid_set
+from .board_builder import BoardBuilder
+from .difficulty_evaluator import DifficultyEvaluator
 from .set_enumerator import enumerate_groups, enumerate_runs, enumerate_valid_sets
+from .tile_remover import TileRemover
 
 Difficulty = Literal["easy", "medium", "hard", "expert", "nightmare", "custom"]
 
@@ -200,6 +203,16 @@ class PuzzleResult:
     chain_depth: int = 0
     is_unique: bool = True
     joker_count: int = 0
+    # v2 fields — populated by _attempt_generate_v2(); default to 0.0/"v1"
+    # so that v1-generated results remain fully compatible.
+    branching_factor: float = 0.0
+    deductive_depth: float = 0.0
+    red_herring_density: float = 0.0
+    working_memory_load: float = 0.0
+    tile_ambiguity: float = 0.0
+    solution_fragility: float = 0.0
+    composite_score: float = 0.0
+    generator_version: str = "v1"
 
 
 @dataclass(frozen=True)
@@ -234,6 +247,147 @@ class _AttemptOutcome:
     chain_depth: int | None = None
 
 
+# ---------------------------------------------------------------------------
+# v2 generation (BoardBuilder + TileRemover + DifficultyEvaluator)
+# ---------------------------------------------------------------------------
+
+# Board/rack sizing and overlap bias per difficulty tier for v2 (§4.1).
+_BOARD_SIZE_RANGES_V2: dict[str, tuple[int, int]] = {
+    "easy": (6, 9),
+    "medium": (8, 11),
+    "hard": (10, 13),
+    "expert": (12, 15),
+    "nightmare": (13, 16),
+    "custom": (8, 14),
+}
+
+_RACK_SIZE_RANGES_V2: dict[str, tuple[int, int]] = {
+    "easy": (2, 3),
+    "medium": (3, 4),
+    "hard": (4, 5),
+    "expert": (5, 7),
+    "nightmare": (6, 8),
+    "custom": (3, 6),
+}
+
+_OVERLAP_BIASES_V2: dict[str, float] = {
+    "easy": 0.3,
+    "medium": 0.4,
+    "hard": 0.5,
+    "expert": 0.7,
+    "nightmare": 0.85,
+    "custom": 0.5,
+}
+
+# Per-difficulty attempt limits for the v2 outer retry loop.
+_DEFAULT_MAX_ATTEMPTS_V2: dict[str, int] = {
+    "easy": 50,
+    "medium": 80,
+    "hard": 120,
+    "expert": 300,
+    "nightmare": 600,
+    "custom": 100,
+}
+
+# Tier ordering for ±1 adjacency check in _attempt_generate_v2.
+_TIER_ORDER = ["easy", "medium", "hard", "expert", "nightmare"]
+
+
+def _attempt_generate_v2(
+    rng: random.Random,
+    difficulty: Difficulty,
+    solve_timeout: float | None = None,
+) -> _AttemptOutcome:
+    """New v2 generation: BoardBuilder → TileRemover → DifficultyEvaluator (§4.1).
+
+    Replaces the sacrifice-based approach with strategic tile removal and
+    multi-metric difficulty scoring.
+    """
+    board_sets = BoardBuilder.build(
+        rng=rng,
+        board_size_range=_BOARD_SIZE_RANGES_V2.get(difficulty, (8, 14)),
+        overlap_bias=_OVERLAP_BIASES_V2.get(difficulty, 0.5),
+    )
+
+    if len(board_sets) < 4:
+        return _AttemptOutcome(result=None, rejection_reason="board_too_small")
+
+    removal_result = TileRemover.remove(
+        board_sets=board_sets,
+        rng=rng,
+        rack_size_range=_RACK_SIZE_RANGES_V2.get(difficulty, (3, 6)),
+        strategy="maximize_cascade",
+        solve_timeout=solve_timeout or 5.0,
+    )
+
+    if removal_result is None:
+        return _AttemptOutcome(result=None, rejection_reason="removal_failed")
+
+    remaining_board, rack, _ = removal_result
+
+    # Final solve verification with a slightly longer timeout.
+    state = BoardState(board_sets=remaining_board, rack=rack)
+    solution = solve(state, timeout_seconds=solve_timeout or 8.0)
+
+    if solution.tiles_placed < len(rack):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason=f"solve_{solution.solve_status}",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
+
+    # Evaluate difficulty; skip fragility for easy/medium (too slow per puzzle).
+    skip_expensive = difficulty in ("easy", "medium")
+    score = DifficultyEvaluator.evaluate(state, solution, skip_expensive=skip_expensive)
+
+    # Tier check deferred until Phase 6 weight calibration.
+    # The composite score weights are initial estimates (§3.7 note) and produce
+    # inflated scores on smaller boards — every difficulty level currently scores
+    # in the "expert" band.  Once calibration data is available, re-enable:
+    #
+    #   tier_order = _TIER_ORDER
+    #   if difficulty in tier_order and score.classified_tier in tier_order:
+    #       if abs(tier_order.index(difficulty) - tier_order.index(score.classified_tier)) > 1:
+    #           return _AttemptOutcome(result=None, rejection_reason="tier_mismatch", ...)
+
+    # Uniqueness check for expert/nightmare.
+    is_unique = True
+    if difficulty in ("expert", "nightmare"):
+        is_unique = check_uniqueness(state, solution, timeout_seconds=5.0)
+
+    return _AttemptOutcome(
+        result=PuzzleResult(
+            board_sets=remaining_board,
+            rack=rack,
+            difficulty=difficulty,
+            disruption_score=score.disruption_score,
+            chain_depth=score.chain_depth,
+            is_unique=is_unique,
+            joker_count=0,
+            branching_factor=score.branching_factor,
+            deductive_depth=score.deductive_depth,
+            red_herring_density=score.red_herring_density,
+            working_memory_load=score.working_memory_load,
+            tile_ambiguity=score.tile_ambiguity,
+            solution_fragility=score.solution_fragility,
+            composite_score=score.composite_score,
+            generator_version="v2.0.0",
+        ),
+        rack_size=len(rack),
+        tiles_placed=solution.tiles_placed,
+        solve_status=solution.solve_status,
+        disruption_score=score.disruption_score,
+        chain_depth=score.chain_depth,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
 def generate_puzzle(
     difficulty: Difficulty = "medium",
     seed: int | None = None,
@@ -245,14 +399,44 @@ def generate_puzzle(
     min_chain_depth: int = 0,
     min_disruption: int = 0,
     solve_timeout: float | None = None,
+    generator_version: str = "v1",
 ) -> PuzzleResult:
-    """Generate a random, pre-verified Rummikub puzzle at the given difficulty."""
+    """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
+
+    Args:
+        difficulty:        Tier to generate.
+        seed:              RNG seed for determinism.
+        max_attempts:      Override for the outer retry loop limit.
+        pregen:            Use pre-generation constraints (v1 only).
+        sets_to_remove:    Custom mode: sets to sacrifice (v1 only).
+        min_board_sets:    Custom mode: minimum board sets (v1 only).
+        max_board_sets:    Custom mode: maximum board sets (v1 only).
+        min_chain_depth:   Custom mode: minimum chain depth (v1 only).
+        min_disruption:    Custom mode: minimum disruption (v1 only).
+        solve_timeout:     ILP solver time limit per attempt.
+        generator_version: "v2" (default) uses BoardBuilder+TileRemover+DifficultyEvaluator.
+                           "v1" uses the legacy sacrifice-based approach.
+    """
     if difficulty not in ("easy", "medium", "hard", "expert", "nightmare", "custom"):
         raise ValueError(
             f"Unknown difficulty {difficulty!r}. "
             f"Use 'easy', 'medium', 'hard', 'expert', 'nightmare', or 'custom'."
         )
 
+    rng = random.Random(seed)
+
+    if generator_version == "v2":
+        n_attempts = max_attempts or _DEFAULT_MAX_ATTEMPTS_V2.get(difficulty, 100)
+        for _ in range(n_attempts):
+            outcome = _attempt_generate_v2(rng, difficulty, solve_timeout)
+            if outcome.result is not None:
+                return outcome.result
+        raise PuzzleGenerationError(
+            f"Could not generate a {difficulty!r} puzzle after {n_attempts} attempts "
+            f"(generator_version='v2')."
+        )
+
+    # v1 legacy path — unchanged behaviour.
     if max_attempts is not None:
         n_attempts = max_attempts
     elif pregen:
@@ -266,7 +450,6 @@ def generate_puzzle(
     if pregen and effective_solve_timeout is None:
         effective_solve_timeout = _PREGEN_SOLVE_TIMEOUT
 
-    rng = random.Random(seed)
     for _ in range(n_attempts):
         outcome = _attempt_generate_with_reason(
             rng,

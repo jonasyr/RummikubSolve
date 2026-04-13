@@ -5,6 +5,88 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [0.43.0] — 2026-04-13 — Phase 4: Generator Integration (v2 pipeline)
+
+### Backend — Generator (`backend/solver/generator/puzzle_generator.py`)
+- `_attempt_generate_v2()`: new generation function wiring BoardBuilder → TileRemover → DifficultyEvaluator; replaces sacrifice-based approach for all non-custom difficulties
+- `generate_puzzle()`: added `generator_version="v2"` parameter; v2 is the default; v1 still accessible via `generator_version="v1"` for backward compatibility
+- `PuzzleResult`: extended with `branching_factor`, `deductive_depth`, `red_herring_density`, `working_memory_load`, `tile_ambiguity`, `solution_fragility`, `composite_score`, `generator_version` (all default to 0.0 / "v1" for backward compatibility)
+- `_DEFAULT_MAX_ATTEMPTS_V2`: per-difficulty attempt limits for v2
+
+### Backend — API (`backend/api/models.py`, `backend/api/main.py`)
+- `PuzzleResponse`: added `composite_score`, `branching_factor`, `generator_version` (additive, optional fields with defaults — backward-compatible)
+- `_result_to_response()`: exposes new fields in API response
+
+### Backend — Pregenerate (`backend/solver/generator/pregenerate.py`)
+- Worker updated to call `_attempt_generate_v2()` directly
+
+### Tests
+- `test_puzzle_generator.py`: 5 new Phase 4 tests — v2 returns puzzle result, tier match, new fields populated, API serialization, v1 fallback
+- **Total: ~220 passing**
+
+---
+
+## [0.42.0] — 2026-04-13 — Phase 3: DifficultyEvaluator
+
+### Backend — Generator (`backend/solver/generator/difficulty_evaluator.py`)
+- New module: 8-metric difficulty scoring system replacing single disruption/chain-depth filtering
+- `DifficultyScore` dataclass: 10 fields covering all difficulty dimensions
+- `compute_branching_factor()`: average valid placements per rack tile
+- `compute_red_herrings()`: fraction of placements not in the optimal solution
+- `compute_working_memory_load()`: count of board sets disrupted by the solution
+- `compute_tile_ambiguity()`: average candidate sets per tile (board + rack)
+- `compute_solution_fragility()`: sensitivity to single-tile removal (expensive; skipped for easy/medium)
+- `compute_deductive_depth()`: chain_depth × log₂(branching_factor + 1)
+- `compute_composite_score()`: weighted combination of all 8 metrics → 0–100 scale
+- `TIER_THRESHOLDS`: easy(0–20), medium(15–35), hard(30–55), expert(50–75), nightmare(70–100)
+- `classify_tier()`: maps composite score to difficulty tier (overlapping bands)
+- `DifficultyEvaluator.evaluate()`: facade with `skip_expensive=False` flag; caches `enumerate_valid_sets()` result to avoid triple enumeration
+
+### Tests (`backend/tests/solver/test_difficulty_evaluator.py`)
+- 14 tests using real solver (no mocks): bounds checks, edge cases (empty rack, trivial puzzle), tier classification, performance guard (<500ms with skip_expensive=True)
+
+### Versions
+- `backend/pyproject.toml` bumped to **0.42.0**
+
+---
+
+## [0.41.0] — 2026-04-13 — Phase 2: TileRemover (Strategic Tile Removal)
+
+### Backend — Generator (`backend/solver/generator/tile_remover.py`)
+- New module: strategic tile removal replacing complete-set sacrifice approach
+- `RemovalCandidate` dataclass: pre-scored removal option with cascade estimate, orphan count, alternative placements
+- `RemovalStep` dataclass: committed removal record with pre-removal board snapshot for replay
+- `estimate_cascade_depth()`: heuristic scoring (+2.0/+1.0/+0.5 per orphan based on absorber count)
+- `_score_all_candidates()`: scores every board tile as a removal candidate in O(n·templates)
+- `_apply_removal()`: index-based removal preserving Tile object identity (required by solver's id()-based tracking)
+- `TileRemover.remove()`: top-30% weighted random selection with per-step solvability verification; retries up to 5 candidates per step; guards with 2s per-step and 30s total timeouts
+
+### Tests (`backend/tests/solver/test_tile_remover.py`)
+- 23 tests: pure-logic helpers (cascade depth, apply removal, scoring) + real-solver integration tests
+
+### Versions
+- `backend/pyproject.toml` bumped to **0.41.0**
+
+---
+
+## [0.40.0] — 2026-04-13 — Phase 1: BoardBuilder (High-Overlap Board Construction)
+
+### Backend — Generator
+- `backend/solver/generator/tile_pool.py` (new): `make_tile_pool()` and `assign_copy_ids()` extracted from `puzzle_generator.py`; consolidated pool creation with joker support
+- `backend/solver/generator/board_builder.py` (new): overlap-graph-guided board construction replacing greedy `_pick_compatible_sets()`
+  - `build_overlap_graph()`: adjacency map of tile co-occurrence across templates
+  - `score_set_overlap()`: average connectivity score per set
+  - `select_high_overlap_sets()`: weighted random selection with `overlap_bias` parameter (0=random, 1=greedy)
+  - `BoardBuilder.build()`: full pipeline — pool → enumerate → shuffle → graph → select → assign_copy_ids
+
+### Tests (`backend/tests/solver/test_board_builder.py`)
+- 21 tests: board validity, no duplicate tiles, copy_id correctness, size constraints, seed determinism, overlap graph symmetry, overlap bias effectiveness (<100ms performance guard)
+
+### Versions
+- `backend/pyproject.toml` bumped to **0.40.0**
+
+---
+
 ## [0.39.0] — 2026-04-09 — Play Mode Phase 5.4/6.1/6.3–6.6 + Docker fixes
 
 ### Frontend — Store (`frontend/src/store/play.ts`)

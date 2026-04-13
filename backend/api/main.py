@@ -373,6 +373,9 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             chain_depth=result.chain_depth,
             is_unique=result.is_unique,
             puzzle_id=puzzle_id,
+            composite_score=result.composite_score,
+            branching_factor=result.branching_factor,
+            generator_version=result.generator_version,
         )
 
     # Phase 5: for expert/nightmare try the pre-generated pool first.

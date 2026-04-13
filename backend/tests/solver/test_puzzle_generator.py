@@ -724,3 +724,56 @@ class TestPregenTier:
         state = BoardState(board_sets=result.board_sets, rack=result.rack)
         solution = solve(state)
         assert solution.tiles_placed == len(result.rack)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: v2 generator (_attempt_generate_v2, generate_puzzle with generator_version="v2")
+# ---------------------------------------------------------------------------
+
+
+class TestGeneratorV2:
+    """Tests for the v2 generation pipeline (BoardBuilder + TileRemover + DifficultyEvaluator)."""
+
+    def test_v2_returns_puzzle_result_easy(self) -> None:
+        """generate_puzzle with generator_version='v2' returns a PuzzleResult for easy."""
+        result = generate_puzzle(difficulty="easy", seed=0, generator_version="v2")
+        assert isinstance(result, PuzzleResult)
+        assert result.generator_version == "v2.0.0"
+        assert len(result.rack) >= 2
+        assert len(result.board_sets) >= 1
+
+    def test_v2_returns_puzzle_result_medium(self) -> None:
+        """generate_puzzle with generator_version='v2' returns a PuzzleResult for medium."""
+        result = generate_puzzle(difficulty="medium", seed=1, generator_version="v2")
+        assert isinstance(result, PuzzleResult)
+        assert result.generator_version == "v2.0.0"
+
+    def test_v2_new_fields_populated(self) -> None:
+        """v2 result has non-default values for new difficulty metric fields."""
+        result = generate_puzzle(difficulty="easy", seed=5, generator_version="v2")
+        # At least one metric should be non-zero for any real puzzle
+        assert (
+            result.branching_factor > 0.0
+            or result.tile_ambiguity > 0.0
+            or result.composite_score > 0.0
+        )
+        assert result.composite_score >= 0.0
+
+    def test_v2_composite_score_in_range(self) -> None:
+        """v2 composite_score is in [0, 100]."""
+        result = generate_puzzle(difficulty="medium", seed=3, generator_version="v2")
+        assert 0.0 <= result.composite_score <= 100.0
+
+    def test_v1_fallback_still_works(self) -> None:
+        """generator_version='v1' produces the old-style result (no composite_score)."""
+        result = generate_puzzle(difficulty="easy", seed=1, generator_version="v1")
+        assert result.generator_version == "v1"
+        assert result.composite_score == 0.0
+
+    def test_v2_puzzle_is_solvable(self) -> None:
+        """v2 puzzle is solvable by the ILP solver."""
+        from solver.models.board_state import BoardState
+        result = generate_puzzle(difficulty="easy", seed=10, generator_version="v2")
+        state = BoardState(board_sets=result.board_sets, rack=result.rack)
+        solution = solve(state)
+        assert solution.tiles_placed == len(result.rack)
