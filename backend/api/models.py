@@ -162,11 +162,11 @@ class PuzzleRequest(BaseModel):
     # when drawing from the pre-generated pool.  Capped at 500 to bound request size.
     seen_ids: list[str] = Field(default_factory=list, max_length=500)
     # Phase 7a: Custom mode parameters — ignored for all non-custom difficulties.
-    sets_to_remove: int = Field(3, ge=1, le=8)    # sets to sacrifice (expanded from 5 to 8)
-    min_board_sets: int = Field(8, ge=5, le=25)   # board sets before sacrifice
+    sets_to_remove: int = Field(3, ge=1, le=8)  # sets to sacrifice (expanded from 5 to 8)
+    min_board_sets: int = Field(8, ge=5, le=25)  # board sets before sacrifice
     max_board_sets: int = Field(14, ge=5, le=25)  # board sets before sacrifice
-    min_chain_depth: int = Field(0, ge=0, le=4)   # minimum solution chain depth
-    min_disruption: int = Field(0, ge=0, le=60)   # minimum disruption score
+    min_chain_depth: int = Field(0, ge=0, le=4)  # minimum solution chain depth
+    min_disruption: int = Field(0, ge=0, le=60)  # minimum disruption score
 
 
 class PuzzleResponse(BaseModel):
@@ -175,9 +175,9 @@ class PuzzleResponse(BaseModel):
     difficulty: str
     tile_count: int
     disruption_score: int
-    chain_depth: int = 0          # Phase 3: longest rearrangement chain depth
-    is_unique: bool = True         # Phase 3: solution uniqueness verified for Expert/Nightmare
-    puzzle_id: str = ""            # Phase 5: UUID for pool-drawn puzzles; "" for live-generated
+    chain_depth: int = 0  # Phase 3: longest rearrangement chain depth
+    is_unique: bool = True  # Phase 3: solution uniqueness verified for Expert/Nightmare
+    puzzle_id: str = ""  # Phase 5: UUID for pool-drawn puzzles; "" for live-generated
     # Phase 4 (v2 generator) — populated when generator_version="v2"; 0.0/"v1" otherwise.
     composite_score: float = 0.0
     branching_factor: float = 0.0
@@ -242,13 +242,16 @@ class TelemetryRequest(BaseModel):
                 or self.to_row is None
                 or self.to_col is None
             ):
-                raise ValueError("tile_moved requires tile, from_row, from_col, to_row, and to_col.")
+                raise ValueError(
+                    "tile_moved requires tile, from_row, from_col, to_row, and to_col."
+                )
         elif self.event_type == "tile_returned_to_rack":
             if self.tile is None:
                 raise ValueError("tile_returned_to_rack requires tile.")
-        elif self.event_type == "puzzle_solved":
-            if self.elapsed_ms is None or self.move_count is None or self.undo_count is None:
-                raise ValueError("puzzle_solved requires elapsed_ms, move_count, and undo_count.")
+        elif self.event_type == "puzzle_solved" and (
+            self.elapsed_ms is None or self.move_count is None or self.undo_count is None
+        ):
+            raise ValueError("puzzle_solved requires elapsed_ms, move_count, and undo_count.")
         return self
 
 

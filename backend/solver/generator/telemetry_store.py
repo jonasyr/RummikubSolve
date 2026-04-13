@@ -70,7 +70,9 @@ class TelemetryStore:
                 disruption_score, chain_depth, tile_color, tile_number, tile_joker,
                 from_row, from_col, to_row, to_col, elapsed_ms, move_count,
                 undo_count, redo_count, commit_count, revert_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )""",
             (
                 event_id,
                 event["event_type"],

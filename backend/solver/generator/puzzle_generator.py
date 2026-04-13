@@ -296,11 +296,11 @@ _DEFAULT_MAX_ATTEMPTS_V2: dict[str, int] = {
 _TIER_ORDER = ["easy", "medium", "hard", "expert", "nightmare"]
 
 try:
-    import structlog
+    import structlog as _structlog
 except ImportError:  # pragma: no cover - fallback for minimal environments
-    structlog = None
+    _structlog = None  # type: ignore[assignment]
 
-logger = structlog.get_logger(__name__) if structlog is not None else logging.getLogger(__name__)
+logger = _structlog.get_logger(__name__) if _structlog is not None else logging.getLogger(__name__)
 
 
 def _attempt_generate_v2(
@@ -567,20 +567,16 @@ def _attempt_generate_with_reason(
     input_board = rack_candidate.remaining_board
     rack = rack_candidate.rack
     rack_size = len(rack)
-    if (
-        pregen_profile is not None
-        and (
-            rack_candidate.complexity.rack_tiles_placeable < rack_size
-            or rack_candidate.complexity.total_rack_tile_coverage
-            < pregen_profile.min_total_rack_tile_coverage
-            or rack_candidate.complexity.multi_option_rack_tiles
-            < pregen_profile.min_multi_option_rack_tiles
-            or rack_candidate.complexity.min_rack_tile_coverage < 1
-            or
-            rack_candidate.complexity.candidate_set_count > pregen_profile.max_candidate_sets
-            or rack_candidate.complexity.estimated_ilp_columns > pregen_profile.max_ilp_columns
-            or rack_candidate.complexity.estimated_ilp_rows > pregen_profile.max_ilp_rows
-        )
+    if pregen_profile is not None and (
+        rack_candidate.complexity.rack_tiles_placeable < rack_size
+        or rack_candidate.complexity.total_rack_tile_coverage
+        < pregen_profile.min_total_rack_tile_coverage
+        or rack_candidate.complexity.multi_option_rack_tiles
+        < pregen_profile.min_multi_option_rack_tiles
+        or rack_candidate.complexity.min_rack_tile_coverage < 1
+        or rack_candidate.complexity.candidate_set_count > pregen_profile.max_candidate_sets
+        or rack_candidate.complexity.estimated_ilp_columns > pregen_profile.max_ilp_columns
+        or rack_candidate.complexity.estimated_ilp_rows > pregen_profile.max_ilp_rows
     ):
         if rack_candidate.complexity.rack_tiles_placeable < rack_size:
             return _AttemptOutcome(
@@ -907,20 +903,13 @@ def _estimate_complexity(
         slot_constraint_count += non_joker_slot_count + (1 if joker_slot_count > 0 else 0)
         seen_keys: set[tuple[bool, Color | None, int | None]] = set()
         for tile in candidate_set.tiles:
-            slot_key = (
-                (True, None, None)
-                if tile.is_joker
-                else (False, tile.color, tile.number)
-            )
+            slot_key = (True, None, None) if tile.is_joker else (False, tile.color, tile.number)
             if slot_key in seen_keys:
                 continue
             x_var_count += slot_to_match_count[slot_key]
             seen_keys.add(slot_key)
 
-        candidate_keys = {
-            (tile.is_joker, tile.color, tile.number)
-            for tile in candidate_set.tiles
-        }
+        candidate_keys = {(tile.is_joker, tile.color, tile.number) for tile in candidate_set.tiles}
         for rack_index, rack_tile in enumerate(state.rack):
             rack_key = (rack_tile.is_joker, rack_tile.color, rack_tile.number)
             if rack_key in candidate_keys:
