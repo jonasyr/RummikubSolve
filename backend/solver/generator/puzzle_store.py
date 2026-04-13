@@ -40,7 +40,12 @@ _CREATE_TABLE = """
         created_at       TEXT NOT NULL DEFAULT (datetime('now')),
         generator_version TEXT NOT NULL DEFAULT 'v1',
         composite_score  REAL NOT NULL DEFAULT 0.0,
-        branching_factor REAL NOT NULL DEFAULT 0.0
+        branching_factor REAL NOT NULL DEFAULT 0.0,
+        deductive_depth REAL NOT NULL DEFAULT 0.0,
+        red_herring_density REAL NOT NULL DEFAULT 0.0,
+        working_memory_load REAL NOT NULL DEFAULT 0.0,
+        tile_ambiguity REAL NOT NULL DEFAULT 0.0,
+        solution_fragility REAL NOT NULL DEFAULT 0.0
     )
 """
 
@@ -50,6 +55,11 @@ _MIGRATION_COLUMNS: list[tuple[str, str]] = [
     ("generator_version", "TEXT NOT NULL DEFAULT 'v1'"),
     ("composite_score", "REAL NOT NULL DEFAULT 0.0"),
     ("branching_factor", "REAL NOT NULL DEFAULT 0.0"),
+    ("deductive_depth", "REAL NOT NULL DEFAULT 0.0"),
+    ("red_herring_density", "REAL NOT NULL DEFAULT 0.0"),
+    ("working_memory_load", "REAL NOT NULL DEFAULT 0.0"),
+    ("tile_ambiguity", "REAL NOT NULL DEFAULT 0.0"),
+    ("solution_fragility", "REAL NOT NULL DEFAULT 0.0"),
 ]
 
 _CREATE_INDEX = """
@@ -99,8 +109,9 @@ class PuzzleStore:
                (id, difficulty, board_json, rack_json, chain_depth,
                 disruption, rack_size, board_size, is_unique,
                 joker_count, seed, generator_version, composite_score,
-                branching_factor)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                branching_factor, deductive_depth, red_herring_density,
+                working_memory_load, tile_ambiguity, solution_fragility)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 puzzle_id,
                 result.difficulty,
@@ -116,6 +127,11 @@ class PuzzleStore:
                 result.generator_version,
                 result.composite_score,
                 result.branching_factor,
+                result.deductive_depth,
+                result.red_herring_density,
+                result.working_memory_load,
+                result.tile_ambiguity,
+                result.solution_fragility,
             ),
         )
         self.conn.commit()
@@ -224,5 +240,20 @@ def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
         composite_score=float(row["composite_score"]) if "composite_score" in row.keys() else 0.0,  # noqa: SIM401,SIM118
         branching_factor=(
             float(row["branching_factor"]) if "branching_factor" in row.keys() else 0.0  # noqa: SIM401,SIM118
+        ),
+        deductive_depth=(
+            float(row["deductive_depth"]) if "deductive_depth" in row.keys() else 0.0  # noqa: SIM401,SIM118
+        ),
+        red_herring_density=(
+            float(row["red_herring_density"]) if "red_herring_density" in row.keys() else 0.0  # noqa: SIM401,SIM118
+        ),
+        working_memory_load=(
+            float(row["working_memory_load"]) if "working_memory_load" in row.keys() else 0.0  # noqa: SIM401,SIM118
+        ),
+        tile_ambiguity=(
+            float(row["tile_ambiguity"]) if "tile_ambiguity" in row.keys() else 0.0  # noqa: SIM401,SIM118
+        ),
+        solution_fragility=(
+            float(row["solution_fragility"]) if "solution_fragility" in row.keys() else 0.0  # noqa: SIM401,SIM118
         ),
     )

@@ -214,8 +214,7 @@ def _v2_easy_result() -> PuzzleResult:
 
 
 class TestV2RoundTrip:
-    """All v2 PuzzleResult fields (composite_score, branching_factor,
-    generator_version) must survive a store → draw round-trip."""
+    """All v2 PuzzleResult fields survive a store → draw round-trip."""
 
     @pytest.fixture(autouse=True)
     def _store_and_draw(
@@ -244,3 +243,28 @@ class TestV2RoundTrip:
             self.original.branching_factor, abs=1e-6
         )
         assert self.result.branching_factor >= 0.0
+
+    def test_roundtrip_deductive_depth(self) -> None:
+        assert self.result.deductive_depth == pytest.approx(
+            self.original.deductive_depth, abs=1e-6
+        )
+
+    def test_roundtrip_red_herring_density(self) -> None:
+        assert self.result.red_herring_density == pytest.approx(
+            self.original.red_herring_density, abs=1e-6
+        )
+
+    def test_roundtrip_working_memory_load(self) -> None:
+        assert self.result.working_memory_load == pytest.approx(
+            self.original.working_memory_load, abs=1e-6
+        )
+
+    def test_roundtrip_tile_ambiguity(self) -> None:
+        assert self.result.tile_ambiguity == pytest.approx(
+            self.original.tile_ambiguity, abs=1e-6
+        )
+
+    def test_roundtrip_solution_fragility(self) -> None:
+        assert self.result.solution_fragility == pytest.approx(
+            self.original.solution_fragility, abs=1e-6
+        )

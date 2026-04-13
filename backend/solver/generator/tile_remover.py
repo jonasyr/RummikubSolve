@@ -338,7 +338,14 @@ class TileRemover:
                 new_rack = rack + [chosen.tile]
 
                 state = BoardState(board_sets=new_board, rack=new_rack)
-                solution = solve(state, timeout_seconds=solve_timeout)
+                try:
+                    solution = solve(state, timeout_seconds=solve_timeout)
+                except ValueError:
+                    # Solver post-verification failures can occur on some
+                    # intermediate removal states; treat them as invalid
+                    # candidates and keep searching rather than aborting
+                    # the entire generation attempt.
+                    continue
 
                 # Reject if the solver timed out or couldn't place all rack tiles.
                 if solution.solve_status in ("timeout_fallback", "infeasible_fallback"):

@@ -9,11 +9,13 @@ import type { TileInput } from "../../types/api";
 vi.mock("../../lib/api", () => ({
   fetchPuzzle: vi.fn(),
   solvePuzzle: vi.fn(),
+  postTelemetry: vi.fn(),
 }));
 
 // Import after vi.mock so we get the mocked version.
-const { fetchPuzzle } = await import("../../lib/api");
+const { fetchPuzzle, postTelemetry } = await import("../../lib/api");
 const mockFetchPuzzle = fetchPuzzle as ReturnType<typeof vi.fn>;
+const mockPostTelemetry = postTelemetry as ReturnType<typeof vi.fn>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,12 +39,22 @@ const makePuzzleResponse = (
   chain_depth: 0,
   is_unique: false,
   puzzle_id: "",
+  composite_score: 0,
+  branching_factor: 0,
+  deductive_depth: 0,
+  red_herring_density: 0,
+  working_memory_load: 0,
+  tile_ambiguity: 0,
+  solution_fragility: 0,
+  generator_version: "v2.0.0",
 });
 
 beforeEach(() => {
   store().reset();
   gameStore().reset();
   mockFetchPuzzle.mockReset();
+  mockPostTelemetry.mockReset();
+  mockPostTelemetry.mockResolvedValue({ status: "ok" });
 });
 
 // ---------------------------------------------------------------------------
@@ -151,6 +163,13 @@ describe("loadPuzzle", () => {
     await store().loadPuzzle({ difficulty: "easy" });
     expect(store().detectedSets).toHaveLength(1);
     expect(store().detectedSets[0].tiles).toHaveLength(3);
+  });
+
+  it("emits puzzle_loaded telemetry after successful load", async () => {
+    mockFetchPuzzle.mockResolvedValueOnce(makePuzzleResponse([]));
+    await store().loadPuzzle({ difficulty: "easy" });
+    expect(mockPostTelemetry).toHaveBeenCalledTimes(1);
+    expect(mockPostTelemetry.mock.calls[0][0].event_type).toBe("puzzle_loaded");
   });
 
   it("resets past/future/selectedTile on new puzzle load", async () => {
@@ -287,6 +306,21 @@ describe("tapCell — Phase 2", () => {
     expect(store().grid.get("1:0")?.tile.number).toBe(1);
   });
 
+  it("emits tile_placed telemetry for rack placements", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);
+    const payload = mockPostTelemetry.mock.calls
+      .map(([event]) => event)
+      .find((event) => event.event_type === "tile_placed");
+    expect(payload).toEqual(
+      expect.objectContaining({
+        event_type: "tile_placed",
+        to_row: 1,
+        to_col: 0,
+      }),
+    );
+  });
+
   it("removes placed tile from rack array", () => {
     store().tapRackTile(0);
     store().tapCell(1, 0);
@@ -324,6 +358,23 @@ describe("tapCell — Phase 2", () => {
     expect(store().grid.has("0:0")).toBe(false);
   });
 
+  it("emits tile_moved telemetry for grid moves", () => {
+    store().tapCell(0, 0);
+    store().tapCell(2, 0);
+    const payload = mockPostTelemetry.mock.calls
+      .map(([event]) => event)
+      .find((event) => event.event_type === "tile_moved");
+    expect(payload).toEqual(
+      expect.objectContaining({
+        event_type: "tile_moved",
+        from_row: 0,
+        from_col: 0,
+        to_row: 2,
+        to_col: 0,
+      }),
+    );
+  });
+
   it("board-source tile: returnToRack is a no-op", () => {
     store().tapCell(0, 0);   // select board tile (source: "board")
     store().returnToRack();  // should be blocked
@@ -347,6 +398,21 @@ describe("returnToRack — Phase 2", () => {
     expect(store().grid.has("1:0")).toBe(false);
   });
 
+  it("emits tile_returned_to_rack telemetry", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);
+    store().tapCell(1, 0);
+    store().returnToRack();
+    const payload = mockPostTelemetry.mock.calls
+      .map(([event]) => event)
+      .find((event) => event.event_type === "tile_returned_to_rack");
+    expect(payload).toEqual(
+      expect.objectContaining({
+        event_type: "tile_returned_to_rack",
+      }),
+    );
+  });
+
   it("board-source grid tile is a no-op", () => {
     store().tapCell(0, 0);  // select board tile
     const rackBefore = store().rack.length;
@@ -367,6 +433,20 @@ describe("undo / redo — Phase 2", () => {
     store().undo();
     expect(store().rack).toHaveLength(2);
     expect(store().grid.has("1:0")).toBe(false);
+  });
+
+  it("emits undo_pressed telemetry", () => {
+    store().tapRackTile(0);
+    store().tapCell(1, 0);
+    store().undo();
+    const payload = mockPostTelemetry.mock.calls
+      .map(([event]) => event)
+      .find((event) => event.event_type === "undo_pressed");
+    expect(payload).toEqual(
+      expect.objectContaining({
+        event_type: "undo_pressed",
+      }),
+    );
   });
 
   it("redo re-applies the undone placement", () => {
@@ -503,6 +583,23 @@ describe("commit — Phase 3", () => {
     // Committed snapshot should reflect post-placement state
     expect(store().committedSnapshot.rack).toHaveLength(0);
     expect(store().committedSnapshot.cells.has("0:3")).toBe(true);
+  });
+
+  it("emits puzzle_solved telemetry once on first solve", async () => {
+    mockFetchPuzzle.mockResolvedValueOnce(
+      makePuzzleResponse([[redTile(5), redTile(6), redTile(7)]], [redTile(8)]),
+    );
+    await store().loadPuzzle({ difficulty: "easy" });
+    mockPostTelemetry.mockClear();
+
+    store().tapRackTile(0);
+    store().tapCell(0, 3);
+    store().commit();
+
+    const solvedCalls = mockPostTelemetry.mock.calls.filter(
+      ([payload]) => payload.event_type === "puzzle_solved",
+    );
+    expect(solvedCalls).toHaveLength(1);
   });
 });
 

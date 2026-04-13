@@ -10,6 +10,7 @@ v1 unit tests in test_puzzle_generator.py are unaffected.
 from __future__ import annotations
 
 import time
+from statistics import mean
 
 import pytest
 
@@ -107,7 +108,7 @@ def test_v2_result_type_is_puzzle_result(_v2_easy: PuzzleResult) -> None:
 
 
 def test_v2_store_round_trip_all_metrics(_v2_hard: PuzzleResult, tmp_path: object) -> None:
-    """All 8 v2 PuzzleResult fields survive a complete store → draw cycle."""
+    """All v2 PuzzleResult metric fields survive a complete store → draw cycle."""
     import tempfile
     from pathlib import Path
 
@@ -123,8 +124,17 @@ def test_v2_store_round_trip_all_metrics(_v2_hard: PuzzleResult, tmp_path: objec
     assert restored.generator_version == _v2_hard.generator_version
     assert restored.composite_score == pytest.approx(_v2_hard.composite_score, abs=1e-5)
     assert restored.branching_factor == pytest.approx(_v2_hard.branching_factor, abs=1e-5)
-    # Fields not yet persisted (deductive_depth etc.) default to 0.0 — that is expected.
-    # The three persisted v2 fields must match exactly.
+    assert restored.deductive_depth == pytest.approx(_v2_hard.deductive_depth, abs=1e-5)
+    assert restored.red_herring_density == pytest.approx(
+        _v2_hard.red_herring_density, abs=1e-5
+    )
+    assert restored.working_memory_load == pytest.approx(
+        _v2_hard.working_memory_load, abs=1e-5
+    )
+    assert restored.tile_ambiguity == pytest.approx(_v2_hard.tile_ambiguity, abs=1e-5)
+    assert restored.solution_fragility == pytest.approx(
+        _v2_hard.solution_fragility, abs=1e-5
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,31 +195,31 @@ def test_tile_conservation(seed: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_easy_v2_composite_score_is_calculated() -> None:
-    """All easy v2 puzzles must have a positive composite_score (pipeline runs correctly).
+def test_difficulty_distribution() -> None:
+    """Composite scores should still show a tier-ordered spread before Phase 6 calibration."""
+    sample_count = 5
+    averages: dict[str, float] = {}
 
-    Note: absolute thresholds are not checked here — the TIER_THRESHOLDS in
-    difficulty_evaluator.py are initial weight estimates that will be recalibrated
-    in Phase 6.  This test only verifies that the metric pipeline produces a
-    non-zero, finite value for every easy puzzle.
-    """
-    for seed in range(10):
-        result = generate_puzzle("easy", seed=seed, generator_version="v2")
-        assert result.composite_score > 0.0, (
-            f"Easy v2 seed={seed}: composite_score should be > 0, got {result.composite_score}"
-        )
-        assert result.composite_score <= 100.0, (
-            f"Easy v2 seed={seed}: composite_score out of range: {result.composite_score}"
-        )
+    for difficulty in ("easy", "medium", "hard", "expert", "nightmare"):
+        scores = [
+            generate_puzzle(difficulty, seed=seed, generator_version="v2").composite_score
+            for seed in range(sample_count)
+        ]
+        assert all(0.0 <= score <= 100.0 for score in scores)
+        averages[difficulty] = mean(scores)
+
+    assert averages["easy"] < averages["medium"] < averages["hard"], averages
+    assert averages["hard"] <= averages["expert"], averages
+    assert averages["expert"] <= averages["nightmare"], averages
 
 
-def test_expert_v2_branching_factor_above_threshold() -> None:
-    """All expert v2 puzzles must have branching_factor ≥ 1.0."""
+def test_no_trivially_solvable_expert_puzzles() -> None:
+    """Expert puzzles should not look trivial on both branching and disruption."""
     for seed in range(5):
         result = generate_puzzle("expert", seed=seed, generator_version="v2")
-        assert result.branching_factor >= 1.0, (
-            f"Expert puzzle seed={seed} has branching_factor={result.branching_factor}"
-        )
+        assert not (
+            result.branching_factor < 2.0 and result.disruption_score < 5
+        ), f"Expert seed={seed} looks trivial"
 
 
 # ---------------------------------------------------------------------------

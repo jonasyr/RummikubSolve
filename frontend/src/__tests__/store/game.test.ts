@@ -163,6 +163,14 @@ describe("lastPuzzleMeta", () => {
       chain_depth: 2,
       is_unique: true,
       puzzle_id: "test-uuid",
+      composite_score: 55,
+      branching_factor: 3,
+      deductive_depth: 2,
+      red_herring_density: 0.2,
+      working_memory_load: 2,
+      tile_ambiguity: 3,
+      solution_fragility: 0.1,
+      generator_version: "v2.0.0",
     });
     await store().loadPuzzle({ difficulty: "expert" });
     expect(store().lastPuzzleMeta).toEqual({
@@ -181,6 +189,14 @@ describe("lastPuzzleMeta", () => {
       disruption_score: 5,
       // chain_depth and is_unique intentionally absent
       puzzle_id: "",
+      composite_score: 10,
+      branching_factor: 1,
+      deductive_depth: 0,
+      red_herring_density: 0,
+      working_memory_load: 0,
+      tile_ambiguity: 1,
+      solution_fragility: 0,
+      generator_version: "v2.0.0",
     });
     await store().loadPuzzle({ difficulty: "easy" });
     expect(store().lastPuzzleMeta?.chainDepth).toBe(0);
@@ -197,6 +213,14 @@ describe("lastPuzzleMeta", () => {
       chain_depth: 4,
       is_unique: false,
       puzzle_id: "some-id",
+      composite_score: 80,
+      branching_factor: 6,
+      deductive_depth: 4,
+      red_herring_density: 0.4,
+      working_memory_load: 5,
+      tile_ambiguity: 7,
+      solution_fragility: 0.2,
+      generator_version: "v2.0.0",
     });
     await store().loadPuzzle({ difficulty: "nightmare" });
     expect(store().lastPuzzleMeta?.difficulty).toBe("nightmare");
@@ -212,6 +236,14 @@ describe("lastPuzzleMeta", () => {
       chain_depth: 1,
       is_unique: false,
       puzzle_id: "",
+      composite_score: 25,
+      branching_factor: 2,
+      deductive_depth: 1,
+      red_herring_density: 0.1,
+      working_memory_load: 1,
+      tile_ambiguity: 2,
+      solution_fragility: 0.1,
+      generator_version: "v2.0.0",
     });
     await store().loadPuzzle({ difficulty: "medium" });
     expect(store().lastPuzzleMeta).not.toBeNull();

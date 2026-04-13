@@ -10,14 +10,66 @@ Blueprint: "Puzzle Generation System — Full Rebuild Implementation Plan"
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..engine.objective import compute_chain_depth, compute_disruption_score
 from ..engine.solver import solve
 from ..generator.set_enumerator import enumerate_valid_sets
 from ..models.board_state import BoardState, Solution
 from ..models.tileset import TileSet
+
+_WEIGHTS_PATH = Path(__file__).with_name("difficulty_weights.json")
+
+
+def _load_difficulty_config() -> tuple[dict[str, float], dict[str, float]]:
+    raw = json.loads(_WEIGHTS_PATH.read_text(encoding="utf-8"))
+
+    weights = raw.get("weights")
+    ceilings = raw.get("normalization_ceilings")
+    if not isinstance(weights, dict) or not isinstance(ceilings, dict):
+        raise ValueError("difficulty_weights.json must define weights and normalization_ceilings")
+
+    required_weights = {
+        "branching",
+        "deductive",
+        "red_herring",
+        "working_memory",
+        "ambiguity",
+        "fragility",
+        "disruption",
+        "chain_depth",
+    }
+    required_ceilings = {
+        "branching_factor",
+        "deductive_depth",
+        "working_memory_load",
+        "tile_ambiguity",
+        "disruption_score",
+        "chain_depth",
+    }
+
+    missing_weights = sorted(required_weights - set(weights))
+    missing_ceilings = sorted(required_ceilings - set(ceilings))
+    if missing_weights or missing_ceilings:
+        missing = []
+        if missing_weights:
+            missing.append(f"weights={missing_weights}")
+        if missing_ceilings:
+            missing.append(f"normalization_ceilings={missing_ceilings}")
+        raise ValueError(
+            "difficulty_weights.json is missing required keys: " + ", ".join(missing)
+        )
+
+    return (
+        {key: float(weights[key]) for key in required_weights},
+        {key: float(ceilings[key]) for key in required_ceilings},
+    )
+
+
+_COMPOSITE_WEIGHTS, _NORMALIZATION_CEILINGS = _load_difficulty_config()
 
 
 @dataclass(frozen=True)
@@ -284,24 +336,24 @@ def compute_composite_score(
     Each metric is normalised to roughly [0, 1] before weighting.
     Weights (sum to 1.0) reflect estimated cognitive difficulty contribution.
     """
-    bf_norm = min(branching_factor / 8.0, 1.0)
-    dd_norm = min(deductive_depth / 10.0, 1.0)
+    bf_norm = min(branching_factor / _NORMALIZATION_CEILINGS["branching_factor"], 1.0)
+    dd_norm = min(deductive_depth / _NORMALIZATION_CEILINGS["deductive_depth"], 1.0)
     rh_norm = red_herring_density          # already [0, 1]
-    wm_norm = min(working_memory_load / 10.0, 1.0)
-    ta_norm = min(tile_ambiguity / 15.0, 1.0)
+    wm_norm = min(working_memory_load / _NORMALIZATION_CEILINGS["working_memory_load"], 1.0)
+    ta_norm = min(tile_ambiguity / _NORMALIZATION_CEILINGS["tile_ambiguity"], 1.0)
     sf_norm = solution_fragility           # already [0, 1]
-    ds_norm = min(disruption_score / 50.0, 1.0)
-    cd_norm = min(chain_depth / 5.0, 1.0)
+    ds_norm = min(disruption_score / _NORMALIZATION_CEILINGS["disruption_score"], 1.0)
+    cd_norm = min(chain_depth / _NORMALIZATION_CEILINGS["chain_depth"], 1.0)
 
     composite = (
-        0.20 * bf_norm
-        + 0.20 * dd_norm
-        + 0.15 * rh_norm
-        + 0.15 * wm_norm
-        + 0.10 * ta_norm
-        + 0.10 * sf_norm
-        + 0.05 * ds_norm
-        + 0.05 * cd_norm
+        _COMPOSITE_WEIGHTS["branching"] * bf_norm
+        + _COMPOSITE_WEIGHTS["deductive"] * dd_norm
+        + _COMPOSITE_WEIGHTS["red_herring"] * rh_norm
+        + _COMPOSITE_WEIGHTS["working_memory"] * wm_norm
+        + _COMPOSITE_WEIGHTS["ambiguity"] * ta_norm
+        + _COMPOSITE_WEIGHTS["fragility"] * sf_norm
+        + _COMPOSITE_WEIGHTS["disruption"] * ds_norm
+        + _COMPOSITE_WEIGHTS["chain_depth"] * cd_norm
     ) * 100.0
 
     return round(composite, 2)

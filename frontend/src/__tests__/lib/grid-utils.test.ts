@@ -33,6 +33,14 @@ const makePuzzle = (
   chain_depth: 0,
   is_unique: false,
   puzzle_id: "",
+  composite_score: 0,
+  branching_factor: 0,
+  deductive_depth: 0,
+  red_herring_density: 0,
+  working_memory_load: 0,
+  tile_ambiguity: 0,
+  solution_fragility: 0,
+  generator_version: "v2.0.0",
 });
 
 const boardPlaced = (tile: TileInput): PlacedTile => ({ tile, source: "board" });

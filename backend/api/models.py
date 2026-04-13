@@ -181,4 +181,76 @@ class PuzzleResponse(BaseModel):
     # Phase 4 (v2 generator) — populated when generator_version="v2"; 0.0/"v1" otherwise.
     composite_score: float = 0.0
     branching_factor: float = 0.0
+    deductive_depth: float = 0.0
+    red_herring_density: float = 0.0
+    working_memory_load: float = 0.0
+    tile_ambiguity: float = 0.0
+    solution_fragility: float = 0.0
     generator_version: str = "v1"
+
+
+class TelemetryTileInput(BaseModel):
+    color: Literal["blue", "red", "black", "yellow"] | None = None
+    number: int | None = None
+    joker: bool = False
+
+
+class TelemetryRequest(BaseModel):
+    event_type: Literal[
+        "puzzle_loaded",
+        "tile_placed",
+        "tile_moved",
+        "tile_returned_to_rack",
+        "undo_pressed",
+        "puzzle_solved",
+    ]
+    event_at: str
+    puzzle_id: str = ""
+    difficulty: str
+    generator_version: str
+    composite_score: float
+    branching_factor: float
+    deductive_depth: float
+    red_herring_density: float
+    working_memory_load: float
+    tile_ambiguity: float
+    solution_fragility: float
+    disruption_score: int
+    chain_depth: int
+    tile: TelemetryTileInput | None = None
+    from_row: int | None = None
+    from_col: int | None = None
+    to_row: int | None = None
+    to_col: int | None = None
+    elapsed_ms: int | None = Field(default=None, ge=0)
+    move_count: int | None = Field(default=None, ge=0)
+    undo_count: int | None = Field(default=None, ge=0)
+    redo_count: int | None = Field(default=None, ge=0)
+    commit_count: int | None = Field(default=None, ge=0)
+    revert_count: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_event_payload(self) -> TelemetryRequest:
+        if self.event_type == "tile_placed":
+            if self.tile is None or self.to_row is None or self.to_col is None:
+                raise ValueError("tile_placed requires tile, to_row, and to_col.")
+        elif self.event_type == "tile_moved":
+            if (
+                self.tile is None
+                or self.from_row is None
+                or self.from_col is None
+                or self.to_row is None
+                or self.to_col is None
+            ):
+                raise ValueError("tile_moved requires tile, from_row, from_col, to_row, and to_col.")
+        elif self.event_type == "tile_returned_to_rack":
+            if self.tile is None:
+                raise ValueError("tile_returned_to_rack requires tile.")
+        elif self.event_type == "puzzle_solved":
+            if self.elapsed_ms is None or self.move_count is None or self.undo_count is None:
+                raise ValueError("puzzle_solved requires elapsed_ms, move_count, and undo_count.")
+        return self
+
+
+class TelemetryResponse(BaseModel):
+    status: Literal["ok"]

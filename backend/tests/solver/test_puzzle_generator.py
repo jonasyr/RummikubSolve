@@ -24,45 +24,52 @@ from solver.validator.rule_checker import is_valid_set
 
 pytestmark = pytest.mark.slow
 
+_raw_generate_puzzle = generate_puzzle
+
+
+def generate_puzzle(*args: object, **kwargs: object) -> PuzzleResult:
+    kwargs.setdefault("generator_version", "v1")
+    return _raw_generate_puzzle(*args, **kwargs)
+
 # ---------------------------------------------------------------------------
 # Happy-path: one puzzle per difficulty
 # ---------------------------------------------------------------------------
 
 
 def test_easy_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="easy", seed=1)
+    result = generate_puzzle(difficulty="easy", seed=1, generator_version="v1")
     assert isinstance(result, PuzzleResult)
     assert result.difficulty == "easy"
     assert 2 <= len(result.rack) <= 3
 
 
 def test_medium_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="medium", seed=2)
+    result = generate_puzzle(difficulty="medium", seed=2, generator_version="v1")
     assert result.difficulty == "medium"
     assert 3 <= len(result.rack) <= 4
 
 
 def test_hard_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="hard", seed=3)
+    result = generate_puzzle(difficulty="hard", seed=3, generator_version="v1")
     assert result.difficulty == "hard"
     assert 4 <= len(result.rack) <= 5
 
 
 def test_custom_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="custom", seed=4, sets_to_remove=3)
+    result = generate_puzzle(difficulty="custom", seed=4, sets_to_remove=3, generator_version="v1")
     assert result.difficulty == "custom"
     # 3 complete sets removed → at least 3 × 3 = 9 tiles.
     assert len(result.rack) >= 9
 
 
 def test_custom_puzzle_scales_with_sets_removed() -> None:
-    result = generate_puzzle(difficulty="custom", seed=7, sets_to_remove=4)
+    result = generate_puzzle(difficulty="custom", seed=7, sets_to_remove=4, generator_version="v1")
     # 4 complete sets removed → at least 4 × 3 = 12 tiles.
     assert len(result.rack) >= 12
 
 
 def test_custom_puzzle_is_solvable() -> None:
-    result = generate_puzzle(difficulty="custom", seed=10, sets_to_remove=3)
+    result = generate_puzzle(difficulty="custom", seed=10, sets_to_remove=3, generator_version="v1")
     state = BoardState(board_sets=result.board_sets, rack=result.rack)
     solution = solve(state)
     assert solution.tiles_placed == len(result.rack)

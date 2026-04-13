@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from solver.generator.board_builder import BoardBuilder
+import solver.generator.tile_remover as tile_remover_module
 from solver.generator.tile_remover import (
     RemovalCandidate,
     TileRemover,
@@ -346,6 +349,28 @@ def test_state_before_is_pre_removal_snapshot():
     _, _, log = result
     if len(log) >= 2:
         assert len(log[0].state_before.rack) < len(log[1].state_before.rack)
+
+
+def test_remove_skips_candidates_when_solver_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Solver ValueError during a trial removal is treated as a rejected candidate."""
+    board = _make_board(7)
+    real_solve = tile_remover_module.solve
+    calls = {"count": 0}
+
+    def flaky_solve(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise ValueError("post-verification failed")
+        return real_solve(*args, **kwargs)
+
+    monkeypatch.setattr(tile_remover_module, "solve", flaky_solve)
+
+    result = TileRemover.remove(board, random.Random(9), rack_size_range=(2, 3))
+    assert result is not None
+    _, rack, _ = result
+    assert len(rack) >= 2
 
 
 def test_cascade_estimate_in_candidates():

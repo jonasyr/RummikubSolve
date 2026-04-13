@@ -24,6 +24,7 @@ Solvability is guaranteed by construction. Joker-free in v1.
 
 from __future__ import annotations
 
+import logging
 import random
 from collections import Counter
 from dataclasses import dataclass
@@ -294,6 +295,13 @@ _DEFAULT_MAX_ATTEMPTS_V2: dict[str, int] = {
 # Tier ordering for ±1 adjacency check in _attempt_generate_v2.
 _TIER_ORDER = ["easy", "medium", "hard", "expert", "nightmare"]
 
+try:
+    import structlog
+except ImportError:  # pragma: no cover - fallback for minimal environments
+    structlog = None
+
+logger = structlog.get_logger(__name__) if structlog is not None else logging.getLogger(__name__)
+
 
 def _attempt_generate_v2(
     rng: random.Random,
@@ -359,6 +367,16 @@ def _attempt_generate_v2(
     if difficulty in ("expert", "nightmare"):
         is_unique = check_uniqueness(state, solution, timeout_seconds=5.0)
 
+    logger.info(
+        "puzzle_generated",
+        generator_version="v2.0.0",
+        difficulty=difficulty,
+        composite_score=score.composite_score,
+        branching_factor=score.branching_factor,
+        board_size=len(remaining_board),
+        rack_size=len(rack),
+    )
+
     return _AttemptOutcome(
         result=PuzzleResult(
             board_sets=remaining_board,
@@ -401,7 +419,7 @@ def generate_puzzle(
     min_chain_depth: int = 0,
     min_disruption: int = 0,
     solve_timeout: float | None = None,
-    generator_version: str = "v1",
+    generator_version: str = "v2",
 ) -> PuzzleResult:
     """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
 

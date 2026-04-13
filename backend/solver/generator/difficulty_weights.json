@@ -1,0 +1,20 @@
+{
+  "weights": {
+    "branching": 0.2,
+    "deductive": 0.2,
+    "red_herring": 0.15,
+    "working_memory": 0.15,
+    "ambiguity": 0.1,
+    "fragility": 0.1,
+    "disruption": 0.05,
+    "chain_depth": 0.05
+  },
+  "normalization_ceilings": {
+    "branching_factor": 8.0,
+    "deductive_depth": 10.0,
+    "working_memory_load": 10.0,
+    "tile_ambiguity": 15.0,
+    "disruption_score": 50.0,
+    "chain_depth": 5.0
+  }
+}

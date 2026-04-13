@@ -119,6 +119,7 @@ from solver.generator.puzzle_store import PuzzleStore  # noqa: E402
 from solver.generator.set_changes import (  # noqa: E402
     build_set_changes as _build_set_changes_data,
 )
+from solver.generator.telemetry_store import TelemetryStore  # noqa: E402
 from solver.models.board_state import BoardState  # noqa: E402
 from solver.models.tile import Color, Tile  # noqa: E402
 from solver.models.tileset import SetType, TileSet  # noqa: E402
@@ -133,6 +134,8 @@ from .models import (  # noqa: E402  (import after app init is intentional)
     SetChangeResultSet,
     SolveRequest,
     SolveResponse,
+    TelemetryRequest,
+    TelemetryResponse,
     TileInput,
     TileOutput,
     TileWithOrigin,
@@ -375,6 +378,11 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             puzzle_id=puzzle_id,
             composite_score=result.composite_score,
             branching_factor=result.branching_factor,
+            deductive_depth=result.deductive_depth,
+            red_herring_density=result.red_herring_density,
+            working_memory_load=result.working_memory_load,
+            tile_ambiguity=result.tile_ambiguity,
+            solution_fragility=result.solution_fragility,
             generator_version=result.generator_version,
         )
 
@@ -415,3 +423,23 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
         ) from exc
 
     return _result_to_response(result)
+
+
+@app.post("/api/telemetry", response_model=TelemetryResponse, tags=["meta"])
+def telemetry_endpoint(request: TelemetryRequest) -> TelemetryResponse:
+    """Persist one play-mode telemetry event for later difficulty calibration."""
+    store = TelemetryStore()
+    try:
+        event_id = store.store(request.model_dump())
+    finally:
+        store.close()
+
+    logger.info(
+        "telemetry_recorded",
+        event_id=event_id,
+        event_type=request.event_type,
+        puzzle_id=request.puzzle_id,
+        difficulty=request.difficulty,
+        generator_version=request.generator_version,
+    )
+    return TelemetryResponse(status="ok")

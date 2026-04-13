@@ -365,20 +365,29 @@ async def test_custom_is_unique_field_present(client: AsyncClient) -> None:
 
 
 async def test_response_has_v2_fields(client: AsyncClient) -> None:
-    """Phase 5: POST /api/puzzle for medium returns all three v2 metadata fields.
+    """Phase 5: POST /api/puzzle for medium returns the full v2 metric payload.
 
     After wiring generator_version='v2' in puzzle_endpoint(), every non-custom
-    response must include composite_score, branching_factor, and generator_version
-    with their v2.0.0 values.
+    response must include the full set of v2 metrics and generator_version.
     """
     r = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 55})
     assert r.status_code == 200
     data = r.json()
     assert "composite_score" in data, "composite_score missing from response"
     assert "branching_factor" in data, "branching_factor missing from response"
+    assert "deductive_depth" in data, "deductive_depth missing from response"
+    assert "red_herring_density" in data, "red_herring_density missing from response"
+    assert "working_memory_load" in data, "working_memory_load missing from response"
+    assert "tile_ambiguity" in data, "tile_ambiguity missing from response"
+    assert "solution_fragility" in data, "solution_fragility missing from response"
     assert "generator_version" in data, "generator_version missing from response"
     assert isinstance(data["composite_score"], float)
     assert isinstance(data["branching_factor"], float)
+    assert isinstance(data["deductive_depth"], float)
+    assert isinstance(data["red_herring_density"], float)
+    assert isinstance(data["working_memory_load"], float)
+    assert isinstance(data["tile_ambiguity"], float)
+    assert isinstance(data["solution_fragility"], float)
     assert data["composite_score"] >= 0.0
     assert data["branching_factor"] >= 0.0
     assert data["generator_version"] == "v2.0.0"

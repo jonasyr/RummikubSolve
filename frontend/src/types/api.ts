@@ -94,6 +94,60 @@ export interface PuzzleResponse {
   is_unique: boolean;       // Phase 3: solution uniqueness verified for Expert/Nightmare
   /** Phase 5: UUID for pool-drawn puzzles; empty string for live-generated. */
   puzzle_id: string;
+  composite_score: number;
+  branching_factor: number;
+  deductive_depth: number;
+  red_herring_density: number;
+  working_memory_load: number;
+  tile_ambiguity: number;
+  solution_fragility: number;
+  generator_version: string;
+}
+
+export type TelemetryEventType =
+  | "puzzle_loaded"
+  | "tile_placed"
+  | "tile_moved"
+  | "tile_returned_to_rack"
+  | "undo_pressed"
+  | "puzzle_solved";
+
+export interface TelemetryTilePayload {
+  color?: TileColor;
+  number?: number;
+  joker?: boolean;
+}
+
+export interface TelemetryEventRequest {
+  event_type: TelemetryEventType;
+  event_at: string;
+  puzzle_id: string;
+  difficulty: Difficulty | string;
+  generator_version: string;
+  composite_score: number;
+  branching_factor: number;
+  deductive_depth: number;
+  red_herring_density: number;
+  working_memory_load: number;
+  tile_ambiguity: number;
+  solution_fragility: number;
+  disruption_score: number;
+  chain_depth: number;
+  tile?: TelemetryTilePayload;
+  from_row?: number;
+  from_col?: number;
+  to_row?: number;
+  to_col?: number;
+  elapsed_ms?: number;
+  move_count?: number;
+  undo_count?: number;
+  redo_count?: number;
+  commit_count?: number;
+  revert_count?: number;
+}
+
+export interface TelemetryResponse {
+  status: "ok";
 }
 
 export type SolveStatus = "solved" | "no_solution";
