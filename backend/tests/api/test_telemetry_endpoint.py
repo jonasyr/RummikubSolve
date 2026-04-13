@@ -10,6 +10,7 @@ from api.main import telemetry_endpoint
 from api.models import TelemetryRequest
 from solver.generator.telemetry_store import TelemetryStore
 
+
 def _payload() -> dict[str, object]:
     return {
         "event_type": "puzzle_solved",

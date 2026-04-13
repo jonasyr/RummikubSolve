@@ -9,7 +9,6 @@ from httpx import ASGITransport, AsyncClient
 
 from api.main import app
 from solver.generator.puzzle_generator import (
-    _MIN_CHAIN_DEPTHS,  # type: ignore[attr-defined]
     generate_puzzle,
 )
 
@@ -152,9 +151,7 @@ class TestPuzzleResponseNewFields:
         assert "is_unique" in data
         assert isinstance(data["is_unique"], bool)
 
-    async def test_expert_response_chain_depth_and_unique(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_expert_response_chain_depth_and_unique(self, client: AsyncClient) -> None:
         r = await client.post("/api/puzzle", json={"difficulty": "expert", "seed": 42})
         assert r.status_code == 200
         data = r.json()
@@ -196,9 +193,7 @@ class TestSeenIdsValidation:
         assert r.status_code == 200
 
     async def test_seen_ids_empty_list_ok(self, client: AsyncClient) -> None:
-        r = await client.post(
-            "/api/puzzle", json={"difficulty": "easy", "seed": 1, "seen_ids": []}
-        )
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1, "seen_ids": []})
         assert r.status_code == 200
 
     async def test_seen_ids_with_strings(self, client: AsyncClient) -> None:
@@ -278,9 +273,7 @@ class TestPoolIntegration:
         mock_store.draw.return_value = (_pool_result, fake_id)
         monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
 
-        r = await client.post(
-            "/api/puzzle", json={"difficulty": "expert", "seen_ids": seen}
-        )
+        r = await client.post("/api/puzzle", json={"difficulty": "expert", "seen_ids": seen})
         assert r.status_code == 200
         mock_store.draw.assert_called_once_with("expert", exclude_ids=seen)
 

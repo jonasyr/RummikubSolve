@@ -8,7 +8,6 @@ from solver.generator.tile_pool import assign_copy_ids, make_tile_pool
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
 
-
 # ---------------------------------------------------------------------------
 # make_tile_pool
 # ---------------------------------------------------------------------------
@@ -73,9 +72,6 @@ def test_assign_copy_ids_assigns_0_then_1() -> None:
     ]
     result = assign_copy_ids(sets)
     red5_ids = [
-        t.copy_id
-        for ts in result
-        for t in ts.tiles
-        if t.color == Color.RED and t.number == 5
+        t.copy_id for ts in result for t in ts.tiles if t.color == Color.RED and t.number == 5
     ]
     assert red5_ids == [0, 1]

@@ -12,8 +12,8 @@ import random
 
 import pytest
 
-from solver.generator.board_builder import BoardBuilder
 import solver.generator.tile_remover as tile_remover_module
+from solver.generator.board_builder import BoardBuilder
 from solver.generator.tile_remover import (
     RemovalCandidate,
     TileRemover,
@@ -27,6 +27,7 @@ from solver.models.tileset import SetType, TileSet
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
+
 
 def _tile(color: Color, number: int, copy_id: int = 0) -> Tile:
     return Tile(color=color, number=number, copy_id=copy_id)
@@ -42,7 +43,6 @@ def _group(number: int, *colors: Color) -> TileSet:
     return TileSet(type=SetType.GROUP, tiles=[_tile(c, number) for c in colors])
 
 
-
 # ---------------------------------------------------------------------------
 # estimate_cascade_depth — pure logic, no solver
 # ---------------------------------------------------------------------------
@@ -50,9 +50,7 @@ def _group(number: int, *colors: Color) -> TileSet:
 
 def test_cascade_survives_set():
     """Removing a tile from a set with ≥4 tiles returns 0.5 (set survives)."""
-    ts = _run(
-        (Color.RED, 3), (Color.RED, 4), (Color.RED, 5), (Color.RED, 6)
-    )
+    ts = _run((Color.RED, 3), (Color.RED, 4), (Color.RED, 5), (Color.RED, 6))
     board = [ts]
     tile = ts.tiles[0]
     result = estimate_cascade_depth(board, tile, 0, [])
@@ -101,9 +99,9 @@ def test_cascade_breaks_set_multiple_absorbers():
     # [R2,R3,R4] + R5 = [R2,R3,R4,R5] ✓   [R6,R7,R8] + R5 = [R5,R6,R7,R8] ✓
     # [K2,K3,K4] + K5 = [K2,K3,K4,K5] ✓   [K6,K7,K8] + K5 = [K5,K6,K7,K8] ✓
     ts_main = _group(5, Color.BLUE, Color.RED, Color.BLACK)
-    ts_r_low  = _run((Color.RED,   2), (Color.RED,   3), (Color.RED,   4))
-    ts_r_high = _run((Color.RED,   6), (Color.RED,   7), (Color.RED,   8))
-    ts_k_low  = _run((Color.BLACK, 2), (Color.BLACK, 3), (Color.BLACK, 4))
+    ts_r_low = _run((Color.RED, 2), (Color.RED, 3), (Color.RED, 4))
+    ts_r_high = _run((Color.RED, 6), (Color.RED, 7), (Color.RED, 8))
+    ts_k_low = _run((Color.BLACK, 2), (Color.BLACK, 3), (Color.BLACK, 4))
     ts_k_high = _run((Color.BLACK, 6), (Color.BLACK, 7), (Color.BLACK, 8))
     board = [ts_main, ts_r_low, ts_r_high, ts_k_low, ts_k_high]
     tile = ts_main.tiles[0]  # Blue 5; orphans = [Red 5, Black 5]
@@ -135,9 +133,14 @@ def test_apply_removal_removes_correct_tile():
     t1, t2, t3 = _tile(Color.RED, 1), _tile(Color.RED, 2), _tile(Color.RED, 3)
     board = [TileSet(type=SetType.RUN, tiles=[t1, t2, t3])]
     cand = RemovalCandidate(
-        set_index=0, tile_index=1, tile=t2,
-        set_size_after=2, breaks_set=True,
-        orphan_count=2, alternative_placements=0, cascade_estimate=1.0,
+        set_index=0,
+        tile_index=1,
+        tile=t2,
+        set_size_after=2,
+        breaks_set=True,
+        orphan_count=2,
+        alternative_placements=0,
+        cascade_estimate=1.0,
     )
     result = _apply_removal(board, cand)
     assert len(result) == 1
@@ -149,9 +152,14 @@ def test_apply_removal_drops_empty_set():
     t = _tile(Color.RED, 5)
     board = [TileSet(type=SetType.RUN, tiles=[t])]
     cand = RemovalCandidate(
-        set_index=0, tile_index=0, tile=t,
-        set_size_after=0, breaks_set=True,
-        orphan_count=0, alternative_placements=0, cascade_estimate=2.0,
+        set_index=0,
+        tile_index=0,
+        tile=t,
+        set_size_after=0,
+        breaks_set=True,
+        orphan_count=0,
+        alternative_placements=0,
+        cascade_estimate=2.0,
     )
     result = _apply_removal(board, cand)
     assert result == []
@@ -162,9 +170,14 @@ def test_apply_removal_orphaned_2tile_set_kept():
     t1, t2, t3 = _tile(Color.RED, 1), _tile(Color.RED, 2), _tile(Color.RED, 3)
     board = [TileSet(type=SetType.RUN, tiles=[t1, t2, t3])]
     cand = RemovalCandidate(
-        set_index=0, tile_index=0, tile=t1,
-        set_size_after=2, breaks_set=True,
-        orphan_count=2, alternative_placements=0, cascade_estimate=2.0,
+        set_index=0,
+        tile_index=0,
+        tile=t1,
+        set_size_after=2,
+        breaks_set=True,
+        orphan_count=2,
+        alternative_placements=0,
+        cascade_estimate=2.0,
     )
     result = _apply_removal(board, cand)
     assert len(result) == 1
@@ -180,9 +193,14 @@ def test_apply_removal_preserves_tile_identity():
         TileSet(type=SetType.GROUP, tiles=[other_t]),
     ]
     cand = RemovalCandidate(
-        set_index=0, tile_index=0, tile=t1,
-        set_size_after=2, breaks_set=True,
-        orphan_count=2, alternative_placements=0, cascade_estimate=2.0,
+        set_index=0,
+        tile_index=0,
+        tile=t1,
+        set_size_after=2,
+        breaks_set=True,
+        orphan_count=2,
+        alternative_placements=0,
+        cascade_estimate=2.0,
     )
     result = _apply_removal(board, cand)
     # t2 and t3 in first set must be the exact same objects
@@ -198,9 +216,14 @@ def test_apply_removal_other_sets_unchanged():
     ts2 = _group(7, Color.BLUE, Color.RED, Color.BLACK)
     board = [ts1, ts2]
     cand = RemovalCandidate(
-        set_index=0, tile_index=0, tile=ts1.tiles[0],
-        set_size_after=2, breaks_set=True,
-        orphan_count=2, alternative_placements=0, cascade_estimate=1.0,
+        set_index=0,
+        tile_index=0,
+        tile=ts1.tiles[0],
+        set_size_after=2,
+        breaks_set=True,
+        orphan_count=2,
+        alternative_placements=0,
+        cascade_estimate=1.0,
     )
     result = _apply_removal(board, cand)
     # Second set is intact and contains the same tile objects
@@ -216,7 +239,7 @@ def test_apply_removal_other_sets_unchanged():
 def test_score_all_candidates_count():
     """Returns one candidate per board tile."""
     ts1 = _run((Color.RED, 1), (Color.RED, 2), (Color.RED, 3))  # 3 tiles
-    ts2 = _group(5, Color.BLUE, Color.RED, Color.BLACK)           # 3 tiles
+    ts2 = _group(5, Color.BLUE, Color.RED, Color.BLACK)  # 3 tiles
     board = [ts1, ts2]
     candidates = _score_all_candidates(board, [])
     assert len(candidates) == 6
@@ -234,9 +257,7 @@ def test_score_all_candidates_breaks_set_flag():
 
 def test_score_all_candidates_no_break_large_set():
     """breaks_set is False for tiles from sets with ≥4 tiles."""
-    ts = _run(
-        (Color.RED, 1), (Color.RED, 2), (Color.RED, 3), (Color.RED, 4)
-    )
+    ts = _run((Color.RED, 1), (Color.RED, 2), (Color.RED, 3), (Color.RED, 4))
     board = [ts]
     candidates = _score_all_candidates(board, [])
     assert all(not c.breaks_set for c in candidates)
@@ -290,9 +311,7 @@ def test_board_tiles_not_in_rack():
     result = TileRemover.remove(_make_board(2), random.Random(3), rack_size_range=(3, 5))
     assert result is not None
     remaining_board, rack, _ = result
-    board_keys = {
-        (t.color, t.number, t.copy_id) for ts in remaining_board for t in ts.tiles
-    }
+    board_keys = {(t.color, t.number, t.copy_id) for ts in remaining_board for t in ts.tiles}
     rack_keys = {(t.color, t.number, t.copy_id) for t in rack}
     assert board_keys.isdisjoint(rack_keys), "Tile appears in both board and rack"
 
@@ -376,9 +395,14 @@ def test_remove_skips_candidates_when_solver_raises(
 def test_cascade_estimate_in_candidates():
     """Tiles from 3-tile sets have higher cascade estimates than tiles from large sets."""
     board = [
-        _run((Color.RED, 1), (Color.RED, 2), (Color.RED, 3)),           # 3-tile
-        _run((Color.BLUE, 5), (Color.BLUE, 6), (Color.BLUE, 7),         # 5-tile
-             (Color.BLUE, 8), (Color.BLUE, 9)),
+        _run((Color.RED, 1), (Color.RED, 2), (Color.RED, 3)),  # 3-tile
+        _run(
+            (Color.BLUE, 5),
+            (Color.BLUE, 6),
+            (Color.BLUE, 7),  # 5-tile
+            (Color.BLUE, 8),
+            (Color.BLUE, 9),
+        ),
     ]
     candidates = _score_all_candidates(board, [])
     small_set = [c for c in candidates if c.set_index == 0]
