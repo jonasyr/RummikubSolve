@@ -231,7 +231,13 @@ def compute_solution_fragility(state: BoardState, solution: Solution) -> float:
     for i in range(len(state.rack)):
         reduced_rack = [t for j, t in enumerate(state.rack) if j != i]
         reduced_state = BoardState(board_sets=state.board_sets, rack=reduced_rack)
-        reduced_solution = solve(reduced_state, timeout_seconds=2.0)
+        try:
+            reduced_solution = solve(reduced_state, timeout_seconds=2.0)
+        except ValueError:
+            # Solver post-verification failure on a reduced rack — treat the
+            # removal as causing a change (conservative: counts toward fragility).
+            changes += 1
+            continue
 
         if reduced_solution.tiles_placed < len(reduced_rack):
             changes += 1

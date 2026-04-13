@@ -403,6 +403,9 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             max_board_sets=request.max_board_sets,
             min_chain_depth=request.min_chain_depth,
             min_disruption=request.min_disruption,
+            # Phase 5: use v2 pipeline for standard tiers (§9.6 default switch).
+            # "custom" stays on v1 — its fine-grained params are v1-only.
+            generator_version="v1" if request.difficulty == "custom" else "v2",
         )
     except PuzzleGenerationError as exc:
         logger.warning("puzzle_generation_failed", error=str(exc))

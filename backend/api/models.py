@@ -42,7 +42,10 @@ class TileInput(BaseModel):
 
 class BoardSetInput(BaseModel):
     type: Literal["run", "group"]
-    tiles: list[TileInput] = Field(min_length=3, max_length=13)
+    # min_length=1 (not 3) to support v2 puzzle boards which may include
+    # "orphaned" sets — partial tile groups left after individual tile removal.
+    # The ILP solver handles these via its tile-conservation constraints.
+    tiles: list[TileInput] = Field(min_length=1, max_length=13)
 
 
 class RulesInput(BaseModel):

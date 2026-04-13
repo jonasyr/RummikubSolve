@@ -219,10 +219,10 @@ def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
         chain_depth=row["chain_depth"],
         is_unique=bool(row["is_unique"]),
         joker_count=row["joker_count"],
-        # sqlite3.Row has no .get(); use column-name membership check instead.
-        generator_version=row["generator_version"] if "generator_version" in row else "v1",  # noqa: SIM401
-        composite_score=float(row["composite_score"]) if "composite_score" in row else 0.0,  # noqa: SIM401
+        # sqlite3.Row.__contains__ tests VALUES, not column names; use .keys().
+        generator_version=row["generator_version"] if "generator_version" in row.keys() else "v1",  # noqa: SIM401,SIM118
+        composite_score=float(row["composite_score"]) if "composite_score" in row.keys() else 0.0,  # noqa: SIM401,SIM118
         branching_factor=(
-            float(row["branching_factor"]) if "branching_factor" in row else 0.0  # noqa: SIM401
+            float(row["branching_factor"]) if "branching_factor" in row.keys() else 0.0  # noqa: SIM401,SIM118
         ),
     )

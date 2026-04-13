@@ -200,3 +200,47 @@ class TestRoundtrip:
     def test_roundtrip_joker_count(self) -> None:
         assert self.result.joker_count == 0  # current puzzles are always joker-free
         assert self.result.joker_count == self.original.joker_count
+
+
+# ---------------------------------------------------------------------------
+# TestV2RoundTrip — Phase 5: verify all v2 fields survive store → draw
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def _v2_easy_result() -> PuzzleResult:
+    """One v2 easy puzzle, generated once per module."""
+    return generate_puzzle(difficulty="easy", seed=99, generator_version="v2")
+
+
+class TestV2RoundTrip:
+    """All v2 PuzzleResult fields (composite_score, branching_factor,
+    generator_version) must survive a store → draw round-trip."""
+
+    @pytest.fixture(autouse=True)
+    def _store_and_draw(
+        self, tmp_path: Path, _v2_easy_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "v2.db")
+        store.store(_v2_easy_result)
+        drawn = store.draw("easy")
+        store.close()
+        assert drawn is not None
+        self.original = _v2_easy_result
+        self.result, _ = drawn
+
+    def test_roundtrip_generator_version(self) -> None:
+        assert self.result.generator_version == "v2.0.0"
+        assert self.result.generator_version == self.original.generator_version
+
+    def test_roundtrip_composite_score(self) -> None:
+        assert self.result.composite_score == pytest.approx(
+            self.original.composite_score, abs=1e-6
+        )
+        assert self.result.composite_score >= 0.0
+
+    def test_roundtrip_branching_factor(self) -> None:
+        assert self.result.branching_factor == pytest.approx(
+            self.original.branching_factor, abs=1e-6
+        )
+        assert self.result.branching_factor >= 0.0
