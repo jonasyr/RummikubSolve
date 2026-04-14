@@ -87,14 +87,18 @@ class TestStoreAndCount:
     def test_store_with_seed(self, tmp_path: Path, _medium_result: PuzzleResult) -> None:
         store = PuzzleStore(tmp_path / "p.db")
         puzzle_id = store.store(_medium_result, seed=999)
+        row = store.conn.execute("SELECT seed FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
         store.close()
         assert isinstance(puzzle_id, str)
+        assert row["seed"] == 999
 
     def test_store_without_seed(self, tmp_path: Path, _medium_result: PuzzleResult) -> None:
         store = PuzzleStore(tmp_path / "p.db")
         puzzle_id = store.store(_medium_result, seed=None)
+        row = store.conn.execute("SELECT seed FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
         store.close()
         assert isinstance(puzzle_id, str)
+        assert row["seed"] == 42
 
 
 # ---------------------------------------------------------------------------
@@ -268,3 +272,6 @@ class TestV2RoundTrip:
         assert self.result.solution_fragility == pytest.approx(
             self.original.solution_fragility, abs=1e-6
         )
+
+    def test_roundtrip_seed(self) -> None:
+        assert self.result.seed == self.original.seed

@@ -1,4 +1,5 @@
 import type {
+  CalibrationBatchResponse,
   PuzzleRequest,
   PuzzleResponse,
   SolveRequest,
@@ -88,4 +89,26 @@ export async function postTelemetry(
   }
 
   return res.json() as Promise<TelemetryResponse>;
+}
+
+export async function fetchCalibrationBatch(
+  batchName: string,
+  signal?: AbortSignal,
+): Promise<CalibrationBatchResponse> {
+  const res = await fetch(`${API_URL}/api/calibration-batch/${batchName}`, { signal });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as {
+      detail?: string | Array<{ msg: string }>;
+    };
+    let message: string;
+    if (Array.isArray(data.detail)) {
+      message = data.detail.map((e) => e.msg).join("; ");
+    } else {
+      message = data.detail ?? `HTTP ${res.status}`;
+    }
+    throw new Error(message);
+  }
+
+  return res.json() as Promise<CalibrationBatchResponse>;
 }

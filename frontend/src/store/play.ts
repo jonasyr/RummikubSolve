@@ -69,6 +69,8 @@ interface PlayState {
   revertCount: number;
   moveCount: number;
   telemetrySolvedSent: boolean;
+  attemptId: string | null;
+  calibrationContext: { batchName: string; batchIndex: number } | null;
 
   // ── Actions ──────────────────────────────────────────────────────────────
   loadPuzzle: (req: PuzzleRequest, signal?: AbortSignal) => Promise<void>;
@@ -80,6 +82,7 @@ interface PlayState {
   commit: () => CommitResult;
   revert: () => void;
   setInteractionMode: (mode: "tap" | "drag") => void;
+  setCalibrationContext: (context: { batchName: string; batchIndex: number } | null) => void;
   toggleValidation: () => void;
   reset: () => void;
 }
@@ -114,6 +117,8 @@ const initialState = {
   revertCount: 0,
   moveCount: 0,
   telemetrySolvedSent: false,
+  attemptId: null as string | null,
+  calibrationContext: null as { batchName: string; batchIndex: number } | null,
 };
 
 // ---------------------------------------------------------------------------
@@ -199,6 +204,9 @@ function maybeRecordSolved(state: PlayState): void {
   }
 
   void recordTelemetryEvent("puzzle_solved", state.puzzle, {
+    attempt_id: state.attemptId ?? "",
+    batch_name: state.calibrationContext?.batchName,
+    batch_index: state.calibrationContext?.batchIndex,
     elapsed_ms: Math.max(0, state.solveEndTime - state.solveStartTime),
     move_count: state.moveCount,
     undo_count: state.undoCount,
@@ -206,6 +214,13 @@ function maybeRecordSolved(state: PlayState): void {
     commit_count: state.commitCount,
     revert_count: state.revertCount,
   });
+}
+
+function makeAttemptId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,8 +259,14 @@ export const usePlayStore = create<PlayState>((set, get) => ({
         revertCount: 0,
         moveCount: 0,
         telemetrySolvedSent: false,
+        attemptId: makeAttemptId(),
       });
-      void recordTelemetryEvent("puzzle_loaded", puzzle);
+      const nextState = get();
+      void recordTelemetryEvent("puzzle_loaded", puzzle, {
+        attempt_id: nextState.attemptId ?? "",
+        batch_name: nextState.calibrationContext?.batchName,
+        batch_index: nextState.calibrationContext?.batchIndex,
+      });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         set({ isPuzzleLoading: false });
@@ -304,6 +325,9 @@ export const usePlayStore = create<PlayState>((set, get) => ({
           const tile = state.rack[state.selectedTile.index];
           if (tile) {
             void recordTelemetryEvent("tile_placed", state.puzzle, {
+              attempt_id: state.attemptId ?? "",
+              batch_name: state.calibrationContext?.batchName,
+              batch_index: state.calibrationContext?.batchIndex,
               tile: toTelemetryTile(tile),
               to_row: row,
               to_col: col,
@@ -313,6 +337,9 @@ export const usePlayStore = create<PlayState>((set, get) => ({
           const sourceTile = state.grid.get(cellKey(state.selectedTile.row, state.selectedTile.col));
           if (sourceTile) {
             void recordTelemetryEvent("tile_moved", state.puzzle, {
+              attempt_id: state.attemptId ?? "",
+              batch_name: state.calibrationContext?.batchName,
+              batch_index: state.calibrationContext?.batchIndex,
               tile: toTelemetryTile(sourceTile.tile),
               from_row: state.selectedTile.row,
               from_col: state.selectedTile.col,
@@ -351,6 +378,9 @@ export const usePlayStore = create<PlayState>((set, get) => ({
 
       void (state.puzzle &&
         recordTelemetryEvent("tile_returned_to_rack", state.puzzle, {
+          attempt_id: state.attemptId ?? "",
+          batch_name: state.calibrationContext?.batchName,
+          batch_index: state.calibrationContext?.batchIndex,
           tile: toTelemetryTile(placed.tile),
         }));
 
@@ -369,7 +399,11 @@ export const usePlayStore = create<PlayState>((set, get) => ({
   undo: () =>
     (set((state) => {
       if (state.past.length === 0) return {};
-      void (state.puzzle && recordTelemetryEvent("undo_pressed", state.puzzle));
+      void (state.puzzle && recordTelemetryEvent("undo_pressed", state.puzzle, {
+        attempt_id: state.attemptId ?? "",
+        batch_name: state.calibrationContext?.batchName,
+        batch_index: state.calibrationContext?.batchIndex,
+      }));
       const snapshot = state.past[state.past.length - 1];
       const futureSS = takeSnapshot(state);
       const detected = detectSets(snapshot.cells, state.gridRows, state.gridCols);
@@ -482,6 +516,7 @@ export const usePlayStore = create<PlayState>((set, get) => ({
     }
     set({ interactionMode: mode });
   },
+  setCalibrationContext: (context) => set({ calibrationContext: context }),
   toggleValidation: () => set((s) => ({ showValidation: !s.showValidation })),
   reset: () => set(initialState),
 }));

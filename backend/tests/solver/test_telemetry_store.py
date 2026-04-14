@@ -13,6 +13,7 @@ def _sample_event() -> dict[str, object]:
         "event_at": "2026-04-13T12:00:00Z",
         "puzzle_id": "",
         "difficulty": "expert",
+        "seed": 123,
         "generator_version": "v2.0.0",
         "composite_score": 55.5,
         "branching_factor": 3.0,
@@ -49,4 +50,10 @@ def test_store_increments_count(tmp_path: Path) -> None:
     assert store.count() == 0
     store.store(_sample_event())
     assert store.count() == 1
+    row = store.conn.execute(
+        "SELECT difficulty, seed, elapsed_ms FROM telemetry_events"
+    ).fetchone()
+    assert row["difficulty"] == "expert"
+    assert row["seed"] == 123
+    assert row["elapsed_ms"] == 12345
     store.close()

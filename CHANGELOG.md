@@ -5,6 +5,61 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [Unreleased] — 2026-04-14 — Phase 0–6 calibration foundation
+
+### Backend — Generator and Persistence
+- `difficulty_weights.json` added and `difficulty_evaluator.py` now loads score weights/ceilings from JSON instead of hardcoding them.
+- `puzzle_store.py` now round-trips the full v2 metric set: `deductive_depth`, `red_herring_density`, `working_memory_load`, `tile_ambiguity`, `solution_fragility`, plus existing `composite_score`, `branching_factor`, `generator_version`.
+- `PuzzleResult` now carries `seed`; live-generated puzzles get a deterministic effective seed even when the caller omitted one.
+- `PuzzleStore` now preserves `seed` for both direct stores and pregenerated pool rows; pool-drawn puzzles surface that seed back to the API.
+- `tile_remover.py` now skips trial removals that trigger solver post-verification `ValueError`s instead of aborting generation.
+- `export_telemetry.py` added for CSV export of telemetry data.
+- `calibrate.py` added as a reporting-only calibration CLI for fixed-seed batches.
+- `calibration_batches/phase6_batch_v1.json` added as the first committed 25-puzzle fixed-seed developer batch.
+
+### Backend — API and Telemetry
+- `PuzzleResponse` now includes `seed` and the full v2 metric set.
+- `POST /api/telemetry` expanded to support richer calibration telemetry:
+  - `attempt_id`
+  - `batch_name`
+  - `batch_index`
+  - `puzzle_abandoned`
+  - `puzzle_rated`
+  - manual rating fields (`self_rating`, `self_label`, `stuck_moments`, `notes`)
+- `telemetry_events` schema extended to persist calibration fields and richer attempt/session metadata.
+- `GET /api/calibration-batch/{batch_name}` added to serve fixed-seed developer batch manifests.
+
+### Frontend — Telemetry and Calibration UI
+- `telemetry.ts` now carries `seed`, `attempt_id`, and calibration batch metadata through emitted events.
+- `play.ts` now generates a new `attemptId` on every puzzle load and propagates calibration batch context through automatic telemetry.
+- Normal `/play` clears calibration context on mount so calibration metadata does not leak into standard sessions.
+- New developer calibration route: `/[locale]/play/calibration`
+  - fixed batch loading from backend
+  - progress tracking in localStorage
+  - manual rating UI
+  - abandon reporting
+  - visible seed/difficulty/metric badges for each calibration puzzle
+- Calibration route is gated by a simple developer password prompt (`123`) stored in sessionStorage.
+- Normal play now includes a link into the calibration route.
+
+### Frontend — i18n and UX fixes
+- Added EN/DE calibration strings.
+- Fixed `SetOverlay` translation lookup so already-prefixed validation keys (`play.validation.*`) no longer resolve as `play.play.*`.
+
+### Tests and Verification
+- Added/updated backend coverage for:
+  - telemetry storage
+  - telemetry endpoint validation
+  - calibration batch endpoint
+  - telemetry CSV export
+  - puzzle store seed round-trip
+- Verified:
+  - backend focused suite: `38 passed`
+  - frontend play-store tests: `50 passed`
+  - frontend `tsc --noEmit`: passed
+
+---
+
 ## [0.43.0] — 2026-04-13 — Phase 4: Generator Integration (v2 pipeline)
 
 ### Backend — Generator (`backend/solver/generator/puzzle_generator.py`)

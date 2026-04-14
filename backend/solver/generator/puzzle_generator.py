@@ -203,6 +203,7 @@ class PuzzleResult:
     rack: list[Tile]
     difficulty: Difficulty
     disruption_score: int
+    seed: int | None = None
     chain_depth: int = 0
     is_unique: bool = True
     joker_count: int = 0
@@ -443,13 +444,15 @@ def generate_puzzle(
             f"Use 'easy', 'medium', 'hard', 'expert', 'nightmare', or 'custom'."
         )
 
-    rng = random.Random(seed)
+    effective_seed = seed if seed is not None else random.SystemRandom().randrange(2**31)
+    rng = random.Random(effective_seed)
 
     if generator_version == "v2":
         n_attempts = max_attempts or _DEFAULT_MAX_ATTEMPTS_V2.get(difficulty, 100)
         for _ in range(n_attempts):
             outcome = _attempt_generate_v2(rng, difficulty, solve_timeout)
             if outcome.result is not None:
+                outcome.result.seed = effective_seed
                 return outcome.result
         raise PuzzleGenerationError(
             f"Could not generate a {difficulty!r} puzzle after {n_attempts} attempts "
@@ -483,6 +486,7 @@ def generate_puzzle(
             solve_timeout=effective_solve_timeout,
         )
         if outcome.result is not None:
+            outcome.result.seed = effective_seed
             return outcome.result
 
     raise PuzzleGenerationError(

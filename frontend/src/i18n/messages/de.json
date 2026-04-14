@@ -175,6 +175,7 @@
     "revert": "Zur\u00fccksetzen",
     "revertConfirm": "Zum letzten gespeicherten Stand zur\u00fccksetzen? Alle \u00c4nderungen gehen verloren.",
     "getPuzzle": "Puzzle holen",
+    "calibrationLink": "Kalibrierungs-Batch",
     "loading": "L\u00e4dt\u2026",
     "modeTap": "Tippen",
     "modeDrag": "Ziehen",
@@ -207,6 +208,47 @@
       "emptyCell": "Leeres Feld, Zeile {row}, Spalte {col}",
       "occupiedCell": "{tile} in Zeile {row}, Spalte {col}",
       "gridRegion": "R\u00e4tsel-Spielfeld"
+    }
+  },
+  "calibration": {
+    "title": "Kalibrierungs-Batch",
+    "backToPlay": "\u2190 Zur\u00fcck zum Spiel",
+    "progress": "{done} / {total} bewertet oder abgebrochen",
+    "batchBadge": "Batch: {name}",
+    "puzzleIndex": "Puzzle {current} / {total}",
+    "seed": "Seed {seed}",
+    "rated": "Bewertet",
+    "abandoned": "Abgebrochen",
+    "previous": "Zur\u00fcck",
+    "next": "Weiter",
+    "abandonButton": "Puzzle abbrechen",
+    "ratingTitle": "Manuelle Bewertung",
+    "selfRating": "Schwierigkeit (1\u201310)",
+    "selfLabel": "Gesamteindruck",
+    "stuckMoments": "Feststeck-Momente (>30s)",
+    "notes": "Notizen",
+    "submitRating": "Bewertung senden",
+    "solveFirst": "Zum Bewerten zuerst l\u00f6sen",
+    "errors": {
+      "batchLoad": "Kalibrierungs-Batch konnte nicht geladen werden."
+    },
+    "password": {
+      "title": "Entwicklerzugang für Kalibrierung",
+      "description": "Gib das Kalibrierungs-Passwort ein, um den festen Seed-Batch zu öffnen.",
+      "placeholder": "Passwort",
+      "submit": "Entsperren",
+      "error": "Falsches Passwort."
+    },
+    "labels": {
+      "trivial": "Trivial",
+      "straightforward": "Geradlinig",
+      "challenging": "Anspruchsvoll",
+      "brutal": "Brutal"
+    },
+    "metric": {
+      "score": "Score: {value}",
+      "branching": "Branching: {value}",
+      "chain": "Kettentiefe: {value}"
     }
   }
 }

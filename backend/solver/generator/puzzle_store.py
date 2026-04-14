@@ -104,6 +104,7 @@ class PuzzleStore:
     def store(self, result: PuzzleResult, seed: int | None = None) -> str:
         """Persist a puzzle and return its UUID."""
         puzzle_id = str(uuid.uuid4())
+        effective_seed = seed if seed is not None else result.seed
         self.conn.execute(
             """INSERT INTO puzzles
                (id, difficulty, board_json, rack_json, chain_depth,
@@ -123,7 +124,7 @@ class PuzzleStore:
                 len(result.board_sets),
                 int(result.is_unique),
                 result.joker_count,
-                seed,
+                effective_seed,
                 result.generator_version,
                 result.composite_score,
                 result.branching_factor,
@@ -232,6 +233,7 @@ def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
         rack=rack,
         difficulty=row["difficulty"],
         disruption_score=row["disruption"],
+        seed=int(row["seed"]) if "seed" in row.keys() and row["seed"] is not None else None,
         chain_depth=row["chain_depth"],
         is_unique=bool(row["is_unique"]),
         joker_count=row["joker_count"],

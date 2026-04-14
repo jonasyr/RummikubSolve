@@ -175,6 +175,7 @@
     "revert": "Revert",
     "revertConfirm": "Revert to last committed state? All changes since then will be lost.",
     "getPuzzle": "Get Puzzle",
+    "calibrationLink": "Calibration Batch",
     "loading": "Loading\u2026",
     "modeTap": "Tap",
     "modeDrag": "Drag",
@@ -207,6 +208,47 @@
       "emptyCell": "Empty cell, row {row}, column {col}",
       "occupiedCell": "{tile} at row {row}, column {col}",
       "gridRegion": "Puzzle board grid"
+    }
+  },
+  "calibration": {
+    "title": "Calibration Batch",
+    "backToPlay": "← Back to Play",
+    "progress": "{done} / {total} rated or abandoned",
+    "batchBadge": "Batch: {name}",
+    "puzzleIndex": "Puzzle {current} / {total}",
+    "seed": "Seed {seed}",
+    "rated": "Rated",
+    "abandoned": "Abandoned",
+    "previous": "Previous",
+    "next": "Next",
+    "abandonButton": "Abandon Puzzle",
+    "ratingTitle": "Manual rating",
+    "selfRating": "Difficulty (1–10)",
+    "selfLabel": "Overall feel",
+    "stuckMoments": "Stuck moments (>30s)",
+    "notes": "Notes",
+    "submitRating": "Submit rating",
+    "solveFirst": "Solve first to rate",
+    "errors": {
+      "batchLoad": "Could not load calibration batch."
+    },
+    "password": {
+      "title": "Developer Calibration Access",
+      "description": "Enter the calibration password to open the fixed-seed batch.",
+      "placeholder": "Password",
+      "submit": "Unlock",
+      "error": "Wrong password."
+    },
+    "labels": {
+      "trivial": "Trivial",
+      "straightforward": "Straightforward",
+      "challenging": "Challenging",
+      "brutal": "Brutal"
+    },
+    "metric": {
+      "score": "Score: {value}",
+      "branching": "Branching: {value}",
+      "chain": "Chain depth: {value}"
     }
   }
 }

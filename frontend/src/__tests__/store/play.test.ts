@@ -34,6 +34,7 @@ const makePuzzleResponse = (
   board_sets: boardTiles.map((tiles) => ({ type: "run" as const, tiles })),
   rack,
   difficulty: "easy" as const,
+  seed: 123,
   tile_count: 0,
   disruption_score: 0,
   chain_depth: 0,
@@ -170,6 +171,7 @@ describe("loadPuzzle", () => {
     await store().loadPuzzle({ difficulty: "easy" });
     expect(mockPostTelemetry).toHaveBeenCalledTimes(1);
     expect(mockPostTelemetry.mock.calls[0][0].event_type).toBe("puzzle_loaded");
+    expect(mockPostTelemetry.mock.calls[0][0].seed).toBe(123);
   });
 
   it("resets past/future/selectedTile on new puzzle load", async () => {
@@ -315,6 +317,7 @@ describe("tapCell — Phase 2", () => {
     expect(payload).toEqual(
       expect.objectContaining({
         event_type: "tile_placed",
+        seed: 123,
         to_row: 1,
         to_col: 0,
       }),

@@ -23,12 +23,14 @@ export default function PlayPage() {
   const tapCell          = usePlayStore((s) => s.tapCell);
   const past             = usePlayStore((s) => s.past);
   const setInteractionMode = usePlayStore((s) => s.setInteractionMode);
+  const setCalibrationContext = usePlayStore((s) => s.setCalibrationContext);
 
   // Hydrate interactionMode from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem("play:interactionMode");
     if (saved === "tap" || saved === "drag") setInteractionMode(saved);
-  }, [setInteractionMode]);
+    setCalibrationContext(null);
+  }, [setCalibrationContext, setInteractionMode]);
 
   // Warn before navigating away if there are uncommitted changes
   useEffect(() => {

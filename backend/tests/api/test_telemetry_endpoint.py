@@ -17,6 +17,7 @@ def _payload() -> dict[str, object]:
         "event_at": "2026-04-13T12:00:00Z",
         "puzzle_id": "",
         "difficulty": "expert",
+        "seed": 123,
         "generator_version": "v2.0.0",
         "composite_score": 55.5,
         "branching_factor": 3.0,
@@ -48,6 +49,11 @@ def test_telemetry_200_and_persists(
 
     store = TelemetryStore(db)
     assert store.count() == 1
+    row = store.conn.execute(
+        "SELECT seed, generator_version FROM telemetry_events"
+    ).fetchone()
+    assert row["seed"] == 123
+    assert row["generator_version"] == "v2.0.0"
     store.close()
 
 
@@ -56,3 +62,30 @@ def test_telemetry_422_on_missing_required_solved_fields() -> None:
     payload.pop("elapsed_ms")
     with pytest.raises(ValueError):
         TelemetryRequest(**payload)
+
+
+def test_telemetry_accepts_abandoned_payload() -> None:
+    payload = _payload()
+    payload.update(
+        {
+            "event_type": "puzzle_abandoned",
+            "elapsed_ms": 5000,
+            "tiles_placed": 2,
+            "tiles_remaining": 3,
+        }
+    )
+    assert TelemetryRequest(**payload).event_type == "puzzle_abandoned"
+
+
+def test_telemetry_accepts_rating_payload() -> None:
+    payload = _payload()
+    payload.update(
+        {
+            "event_type": "puzzle_rated",
+            "self_rating": 8,
+            "self_label": "challenging",
+            "stuck_moments": 2,
+            "notes": "Needed one key insight.",
+        }
+    )
+    assert TelemetryRequest(**payload).event_type == "puzzle_rated"

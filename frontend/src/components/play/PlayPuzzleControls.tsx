@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { usePlayStore } from "../../store/play";
 import type { Difficulty } from "../../types/api";
 
@@ -15,6 +16,7 @@ const DIFFICULTIES: Difficulty[] = [
 
 export default function PlayPuzzleControls() {
   const t = useTranslations("play");
+  const locale = useLocale();
   const [difficulty, setDifficulty] = useState<Difficulty>("easy");
   const abortRef = useRef<AbortController | null>(null);
 
@@ -39,6 +41,13 @@ export default function PlayPuzzleControls() {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Link
+        href={`/${locale}/play/calibration`}
+        className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:hover:bg-amber-900"
+      >
+        {t("calibrationLink")}
+      </Link>
+
       <div className="flex flex-wrap gap-1">
         {DIFFICULTIES.map((d) => (
           <button

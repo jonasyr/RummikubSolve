@@ -10,6 +10,7 @@ type TelemetryContext = Pick<
   PuzzleResponse,
   | "puzzle_id"
   | "difficulty"
+  | "seed"
   | "generator_version"
   | "composite_score"
   | "branching_factor"
@@ -22,12 +23,13 @@ type TelemetryContext = Pick<
   | "chain_depth"
 >;
 
-type TelemetryDetails = Omit<
+type TelemetryDetails = Partial<Omit<
   TelemetryEventRequest,
   | "event_type"
   | "event_at"
   | "puzzle_id"
   | "difficulty"
+  | "seed"
   | "generator_version"
   | "composite_score"
   | "branching_factor"
@@ -38,7 +40,7 @@ type TelemetryDetails = Omit<
   | "solution_fragility"
   | "disruption_score"
   | "chain_depth"
->;
+>>;
 
 function toTelemetryTile(tile: TileInput): TileInput {
   return {
@@ -54,10 +56,13 @@ export function buildTelemetryEvent(
   details: TelemetryDetails = {},
 ): TelemetryEventRequest {
   return {
+    ...details,
     event_type: eventType,
     event_at: new Date().toISOString(),
     puzzle_id: puzzle.puzzle_id,
+    attempt_id: details.attempt_id ?? "",
     difficulty: puzzle.difficulty,
+    seed: puzzle.seed,
     generator_version: puzzle.generator_version,
     composite_score: puzzle.composite_score,
     branching_factor: puzzle.branching_factor,
@@ -68,7 +73,6 @@ export function buildTelemetryEvent(
     solution_fragility: puzzle.solution_fragility,
     disruption_score: puzzle.disruption_score,
     chain_depth: puzzle.chain_depth,
-    ...details,
   };
 }
 

@@ -88,6 +88,7 @@ export interface PuzzleResponse {
   board_sets: BoardSetInput[];
   rack: TileInput[];
   difficulty: Difficulty;
+  seed?: number;
   tile_count: number;
   disruption_score: number; // was missing from TS mirror (backend returns it since v0.22.0)
   chain_depth: number;      // Phase 3: longest rearrangement chain depth
@@ -104,13 +105,31 @@ export interface PuzzleResponse {
   generator_version: string;
 }
 
+export interface CalibrationBatchEntry {
+  difficulty: Exclude<Difficulty, "custom">;
+  seed: number;
+}
+
+export interface CalibrationBatchResponse {
+  batch_name: string;
+  entries: CalibrationBatchEntry[];
+}
+
 export type TelemetryEventType =
   | "puzzle_loaded"
   | "tile_placed"
   | "tile_moved"
   | "tile_returned_to_rack"
   | "undo_pressed"
-  | "puzzle_solved";
+  | "puzzle_solved"
+  | "puzzle_abandoned"
+  | "puzzle_rated";
+
+export type TelemetrySelfLabel =
+  | "trivial"
+  | "straightforward"
+  | "challenging"
+  | "brutal";
 
 export interface TelemetryTilePayload {
   color?: TileColor;
@@ -122,7 +141,11 @@ export interface TelemetryEventRequest {
   event_type: TelemetryEventType;
   event_at: string;
   puzzle_id: string;
+  attempt_id: string;
   difficulty: Difficulty | string;
+  seed?: number;
+  batch_name?: string;
+  batch_index?: number;
   generator_version: string;
   composite_score: number;
   branching_factor: number;
@@ -144,6 +167,12 @@ export interface TelemetryEventRequest {
   redo_count?: number;
   commit_count?: number;
   revert_count?: number;
+  tiles_placed?: number;
+  tiles_remaining?: number;
+  self_rating?: number;
+  self_label?: TelemetrySelfLabel;
+  stuck_moments?: number;
+  notes?: string;
 }
 
 export interface TelemetryResponse {

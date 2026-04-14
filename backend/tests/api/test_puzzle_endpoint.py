@@ -59,6 +59,7 @@ async def test_response_fields_present(client: AsyncClient) -> None:
     assert isinstance(data["board_sets"], list)
     assert isinstance(data["rack"], list)
     assert isinstance(data["difficulty"], str)
+    assert data["seed"] == 10
     assert isinstance(data["tile_count"], int)
     assert data["tile_count"] == len(data["rack"])
     assert isinstance(data["disruption_score"], int)
@@ -234,6 +235,11 @@ class TestPuzzleIdField:
         assert r.status_code == 200
         assert r.json()["puzzle_id"] == ""
 
+    async def test_seed_present_for_live_generated_puzzle(self, client: AsyncClient) -> None:
+        r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 44})
+        assert r.status_code == 200
+        assert r.json()["seed"] == 44
+
 
 class TestPoolIntegration:
     """Pool draw / fallback logic via monkeypatched PuzzleStore."""
@@ -250,6 +256,7 @@ class TestPoolIntegration:
         r = await client.post("/api/puzzle", json={"difficulty": "expert"})
         assert r.status_code == 200
         assert r.json()["puzzle_id"] == fake_id
+        assert r.json()["seed"] == 1
 
     async def test_expert_fallback_when_pool_empty(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch

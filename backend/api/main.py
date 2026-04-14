@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import logging
 import os
+from functools import lru_cache
+from json import loads
+from pathlib import Path
 from collections import Counter
 from typing import Literal, cast
 
@@ -127,6 +130,7 @@ from solver.models.tileset import SetType, TileSet  # noqa: E402
 from .models import (  # noqa: E402  (import after app init is intentional)
     BoardSetInput,
     BoardSetOutput,
+    CalibrationBatchResponse,
     MoveOutput,
     PuzzleRequest,
     PuzzleResponse,
@@ -140,6 +144,19 @@ from .models import (  # noqa: E402  (import after app init is intentional)
     TileOutput,
     TileWithOrigin,
 )
+
+_CALIBRATION_BATCH_DIR = (
+    Path(__file__).resolve().parents[1] / "solver" / "generator" / "calibration_batches"
+)
+
+
+@lru_cache(maxsize=8)
+def _load_calibration_batch(batch_name: str) -> CalibrationBatchResponse:
+    path = _CALIBRATION_BATCH_DIR / f"{batch_name}.json"
+    if not path.exists():
+        raise FileNotFoundError(batch_name)
+    data = loads(path.read_text(encoding="utf-8"))
+    return CalibrationBatchResponse(**data)
 
 
 def _assign_copy_ids(tile_inputs: list[TileInput]) -> list[Tile]:
@@ -371,6 +388,7 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             ],
             rack=[_tile_to_input(tile) for tile in result.rack],
             difficulty=result.difficulty,
+            seed=result.seed,
             tile_count=len(result.rack),
             disruption_score=result.disruption_score,
             chain_depth=result.chain_depth,
@@ -439,7 +457,20 @@ def telemetry_endpoint(request: TelemetryRequest) -> TelemetryResponse:
         event_id=event_id,
         event_type=request.event_type,
         puzzle_id=request.puzzle_id,
+        attempt_id=request.attempt_id,
         difficulty=request.difficulty,
+        seed=request.seed,
+        batch_name=request.batch_name,
+        batch_index=request.batch_index,
         generator_version=request.generator_version,
     )
     return TelemetryResponse(status="ok")
+
+
+@app.get("/api/calibration-batch/{batch_name}", response_model=CalibrationBatchResponse, tags=["meta"])
+def calibration_batch_endpoint(batch_name: str) -> CalibrationBatchResponse:
+    """Return a fixed-seed developer calibration batch manifest."""
+    try:
+        return _load_calibration_batch(batch_name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Unknown calibration batch.") from exc

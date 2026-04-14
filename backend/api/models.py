@@ -173,6 +173,7 @@ class PuzzleResponse(BaseModel):
     board_sets: list[BoardSetInput]
     rack: list[TileInput]
     difficulty: str
+    seed: int | None = None
     tile_count: int
     disruption_score: int
     chain_depth: int = 0  # Phase 3: longest rearrangement chain depth
@@ -189,6 +190,16 @@ class PuzzleResponse(BaseModel):
     generator_version: str = "v1"
 
 
+class CalibrationBatchEntry(BaseModel):
+    difficulty: Literal["easy", "medium", "hard", "expert", "nightmare"]
+    seed: int
+
+
+class CalibrationBatchResponse(BaseModel):
+    batch_name: str
+    entries: list[CalibrationBatchEntry]
+
+
 class TelemetryTileInput(BaseModel):
     color: Literal["blue", "red", "black", "yellow"] | None = None
     number: int | None = None
@@ -203,10 +214,16 @@ class TelemetryRequest(BaseModel):
         "tile_returned_to_rack",
         "undo_pressed",
         "puzzle_solved",
+        "puzzle_abandoned",
+        "puzzle_rated",
     ]
     event_at: str
     puzzle_id: str = ""
+    attempt_id: str = ""
     difficulty: str
+    seed: int | None = None
+    batch_name: str | None = None
+    batch_index: int | None = Field(default=None, ge=0)
     generator_version: str
     composite_score: float
     branching_factor: float
@@ -228,6 +245,12 @@ class TelemetryRequest(BaseModel):
     redo_count: int | None = Field(default=None, ge=0)
     commit_count: int | None = Field(default=None, ge=0)
     revert_count: int | None = Field(default=None, ge=0)
+    tiles_placed: int | None = Field(default=None, ge=0)
+    tiles_remaining: int | None = Field(default=None, ge=0)
+    self_rating: int | None = Field(default=None, ge=1, le=10)
+    self_label: Literal["trivial", "straightforward", "challenging", "brutal"] | None = None
+    stuck_moments: int | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def validate_event_payload(self) -> TelemetryRequest:
@@ -248,10 +271,21 @@ class TelemetryRequest(BaseModel):
         elif self.event_type == "tile_returned_to_rack":
             if self.tile is None:
                 raise ValueError("tile_returned_to_rack requires tile.")
-        elif self.event_type == "puzzle_solved" and (
-            self.elapsed_ms is None or self.move_count is None or self.undo_count is None
-        ):
-            raise ValueError("puzzle_solved requires elapsed_ms, move_count, and undo_count.")
+        elif self.event_type == "puzzle_solved":
+            if self.elapsed_ms is None or self.move_count is None or self.undo_count is None:
+                raise ValueError("puzzle_solved requires elapsed_ms, move_count, and undo_count.")
+        elif self.event_type == "puzzle_abandoned":
+            if (
+                self.elapsed_ms is None
+                or self.tiles_placed is None
+                or self.tiles_remaining is None
+            ):
+                raise ValueError(
+                    "puzzle_abandoned requires elapsed_ms, tiles_placed, and tiles_remaining."
+                )
+        elif self.event_type == "puzzle_rated":
+            if self.self_rating is None or self.self_label is None:
+                raise ValueError("puzzle_rated requires self_rating and self_label.")
         return self
 
 

@@ -18,7 +18,11 @@ _CREATE_TABLE = """
         event_type TEXT NOT NULL,
         event_at TEXT NOT NULL,
         puzzle_id TEXT NOT NULL,
+        attempt_id TEXT NOT NULL DEFAULT '',
         difficulty TEXT NOT NULL,
+        seed INTEGER,
+        batch_name TEXT,
+        batch_index INTEGER,
         generator_version TEXT NOT NULL,
         composite_score REAL NOT NULL,
         branching_factor REAL NOT NULL,
@@ -41,9 +45,28 @@ _CREATE_TABLE = """
         undo_count INTEGER,
         redo_count INTEGER,
         commit_count INTEGER,
-        revert_count INTEGER
+        revert_count INTEGER,
+        tiles_placed INTEGER,
+        tiles_remaining INTEGER,
+        self_rating INTEGER,
+        self_label TEXT,
+        stuck_moments INTEGER,
+        notes TEXT
     )
 """
+
+_MIGRATION_COLUMNS: list[tuple[str, str]] = [
+    ("seed", "INTEGER"),
+    ("attempt_id", "TEXT NOT NULL DEFAULT ''"),
+    ("batch_name", "TEXT"),
+    ("batch_index", "INTEGER"),
+    ("tiles_placed", "INTEGER"),
+    ("tiles_remaining", "INTEGER"),
+    ("self_rating", "INTEGER"),
+    ("self_label", "TEXT"),
+    ("stuck_moments", "INTEGER"),
+    ("notes", "TEXT"),
+]
 
 
 class TelemetryStore:
@@ -57,6 +80,11 @@ class TelemetryStore:
 
     def _create_tables(self) -> None:
         self.conn.execute(_CREATE_TABLE)
+        for col_name, col_def in _MIGRATION_COLUMNS:
+            try:
+                self.conn.execute(f"ALTER TABLE telemetry_events ADD COLUMN {col_name} {col_def}")
+            except sqlite3.OperationalError:
+                pass
         self.conn.commit()
 
     def store(self, event: dict[str, object]) -> str:
@@ -64,21 +92,25 @@ class TelemetryStore:
         tile = event.get("tile")
         self.conn.execute(
             """INSERT INTO telemetry_events (
-                id, event_type, event_at, puzzle_id, difficulty, generator_version,
+                id, event_type, event_at, puzzle_id, attempt_id, difficulty, seed,
+                batch_name, batch_index, generator_version,
                 composite_score, branching_factor, deductive_depth, red_herring_density,
                 working_memory_load, tile_ambiguity, solution_fragility,
                 disruption_score, chain_depth, tile_color, tile_number, tile_joker,
                 from_row, from_col, to_row, to_col, elapsed_ms, move_count,
-                undo_count, redo_count, commit_count, revert_count
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )""",
+                undo_count, redo_count, commit_count, revert_count,
+                tiles_placed, tiles_remaining, self_rating, self_label, stuck_moments, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 event_id,
                 event["event_type"],
                 event["event_at"],
                 event["puzzle_id"],
+                event.get("attempt_id", ""),
                 event["difficulty"],
+                event.get("seed"),
+                event.get("batch_name"),
+                event.get("batch_index"),
                 event["generator_version"],
                 event["composite_score"],
                 event["branching_factor"],
@@ -102,6 +134,12 @@ class TelemetryStore:
                 event.get("redo_count"),
                 event.get("commit_count"),
                 event.get("revert_count"),
+                event.get("tiles_placed"),
+                event.get("tiles_remaining"),
+                event.get("self_rating"),
+                event.get("self_label"),
+                event.get("stuck_moments"),
+                event.get("notes"),
             ),
         )
         self.conn.commit()
