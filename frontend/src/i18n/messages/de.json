@@ -226,6 +226,7 @@
     "selfRating": "Schwierigkeit (1\u201310)",
     "selfLabel": "Gesamteindruck",
     "stuckMoments": "Feststeck-Momente (>30s)",
+    "stuckMomentsAuto": "Automatische Feststeck-Momente (>30s)",
     "notes": "Notizen",
     "submitRating": "Bewertung senden",
     "solveFirst": "Zum Bewerten zuerst l\u00f6sen",

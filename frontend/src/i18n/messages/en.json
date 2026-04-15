@@ -226,6 +226,7 @@
     "selfRating": "Difficulty (1–10)",
     "selfLabel": "Overall feel",
     "stuckMoments": "Stuck moments (>30s)",
+    "stuckMomentsAuto": "Automatic stuck moments (>30s)",
     "notes": "Notes",
     "submitRating": "Submit rating",
     "solveFirst": "Solve first to rate",

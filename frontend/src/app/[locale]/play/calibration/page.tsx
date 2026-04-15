@@ -50,7 +50,6 @@ export default function CalibrationPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [selfRating, setSelfRating] = useState(5);
   const [selfLabel, setSelfLabel] = useState<TelemetrySelfLabel>("challenging");
-  const [stuckMoments, setStuckMoments] = useState(0);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -72,6 +71,7 @@ export default function CalibrationPage() {
   const commitCount = usePlayStore((s) => s.commitCount);
   const revertCount = usePlayStore((s) => s.revertCount);
   const solveStartTime = usePlayStore((s) => s.solveStartTime);
+  const stuckMoments = usePlayStore((s) => s.stuckMoments);
 
   const currentIndex = progress.currentIndex;
   const currentEntry = batch[currentIndex] ?? null;
@@ -135,7 +135,6 @@ export default function CalibrationPage() {
     const saved = progress.entries[currentIndex];
     setSelfRating(saved?.selfRating ?? 5);
     setSelfLabel(saved?.selfLabel ?? "challenging");
-    setStuckMoments(0);
     setNotes("");
   }, [currentIndex, progress.entries]);
 
@@ -231,42 +230,44 @@ export default function CalibrationPage() {
 
   if (!accessGranted) {
     return (
-      <PlayLayout>
-        <div style={{ gridArea: "controls" }} className="flex min-h-[60vh] items-center justify-center px-4 py-8">
-          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <h1 className="text-lg font-semibold">{t("password.title")}</h1>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{t("password.description")}</p>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t("password.placeholder")}
-              className="mt-4 w-full rounded border border-gray-300 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-950"
-            />
-            {passwordError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{passwordError}</p>}
-            <div className="mt-4 flex gap-2">
-              <button
-                className="rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                onClick={unlock}
-              >
-                {t("password.submit")}
-              </button>
-              <Link
-                href={`/${locale}/play`}
-                className="rounded border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-              >
-                {t("backToPlay")}
-              </Link>
+      <div className="min-h-dvh overflow-y-auto px-2 py-2">
+        <PlayLayout className="h-auto min-h-[100dvh]">
+          <div style={{ gridArea: "controls" }} className="flex min-h-[60vh] items-center justify-center px-4 py-8">
+            <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+              <h1 className="text-lg font-semibold">{t("password.title")}</h1>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{t("password.description")}</p>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t("password.placeholder")}
+                className="mt-4 w-full rounded border border-gray-300 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-950"
+              />
+              {passwordError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{passwordError}</p>}
+              <div className="mt-4 flex gap-2">
+                <button
+                  className="rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  onClick={unlock}
+                >
+                  {t("password.submit")}
+                </button>
+                <Link
+                  href={`/${locale}/play`}
+                  className="rounded border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                >
+                  {t("backToPlay")}
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
-      </PlayLayout>
+        </PlayLayout>
+      </div>
     );
   }
 
   return (
-    <PlayLayout>
-      <div style={{ gridArea: "controls" }} className="flex flex-col gap-3 border-b px-3 py-3">
+    <div className="min-h-dvh overflow-y-auto px-2 py-2">
+      <div className="mb-3 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href={`/${locale}/play`}
@@ -281,11 +282,11 @@ export default function CalibrationPage() {
         </div>
 
         {loadingBatch ? (
-          <p className="text-sm text-gray-500">{playT("loading")}</p>
+          <p className="mt-3 text-sm text-gray-500">{playT("loading")}</p>
         ) : error ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>
         ) : currentEntry ? (
-          <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
+          <div className="mt-3 grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
             <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-200">
@@ -375,14 +376,10 @@ export default function CalibrationPage() {
                 </label>
 
                 <label className="grid gap-1 text-sm">
-                  <span>{t("stuckMoments")}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={stuckMoments}
-                    onChange={(e) => setStuckMoments(Number(e.target.value))}
-                    className="rounded border border-gray-300 bg-white px-2 py-2 dark:border-gray-700 dark:bg-gray-950"
-                  />
+                  <span>{t("stuckMomentsAuto")}</span>
+                  <div className="rounded border border-gray-300 bg-gray-50 px-2 py-2 text-sm dark:border-gray-700 dark:bg-gray-950">
+                    {stuckMoments}
+                  </div>
                 </label>
 
                 <label className="grid gap-1 text-sm">
@@ -406,31 +403,38 @@ export default function CalibrationPage() {
             </div>
           </div>
         ) : null}
-
-        <ControlBar />
       </div>
 
-      {puzzle ? (
-        <PlayGrid
-          grid={grid}
-          rows={gridRows}
-          cols={GRID_COLS}
-          detectedSets={detectedSets}
-          selectedTile={selectedTile}
-          showValidation={showValidation}
-          onCellClick={tapCell}
-        />
-      ) : (
+      <PlayLayout>
         <div
-          style={{ gridArea: "board" }}
-          className="flex items-center justify-center text-sm text-gray-400"
+          style={{ gridArea: "controls" }}
+          className="flex flex-col gap-2 border-b px-2 py-2"
         >
-          {playT("loadPuzzlePrompt")}
+        <ControlBar />
         </div>
-      )}
 
-      <PlayRack />
-      <SolvedBanner />
-    </PlayLayout>
+        {puzzle ? (
+          <PlayGrid
+            grid={grid}
+            rows={gridRows}
+            cols={GRID_COLS}
+            detectedSets={detectedSets}
+            selectedTile={selectedTile}
+            showValidation={showValidation}
+            onCellClick={tapCell}
+          />
+        ) : (
+          <div
+            style={{ gridArea: "board" }}
+            className="flex items-center justify-center text-sm text-gray-400"
+          >
+            {playT("loadPuzzlePrompt")}
+          </div>
+        )}
+
+        <PlayRack />
+        <SolvedBanner />
+      </PlayLayout>
+    </div>
   );
 }
