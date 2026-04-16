@@ -74,6 +74,75 @@ npx playwright install chromium
 npx playwright test
 ```
 
+## Puzzle Pool & Calibration Workflow
+
+The backend supports an **offline puzzle pool** (SQLite) plus **telemetry export/calibration tooling** for tuning difficulty over time.
+
+### 1) Pre-generate puzzles into the SQLite pool
+
+The API serves `expert`/`nightmare` from the pool first (then falls back to live generation if exhausted), so pre-filling the DB improves latency for hard tiers.
+
+```bash
+cd backend
+pip install -e ".[dev]"
+
+# Generate 50 expert puzzles with 6 workers
+python -m solver.generator.pregenerate --difficulty expert --count 50 --workers 6
+
+# Generate all hard+ tiers (hard, expert, nightmare)
+python -m solver.generator.pregenerate --all --count 100 --workers 4
+
+# Inspect current pool sizes
+python -m solver.generator.pregenerate --stats
+```
+
+Default DB path is `data/puzzles.db`. Override with `PUZZLE_DB_PATH` if needed:
+
+```bash
+PUZZLE_DB_PATH=/absolute/path/puzzles.db python -m solver.generator.pregenerate --stats
+```
+
+### 2) Collect telemetry from play sessions
+
+Frontend play-mode events are written to `telemetry_events` via `POST /api/telemetry`.  
+These rows are stored in the same SQLite DB path (`PUZZLE_DB_PATH`) used by the backend stores.
+
+### 3) Export telemetry to CSV (for spreadsheet/notebook analysis)
+
+```bash
+cd backend
+
+# Export only solved attempts from a specific calibration batch
+python -m solver.generator.export_telemetry \
+  --out data/telemetry_solved.csv \
+  --batch-name phase6_v1 \
+  --solved-only
+
+# Export all telemetry rows
+python -m solver.generator.export_telemetry --out data/telemetry_all.csv
+```
+
+### 4) Run built-in calibration summary on a batch
+
+```bash
+cd backend
+python -m solver.generator.calibrate --batch phase6_v1
+```
+
+This prints per-tier aggregate metrics (score/minutes/undos/rating) and mismatch heuristics to help spot under- or over-classified puzzles.
+
+### 5) Use fixed-seed calibration batches through the API
+
+For development/testing, fixed seed manifests live under:
+
+`backend/solver/generator/calibration_batches/*.json`
+
+You can fetch a batch manifest from:
+
+```bash
+curl http://localhost:8000/api/calibration-batch/phase6_v1
+```
+
 ## Docker
 
 ### Full stack

@@ -96,9 +96,7 @@ class PuzzleStore:
         # SQLite versions that lack ADD COLUMN IF NOT EXISTS (< 3.35).
         for col_name, col_def in _MIGRATION_COLUMNS:
             with contextlib.suppress(sqlite3.OperationalError):
-                self.conn.execute(
-                    f"ALTER TABLE puzzles ADD COLUMN {col_name} {col_def}"
-                )
+                self.conn.execute(f"ALTER TABLE puzzles ADD COLUMN {col_name} {col_def}")
         self.conn.commit()
 
     def store(self, result: PuzzleResult, seed: int | None = None) -> str:
@@ -220,6 +218,7 @@ def _dict_to_tile(d: dict[str, Any]) -> Tile:
 
 def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
     board_data: list[Any] = json.loads(row["board_json"])
+    row_keys = set(row.keys())
     board_sets = [
         TileSet(
             type=SetType(bs["type"]),
@@ -233,29 +232,25 @@ def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
         rack=rack,
         difficulty=row["difficulty"],
         disruption_score=row["disruption"],
-        seed=int(row["seed"]) if "seed" in row.keys() and row["seed"] is not None else None,
+        seed=int(row["seed"]) if "seed" in row_keys and row["seed"] is not None else None,
         chain_depth=row["chain_depth"],
         is_unique=bool(row["is_unique"]),
         joker_count=row["joker_count"],
-        # sqlite3.Row.__contains__ tests VALUES, not column names; use .keys().
-        generator_version=row["generator_version"] if "generator_version" in row.keys() else "v1",  # noqa: SIM401,SIM118
-        composite_score=float(row["composite_score"]) if "composite_score" in row.keys() else 0.0,  # noqa: SIM401,SIM118
+        # sqlite3.Row.__contains__ tests VALUES, not column names; use row_keys.
+        generator_version=row["generator_version"] if "generator_version" in row_keys else "v1",
+        composite_score=float(row["composite_score"]) if "composite_score" in row_keys else 0.0,
         branching_factor=(
-            float(row["branching_factor"]) if "branching_factor" in row.keys() else 0.0  # noqa: SIM401,SIM118
+            float(row["branching_factor"]) if "branching_factor" in row_keys else 0.0
         ),
-        deductive_depth=(
-            float(row["deductive_depth"]) if "deductive_depth" in row.keys() else 0.0  # noqa: SIM401,SIM118
-        ),
+        deductive_depth=(float(row["deductive_depth"]) if "deductive_depth" in row_keys else 0.0),
         red_herring_density=(
-            float(row["red_herring_density"]) if "red_herring_density" in row.keys() else 0.0  # noqa: SIM401,SIM118
+            float(row["red_herring_density"]) if "red_herring_density" in row_keys else 0.0
         ),
         working_memory_load=(
-            float(row["working_memory_load"]) if "working_memory_load" in row.keys() else 0.0  # noqa: SIM401,SIM118
+            float(row["working_memory_load"]) if "working_memory_load" in row_keys else 0.0
         ),
-        tile_ambiguity=(
-            float(row["tile_ambiguity"]) if "tile_ambiguity" in row.keys() else 0.0  # noqa: SIM401,SIM118
-        ),
+        tile_ambiguity=(float(row["tile_ambiguity"]) if "tile_ambiguity" in row_keys else 0.0),
         solution_fragility=(
-            float(row["solution_fragility"]) if "solution_fragility" in row.keys() else 0.0  # noqa: SIM401,SIM118
+            float(row["solution_fragility"]) if "solution_fragility" in row_keys else 0.0
         ),
     )

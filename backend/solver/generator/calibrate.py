@@ -7,8 +7,31 @@ import sqlite3
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean
+from typing import TypedDict
 
 from .telemetry_store import DEFAULT_TELEMETRY_DB_PATH
+
+
+class AttemptSummary(TypedDict):
+    attempt_id: str
+    difficulty: str
+    seed: int | None
+    batch_index: int | None
+    composite_score: float
+    branching_factor: float
+    disruption_score: int
+    chain_depth: int
+    solved: bool
+    abandoned: bool
+    elapsed_ms: int | None
+    move_count: int | None
+    undo_count: int
+    tiles_remaining: int
+    tile_returned_count: int
+    undo_pressed_count: int
+    self_rating: int | None
+    self_label: str | None
+    stuck_moments: int | None
 
 
 def _parse_args() -> argparse.Namespace:
@@ -47,68 +70,94 @@ def main() -> int:
     for row in rows:
         by_attempt[row["attempt_id"]].append(row)
 
-    attempts: list[dict[str, object]] = []
-    for attempt_id, items in by_attempt.items():
-        solved = next((r for r in items if r["event_type"] == "puzzle_solved"), None)
-        abandoned = next((r for r in items if r["event_type"] == "puzzle_abandoned"), None)
-        rated = next((r for r in items if r["event_type"] == "puzzle_rated"), None)
-        base = solved or abandoned or items[0]
-        tile_returned_count = sum(1 for r in items if r["event_type"] == "tile_returned_to_rack")
-        undo_pressed_count = sum(1 for r in items if r["event_type"] == "undo_pressed")
+    attempts: list[AttemptSummary] = []
+    for attempt_id, attempt_events in by_attempt.items():
+        solved = next((r for r in attempt_events if r["event_type"] == "puzzle_solved"), None)
+        abandoned = next((r for r in attempt_events if r["event_type"] == "puzzle_abandoned"), None)
+        rated = next((r for r in attempt_events if r["event_type"] == "puzzle_rated"), None)
+        base = solved or abandoned or attempt_events[0]
+        outcome = solved if solved is not None else abandoned
+        tile_returned_count = sum(
+            1 for r in attempt_events if r["event_type"] == "tile_returned_to_rack"
+        )
+        undo_pressed_count = sum(1 for r in attempt_events if r["event_type"] == "undo_pressed")
         attempts.append(
             {
                 "attempt_id": attempt_id,
-                "difficulty": base["difficulty"],
-                "seed": base["seed"],
-                "batch_index": base["batch_index"],
+                "difficulty": str(base["difficulty"]),
+                "seed": int(base["seed"]) if base["seed"] is not None else None,
+                "batch_index": int(base["batch_index"])
+                if base["batch_index"] is not None
+                else None,
                 "composite_score": float(base["composite_score"]),
                 "branching_factor": float(base["branching_factor"]),
                 "disruption_score": int(base["disruption_score"]),
                 "chain_depth": int(base["chain_depth"]),
                 "solved": solved is not None,
                 "abandoned": abandoned is not None,
-                "elapsed_ms": int((solved or abandoned)["elapsed_ms"]) if (solved or abandoned) and (solved or abandoned)["elapsed_ms"] is not None else None,
-                "move_count": int((solved or abandoned)["move_count"]) if (solved or abandoned) and (solved or abandoned)["move_count"] is not None else None,
-                "undo_count": int((solved or abandoned)["undo_count"]) if (solved or abandoned) and (solved or abandoned)["undo_count"] is not None else 0,
-                "tiles_remaining": int(abandoned["tiles_remaining"]) if abandoned and abandoned["tiles_remaining"] is not None else 0,
+                "elapsed_ms": int(outcome["elapsed_ms"])
+                if outcome is not None and outcome["elapsed_ms"] is not None
+                else None,
+                "move_count": int(outcome["move_count"])
+                if outcome is not None and outcome["move_count"] is not None
+                else None,
+                "undo_count": int(outcome["undo_count"])
+                if outcome is not None and outcome["undo_count"] is not None
+                else 0,
+                "tiles_remaining": int(abandoned["tiles_remaining"])
+                if abandoned and abandoned["tiles_remaining"] is not None
+                else 0,
                 "tile_returned_count": tile_returned_count,
                 "undo_pressed_count": undo_pressed_count,
-                "self_rating": int(rated["self_rating"]) if rated and rated["self_rating"] is not None else None,
+                "self_rating": int(rated["self_rating"])
+                if rated and rated["self_rating"] is not None
+                else None,
                 "self_label": rated["self_label"] if rated else None,
-                "stuck_moments": int(rated["stuck_moments"]) if rated and rated["stuck_moments"] is not None else None,
+                "stuck_moments": int(rated["stuck_moments"])
+                if rated and rated["stuck_moments"] is not None
+                else None,
             }
         )
 
     print(f"Calibration batch: {args.batch}")
     print(f"Attempts: {len(attempts)}")
 
-    by_difficulty: dict[str, list[dict[str, object]]] = defaultdict(list)
+    by_difficulty: dict[str, list[AttemptSummary]] = defaultdict(list)
     for attempt in attempts:
-        by_difficulty[str(attempt["difficulty"])].append(attempt)
+        by_difficulty[attempt["difficulty"]].append(attempt)
 
     print("\nPer-tier summary:")
     for difficulty in ("easy", "medium", "hard", "expert", "nightmare"):
-        items = by_difficulty.get(difficulty, [])
-        if not items:
+        difficulty_items = by_difficulty.get(difficulty, [])
+        if not difficulty_items:
             continue
-        solved_items = [a for a in items if a["solved"]]
+        solved_items = [a for a in difficulty_items if a["solved"]]
+        avg_score = _safe_mean([a["composite_score"] for a in difficulty_items])
+        avg_minutes = _safe_mean(
+            [a["elapsed_ms"] / 60000 for a in solved_items if a["elapsed_ms"] is not None]
+        )
+        avg_undos = _safe_mean([float(a["undo_count"]) for a in solved_items])
+        avg_return_to_rack = _safe_mean([float(a["tile_returned_count"]) for a in difficulty_items])
+        avg_rating = _safe_mean(
+            [a["self_rating"] for a in difficulty_items if a["self_rating"] is not None]
+        )
         print(
-            f"- {difficulty}: count={len(items)} solved={len(solved_items)} "
-            f"avg_score={_safe_mean([float(a['composite_score']) for a in items]):.2f} "
-            f"avg_minutes={_safe_mean([float(a['elapsed_ms']) / 60000 for a in solved_items if a['elapsed_ms'] is not None]):.2f} "
-            f"avg_undos={_safe_mean([float(a['undo_count']) for a in solved_items]):.2f} "
-            f"avg_return_to_rack={_safe_mean([float(a['tile_returned_count']) for a in items]):.2f} "
-            f"avg_rating={_safe_mean([float(a['self_rating']) for a in items if a['self_rating'] is not None]):.2f}"
+            f"- {difficulty}: count={len(difficulty_items)} solved={len(solved_items)} "
+            f"avg_score={avg_score:.2f} "
+            f"avg_minutes={avg_minutes:.2f} "
+            f"avg_undos={avg_undos:.2f} "
+            f"avg_return_to_rack={avg_return_to_rack:.2f} "
+            f"avg_rating={avg_rating:.2f}"
         )
 
     print("\nPotential mismatches:")
     mismatches = 0
-    for attempt in sorted(attempts, key=lambda a: (str(a["difficulty"]), int(a["batch_index"] or 0))):
-        difficulty = str(attempt["difficulty"])
+    for attempt in sorted(attempts, key=lambda a: (a["difficulty"], a["batch_index"] or 0)):
+        difficulty = attempt["difficulty"]
         elapsed_ms = attempt["elapsed_ms"]
-        undo_count = int(attempt["undo_count"] or 0)
+        undo_count = attempt["undo_count"]
         self_label = attempt["self_label"]
-        score = float(attempt["composite_score"])
+        score = attempt["composite_score"]
         reasons: list[str] = []
         if difficulty == "nightmare" and elapsed_ms is not None and elapsed_ms < 180000:
             reasons.append("nightmare_under_3m")
@@ -130,13 +179,16 @@ def main() -> int:
         print("- none")
 
     print("\nAttempts:")
-    for attempt in sorted(attempts, key=lambda a: int(a["batch_index"] or 0)):
+    for attempt in sorted(attempts, key=lambda a: a["batch_index"] or 0):
         elapsed_ms = attempt["elapsed_ms"]
         minutes = f"{elapsed_ms / 60000:.2f}" if elapsed_ms is not None else "n/a"
+        batch_index = attempt["batch_index"] if attempt["batch_index"] is not None else -1
+        seed = str(attempt["seed"]) if attempt["seed"] is not None else "-"
         print(
-            f"- #{attempt['batch_index']:>2} {attempt['difficulty']:>9} seed={attempt['seed']} "
-            f"score={float(attempt['composite_score']):6.2f} minutes={minutes:>5} "
-            f"undos={int(attempt['undo_count'] or 0):>2} returns={int(attempt['tile_returned_count'] or 0):>2} "
+            f"- #{batch_index:>2} {attempt['difficulty']:>9} seed={seed} "
+            f"score={attempt['composite_score']:6.2f} minutes={minutes:>5} "
+            f"undos={attempt['undo_count']:>2} "
+            f"returns={attempt['tile_returned_count']:>2} "
             f"label={attempt['self_label'] or '-'} rating={attempt['self_rating'] or '-'}"
         )
 
