@@ -1,5 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { act } from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { usePlayStore } from "../../../store/play";
 import SolvedBanner from "../../../components/play/SolvedBanner";
 
@@ -13,6 +15,10 @@ vi.mock("next-intl", () => ({
 
 beforeEach(() => {
   usePlayStore.getState().reset();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("SolvedBanner", () => {
@@ -36,5 +42,22 @@ describe("SolvedBanner", () => {
     render(<SolvedBanner />);
     // The mock renders "solveTime:{"time":"30s"}"
     expect(screen.getByText(/30s/)).toBeInTheDocument();
+  });
+
+  it("dismisses on click", async () => {
+    usePlayStore.setState({ isSolved: true });
+    render(<SolvedBanner />);
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument();
+  });
+
+  it("auto-dismisses after 5 seconds", () => {
+    vi.useFakeTimers();
+    usePlayStore.setState({ isSolved: true });
+    render(<SolvedBanner />);
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(screen.queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument();
   });
 });

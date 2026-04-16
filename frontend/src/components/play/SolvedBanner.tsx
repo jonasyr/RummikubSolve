@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { usePlayStore } from "../../store/play";
+
+const AUTO_DISMISS_MS = 5000;
 
 function formatElapsed(seconds: number): string {
   if (seconds >= 60) {
@@ -15,8 +18,21 @@ export default function SolvedBanner() {
   const isSolved   = usePlayStore((s) => s.isSolved);
   const solveStart = usePlayStore((s) => s.solveStartTime);
   const solveEnd   = usePlayStore((s) => s.solveEndTime);
+  const [dismissed, setDismissed] = useState(false);
 
-  if (!isSolved) return null;
+  // Reset dismissed whenever the solved state changes (new puzzle)
+  useEffect(() => {
+    setDismissed(false);
+  }, [isSolved]);
+
+  // Auto-dismiss after AUTO_DISMISS_MS
+  useEffect(() => {
+    if (!isSolved || dismissed) return;
+    const timer = setTimeout(() => setDismissed(true), AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [isSolved, dismissed]);
+
+  if (!isSolved || dismissed) return null;
 
   const elapsed =
     solveStart !== null && solveEnd !== null
@@ -28,7 +44,12 @@ export default function SolvedBanner() {
       className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
       aria-live="polite"
     >
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-green-200 dark:border-green-800 p-8 text-center pointer-events-auto max-w-sm mx-4 animate-pop-in">
+      <div
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-green-200 dark:border-green-800 p-8 text-center pointer-events-auto max-w-sm mx-4 animate-pop-in cursor-pointer"
+        onClick={() => setDismissed(true)}
+        role="button"
+        aria-label="Dismiss"
+      >
         <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
           🎉 {t("solved")} 🎉
         </p>
