@@ -71,7 +71,10 @@ async def test_seeded_puzzle_is_deterministic(client: AsyncClient) -> None:
     r2 = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 42})
     assert r1.status_code == 200
     assert r2.status_code == 200
-    assert r1.json() == r2.json()
+    # puzzle_id is a new UUID on each live-generated call — exclude from comparison.
+    d1 = {k: v for k, v in r1.json().items() if k != "puzzle_id"}
+    d2 = {k: v for k, v in r2.json().items() if k != "puzzle_id"}
+    assert d1 == d2
 
 
 async def test_default_difficulty_uses_medium(client: AsyncClient) -> None:
@@ -220,20 +223,21 @@ class TestPuzzleIdField:
         assert r.status_code == 200
         assert "puzzle_id" in r.json()
 
-    async def test_easy_puzzle_id_is_empty(self, client: AsyncClient) -> None:
+    async def test_easy_puzzle_id_is_nonempty(self, client: AsyncClient) -> None:
+        # Live-generated puzzles are now stored in the pool and return a UUID.
         r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
         assert r.status_code == 200
-        assert r.json()["puzzle_id"] == ""
+        assert r.json()["puzzle_id"] != ""
 
-    async def test_medium_puzzle_id_is_empty(self, client: AsyncClient) -> None:
+    async def test_medium_puzzle_id_is_nonempty(self, client: AsyncClient) -> None:
         r = await client.post("/api/puzzle", json={"difficulty": "medium", "seed": 2})
         assert r.status_code == 200
-        assert r.json()["puzzle_id"] == ""
+        assert r.json()["puzzle_id"] != ""
 
-    async def test_hard_puzzle_id_is_empty(self, client: AsyncClient) -> None:
+    async def test_hard_puzzle_id_is_nonempty(self, client: AsyncClient) -> None:
         r = await client.post("/api/puzzle", json={"difficulty": "hard", "seed": 3})
         assert r.status_code == 200
-        assert r.json()["puzzle_id"] == ""
+        assert r.json()["puzzle_id"] != ""
 
     async def test_seed_present_for_live_generated_puzzle(self, client: AsyncClient) -> None:
         r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 44})

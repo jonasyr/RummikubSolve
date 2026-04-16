@@ -41,6 +41,11 @@ export default function CalibrationPage() {
   const playT = useTranslations("play");
   const locale = useLocale();
 
+  const [batchRunId] = useState<string>(() =>
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
   const [batch, setBatch] = useState<CalibrationBatchEntry[]>([]);
   const [progress, setProgress] = useState<ProgressState>(initialProgress);
   const [loadingBatch, setLoadingBatch] = useState(true);
@@ -124,11 +129,18 @@ export default function CalibrationPage() {
 
   useEffect(() => {
     if (!currentEntry) return;
-    setCalibrationContext({ batchName: BATCH_NAME, batchIndex: currentIndex });
-    if (puzzle?.seed === currentEntry.seed && puzzle?.difficulty === currentEntry.difficulty) {
-      return;
-    }
-    void loadPuzzle({ difficulty: currentEntry.difficulty, seed: currentEntry.seed });
+    setCalibrationContext({ batchName: BATCH_NAME, batchRunId: batchRunId, batchIndex: currentIndex });
+    // Pregenerated batches (Phase 7+) supply puzzle_id → instant pool load.
+    // Legacy batches supply only seed → live generation.
+    const alreadyLoaded = currentEntry.puzzle_id
+      ? puzzle?.puzzle_id === currentEntry.puzzle_id
+      : puzzle?.seed === currentEntry.seed && puzzle?.difficulty === currentEntry.difficulty;
+    if (alreadyLoaded) return;
+    void loadPuzzle(
+      currentEntry.puzzle_id
+        ? { puzzle_id: currentEntry.puzzle_id, difficulty: currentEntry.difficulty }
+        : { difficulty: currentEntry.difficulty, seed: currentEntry.seed },
+    );
   }, [currentEntry, currentIndex, loadPuzzle, puzzle?.difficulty, puzzle?.seed, setCalibrationContext]);
 
   useEffect(() => {
@@ -142,6 +154,17 @@ export default function CalibrationPage() {
     () => Object.values(progress.entries).filter((entry) => entry.rated || entry.abandoned).length,
     [progress.entries],
   );
+
+  const isRunComplete = batch.length > 0 && completedCount >= batch.length;
+
+  const startNewRun = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore storage failures
+    }
+    setProgress(initialProgress);
+  };
 
   const unlock = () => {
     if (password !== ACCESS_PASSWORD) {
@@ -164,6 +187,7 @@ export default function CalibrationPage() {
       await recordTelemetryEvent("puzzle_rated", puzzle, {
         attempt_id: attemptId ?? "",
         batch_name: BATCH_NAME,
+        batch_run_id: batchRunId,
         batch_index: currentIndex,
         self_rating: selfRating,
         self_label: selfLabel,
@@ -196,6 +220,7 @@ export default function CalibrationPage() {
       await recordTelemetryEvent("puzzle_abandoned", puzzle, {
         attempt_id: attemptId ?? "",
         batch_name: BATCH_NAME,
+        batch_run_id: batchRunId,
         batch_index: currentIndex,
         elapsed_ms: elapsedMs,
         move_count: moveCount,
@@ -276,10 +301,39 @@ export default function CalibrationPage() {
             {t("backToPlay")}
           </Link>
           <div className="text-sm font-medium">{t("title")}</div>
-          <div className="ml-auto text-xs text-gray-500">
-            {t("progress", { done: completedCount, total: batch.length || 25 })}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs text-gray-500">
+              {t("progress", { done: completedCount, total: batch.length || 25 })}
+            </span>
+            <button
+              className="rounded border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+              onClick={startNewRun}
+              title={`Run ID: ${batchRunId}`}
+            >
+              {t("newRun")}
+            </button>
           </div>
         </div>
+
+        {isRunComplete && (
+          <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-950">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-green-800 dark:text-green-200">
+                {t("runComplete.title")}
+              </h2>
+              <code className="text-xs text-green-600 dark:text-green-400">{batchRunId.slice(0, 8)}…</code>
+            </div>
+            <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+              {t("runComplete.hint", { runId: batchRunId.slice(0, 8) })}
+            </p>
+            <button
+              className="mt-3 rounded bg-green-700 px-3 py-2 text-xs font-medium text-white hover:bg-green-800"
+              onClick={startNewRun}
+            >
+              {t("newRun")}
+            </button>
+          </div>
+        )}
 
         {loadingBatch ? (
           <p className="mt-3 text-sm text-gray-500">{playT("loading")}</p>
@@ -298,9 +352,11 @@ export default function CalibrationPage() {
                 <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
                   {currentEntry.difficulty}
                 </span>
-                <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                  {t("seed", { seed: currentEntry.seed })}
-                </span>
+                {currentEntry.seed != null && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                    {t("seed", { seed: currentEntry.seed })}
+                  </span>
+                )}
                 {currentProgress?.rated && (
                   <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 dark:bg-green-950 dark:text-green-200">
                     {t("rated")}

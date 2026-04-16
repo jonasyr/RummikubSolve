@@ -16,6 +16,7 @@ Blueprint: "Puzzle Generation System — Full Rebuild Implementation Plan"
 from __future__ import annotations
 
 import random
+import threading
 import time
 from dataclasses import dataclass
 
@@ -34,6 +35,47 @@ _REMOVAL_STEP_TIMEOUT = 2.0  # seconds
 # tiles we have (may be below rack_size_range[0], which causes None return).
 _TOTAL_ATTEMPT_TIMEOUT = 30.0  # seconds
 
+# Extra wall-clock margin added on top of _REMOVAL_STEP_TIMEOUT for the hard
+# Python-level thread deadline.  The HiGHS `time_limit` option is not always
+# respected when running in an AnyIO worker thread on Windows; this wrapper
+# ensures TileRemover's main loop is never blocked longer than this total.
+# Keep this small (0.5 s) — normal HiGHS runs finish in well under time_limit;
+# only a genuinely stuck solver will still be alive at this deadline.
+_HARD_TIMEOUT_MARGIN = 0.5  # seconds
+
+
+def _solve_timed(state: BoardState, timeout_seconds: float) -> Solution | None:
+    """Run solve() in a daemon thread with a Python-level hard deadline.
+
+    HiGHS ``time_limit`` is occasionally not honoured when called from a worker
+    thread on Windows (AnyIO + asyncio).  This wrapper spawns a daemon thread
+    that runs the real solver and joins it with a hard deadline of
+    ``timeout_seconds + _HARD_TIMEOUT_MARGIN``.  If the thread is still alive
+    after that deadline, we return ``None`` (treat as timeout) and let the
+    daemon thread finish on its own — it will not block Python exit.
+
+    Raises the same exceptions as ``solve()`` (e.g. ``ValueError``).
+    """
+    result: list[Solution | None] = [None]
+    exc: list[BaseException | None] = [None]
+
+    def _run() -> None:
+        try:
+            result[0] = solve(state, timeout_seconds=timeout_seconds)
+        except BaseException as e:  # noqa: BLE001
+            exc[0] = e
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout_seconds + _HARD_TIMEOUT_MARGIN)
+
+    if thread.is_alive():
+        # Hard timeout — HiGHS is stuck; skip this candidate.
+        return None
+    if exc[0] is not None:
+        raise exc[0]
+    return result[0]
+
 
 @dataclass(frozen=True)
 class RemovalCandidate:
@@ -43,12 +85,12 @@ class RemovalCandidate:
     call, so the heuristics remain cheap even when the board is large.
     """
 
-    set_index: int           # which board set the tile belongs to
-    tile_index: int          # position within that set (used for index-safe removal)
+    set_index: int  # which board set the tile belongs to
+    tile_index: int  # position within that set (used for index-safe removal)
     tile: Tile
-    set_size_after: int      # len(parent set) - 1
-    breaks_set: bool         # True if set_size_after < 3 (parent becomes invalid)
-    orphan_count: int        # tiles left stranded on board if set breaks
+    set_size_after: int  # len(parent set) - 1
+    breaks_set: bool  # True if set_size_after < 3 (parent becomes invalid)
+    orphan_count: int  # tiles left stranded on board if set breaks
     alternative_placements: int  # templates that contain a tile of this (color, number)
     cascade_estimate: float  # heuristic: expected rearrangement depth
 
@@ -63,12 +105,33 @@ class RemovalStep:
 
     candidate: RemovalCandidate
     state_before: BoardState  # snapshot BEFORE this removal
-    solver_result: Solution   # the solve() call that confirmed solvability
+    solver_result: Solution  # the solve() call that confirmed solvability
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _has_obvious_other_home(
+    tile: Tile,
+    parent_idx: int,
+    board_sets: list[TileSet],
+) -> bool:
+    """Return True if ``tile`` can trivially extend any board set other than its parent.
+
+    A tile that trivially extends another set gives the player an obvious visual
+    slot even if its orphans are hard to rehouse (high cascade).  Penalising such
+    candidates in scoring makes TileRemover prefer removals that are genuinely
+    ambiguous, reducing the rejection rate from the post-generation
+    ``_any_trivial_extension`` gate in puzzle_generator.py.
+    """
+    for i, ts in enumerate(board_sets):
+        if i == parent_idx:
+            continue
+        if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
+            return True
+    return False
 
 
 def estimate_cascade_depth(
@@ -221,9 +284,7 @@ def _apply_removal(
     result: list[TileSet] = []
     for i, ts in enumerate(board_sets):
         if i == candidate.set_index:
-            remaining = [
-                t for j, t in enumerate(ts.tiles) if j != candidate.tile_index
-            ]
+            remaining = [t for j, t in enumerate(ts.tiles) if j != candidate.tile_index]
             if remaining:  # drop the set if it becomes completely empty
                 result.append(TileSet(type=ts.type, tiles=remaining))
         else:
@@ -293,9 +354,8 @@ class TileRemover:
         removal_log: list[RemovalStep] = []
 
         # Templates from board-only pool at start; updated after each commit.
-        all_templates = (
-            enumerate_runs(BoardState(current_board, []))
-            + enumerate_groups(BoardState(current_board, []))
+        all_templates = enumerate_runs(BoardState(current_board, [])) + enumerate_groups(
+            BoardState(current_board, [])
         )
 
         t_start = time.monotonic()
@@ -323,6 +383,10 @@ class TileRemover:
             for _ in range(min(max_removal_attempts_per_tile, len(remaining_pool))):
                 if not remaining_pool:
                     break
+                # Check total-attempt wall-clock here too, not only at step start,
+                # so a run of stuck HiGHS calls can't exceed _TOTAL_ATTEMPT_TIMEOUT.
+                if time.monotonic() - t_start > _TOTAL_ATTEMPT_TIMEOUT:
+                    break
 
                 # Weighted random selection (weights always > 0).
                 if strategy == "maximize_cascade":
@@ -339,12 +403,16 @@ class TileRemover:
 
                 state = BoardState(board_sets=new_board, rack=new_rack)
                 try:
-                    solution = solve(state, timeout_seconds=solve_timeout)
+                    solution = _solve_timed(state, timeout_seconds=solve_timeout)
                 except ValueError:
                     # Solver post-verification failures can occur on some
                     # intermediate removal states; treat them as invalid
                     # candidates and keep searching rather than aborting
                     # the entire generation attempt.
+                    continue
+
+                # Hard-timeout or HiGHS-stuck: _solve_timed returns None.
+                if solution is None:
                     continue
 
                 # Reject if the solver timed out or couldn't place all rack tiles.
@@ -367,9 +435,8 @@ class TileRemover:
 
                 # Recompute templates with updated board + accumulated rack so
                 # that orphan-absorption counts remain accurate in subsequent steps.
-                all_templates = (
-                    enumerate_runs(BoardState(current_board, rack))
-                    + enumerate_groups(BoardState(current_board, rack))
+                all_templates = enumerate_runs(BoardState(current_board, rack)) + enumerate_groups(
+                    BoardState(current_board, rack)
                 )
                 committed = True
                 break

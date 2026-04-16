@@ -250,6 +250,11 @@
       "score": "Score: {value}",
       "branching": "Branching: {value}",
       "chain": "Chain depth: {value}"
+    },
+    "newRun": "New Run",
+    "runComplete": {
+      "title": "Run complete!",
+      "hint": "Use --run-id {runId} with calibrate.py to view this run's results."
     }
   }
 }

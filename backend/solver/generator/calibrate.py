@@ -28,6 +28,7 @@ class AttemptSummary(TypedDict):
     attempt_id: str
     difficulty: str
     seed: int | None
+    batch_run_id: str | None
     batch_index: int | None
     composite_score: float
     branching_factor: float
@@ -54,6 +55,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--db", type=Path, default=DEFAULT_TELEMETRY_DB_PATH)
     parser.add_argument("--puzzle-db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--batch", type=str, default=None)
+    parser.add_argument(
+        "--run-id", type=str, default=None, help="Filter report to one batch_run_id"
+    )
     parser.add_argument(
         "--stats", action="store_true", help="Show score distributions from the puzzle pool"
     )
@@ -242,20 +246,32 @@ def main() -> int:
     conn = sqlite3.connect(str(args.db))
     conn.row_factory = sqlite3.Row
     try:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM telemetry_events
-            WHERE batch_name = ?
-            ORDER BY created_at, id
-            """,
-            (args.batch,),
-        ).fetchall()
+        if args.run_id:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM telemetry_events
+                WHERE batch_name = ? AND batch_run_id = ?
+                ORDER BY created_at, id
+                """,
+                (args.batch, args.run_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM telemetry_events
+                WHERE batch_name = ?
+                ORDER BY created_at, id
+                """,
+                (args.batch,),
+            ).fetchall()
     finally:
         conn.close()
 
     if not rows:
-        print(f"No telemetry rows found for batch '{args.batch}'.")
+        qualifier = f" run-id={args.run_id}" if args.run_id else ""
+        print(f"No telemetry rows found for batch '{args.batch}'{qualifier}.")
         return 1
 
     by_attempt: dict[str, list[sqlite3.Row]] = defaultdict(list)
@@ -278,6 +294,7 @@ def main() -> int:
                 "attempt_id": attempt_id,
                 "difficulty": str(base["difficulty"]),
                 "seed": int(base["seed"]) if base["seed"] is not None else None,
+                "batch_run_id": str(base["batch_run_id"]) if base["batch_run_id"] else None,
                 "batch_index": int(base["batch_index"])
                 if base["batch_index"] is not None
                 else None,
@@ -312,7 +329,24 @@ def main() -> int:
         )
 
     print(f"Calibration batch: {args.batch}")
+    if args.run_id:
+        print(f"Run ID filter: {args.run_id}")
     print(f"Attempts: {len(attempts)}")
+
+    # Per-run breakdown (shows data pollution at a glance when no --run-id filter).
+    by_run: dict[str | None, list[AttemptSummary]] = defaultdict(list)
+    for attempt in attempts:
+        by_run[attempt["batch_run_id"]].append(attempt)
+    if len(by_run) > 1:
+        print(f"\nRuns ({len(by_run)} distinct batch_run_id values):")
+        for run_id, run_attempts in sorted(by_run.items(), key=lambda x: x[0] or ""):
+            run_label = run_id[:8] if run_id else "(no run_id)"
+            solved_n = sum(1 for a in run_attempts if a["solved"])
+            print(f"  {run_label}…  attempts={len(run_attempts)} solved={solved_n}")
+        print()
+    elif len(by_run) == 1:
+        run_id_val = next(iter(by_run))
+        print(f"Run ID: {run_id_val or '(no batch_run_id — pre-phase7 data)'}")
 
     by_difficulty: dict[str, list[AttemptSummary]] = defaultdict(list)
     for attempt in attempts:
@@ -371,13 +405,16 @@ def main() -> int:
         print("- none")
 
     print("\nAttempts:")
+    show_run_col = len(by_run) > 1 and not args.run_id
     for attempt in sorted(attempts, key=lambda a: a["batch_index"] or 0):
         elapsed_ms = attempt["elapsed_ms"]
         minutes = f"{elapsed_ms / 60000:.2f}" if elapsed_ms is not None else "n/a"
         batch_index = attempt["batch_index"] if attempt["batch_index"] is not None else -1
         seed = str(attempt["seed"]) if attempt["seed"] is not None else "-"
+        run_abbr = attempt["batch_run_id"][:8] if attempt["batch_run_id"] else "?"
+        run_col = f" run={run_abbr}…" if show_run_col else ""
         print(
-            f"- #{batch_index:>2} {attempt['difficulty']:>9} seed={seed} "
+            f"- #{batch_index:>2} {attempt['difficulty']:>9} seed={seed}{run_col} "
             f"score={attempt['composite_score']:6.2f} minutes={minutes:>5} "
             f"undos={attempt['undo_count']:>2} "
             f"returns={attempt['tile_returned_count']:>2} "

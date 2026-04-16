@@ -23,6 +23,7 @@ _CREATE_TABLE = """
         difficulty TEXT NOT NULL,
         seed INTEGER,
         batch_name TEXT,
+        batch_run_id TEXT,
         batch_index INTEGER,
         generator_version TEXT NOT NULL,
         composite_score REAL NOT NULL,
@@ -60,6 +61,7 @@ _MIGRATION_COLUMNS: list[tuple[str, str]] = [
     ("seed", "INTEGER"),
     ("attempt_id", "TEXT NOT NULL DEFAULT ''"),
     ("batch_name", "TEXT"),
+    ("batch_run_id", "TEXT"),
     ("batch_index", "INTEGER"),
     ("tiles_placed", "INTEGER"),
     ("tiles_remaining", "INTEGER"),
@@ -100,7 +102,7 @@ class TelemetryStore:
         self.conn.execute(
             """INSERT INTO telemetry_events (
                 id, event_type, event_at, puzzle_id, attempt_id, difficulty, seed,
-                batch_name, batch_index, generator_version,
+                batch_name, batch_run_id, batch_index, generator_version,
                 composite_score, branching_factor, deductive_depth, red_herring_density,
                 working_memory_load, tile_ambiguity, solution_fragility,
                 disruption_score, chain_depth, tile_color, tile_number, tile_joker,
@@ -109,7 +111,7 @@ class TelemetryStore:
                 tiles_placed, tiles_remaining, self_rating, self_label, stuck_moments, notes
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )""",
             (
                 event_id,
@@ -120,6 +122,7 @@ class TelemetryStore:
                 event["difficulty"],
                 event.get("seed"),
                 event.get("batch_name"),
+                event.get("batch_run_id"),
                 event.get("batch_index"),
                 event["generator_version"],
                 event["composite_score"],

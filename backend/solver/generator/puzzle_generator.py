@@ -285,11 +285,17 @@ _OVERLAP_BIASES_V2: dict[str, float] = {
 
 # Per-difficulty attempt limits for the v2 outer retry loop.
 _DEFAULT_MAX_ATTEMPTS_V2: dict[str, int] = {
+    # Live generation limits (easy/medium/hard): kept low to avoid HiGHS worker-thread
+    # hang on Windows where time_limit is not respected in AnyIO threads.
+    # The trivial_extension filter increases the rejection rate, but 503 on live
+    # generation is acceptable — calibration uses gen_calibration_batch.py with
+    # explicit max_attempts=2000 for offline pregeneration.
     "easy": 50,
     "medium": 80,
     "hard": 120,
-    "expert": 300,
-    "nightmare": 600,
+    # Pool-miss fallback only — called rarely since expert/nightmare are pool-first.
+    "expert": 2000,
+    "nightmare": 3000,
     "custom": 100,
 }
 
@@ -344,13 +350,29 @@ def _attempt_generate_v2(
         rng=rng,
         rack_size_range=_RACK_SIZE_RANGES_V2.get(difficulty, (3, 6)),
         strategy="maximize_cascade",
-        solve_timeout=solve_timeout or 5.0,
+        # Do NOT pass solve_timeout here — TileRemover uses its own short default
+        # (_REMOVAL_STEP_TIMEOUT = 2.0 s) for intermediate solvability checks.
+        # A long solve_timeout inflates per-attempt time when HiGHS is slow.
     )
 
     if removal_result is None:
         return _AttemptOutcome(result=None, rejection_reason="removal_failed")
 
     remaining_board, rack, _ = removal_result
+
+    # Quality gate: reject if any rack tile trivially extends a COMPLETE board set.
+    # v2 boards may contain orphaned partial sets (1–2 tile stubs) from sequential
+    # removal — completing those is a puzzle challenge, not a trivial move.
+    # Only complete sets (≥3 tiles) produce visually obvious "extend the run" slots.
+    # Placed BEFORE solve() so rejected attempts skip the expensive solver call.
+    if _any_trivial_extension_v2(rack, remaining_board):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="trivial_extension",
+            rack_size=len(rack),
+            tiles_placed=0,
+            solve_status=None,
+        )
 
     # Final solve verification with a slightly longer timeout.
     state = BoardState(board_sets=remaining_board, rack=rack)
@@ -984,9 +1006,34 @@ def _estimate_complexity(
 
 
 def _any_trivial_extension(rack: list[Tile], board_sets: list[TileSet]) -> bool:
-    """Return True if any rack tile can be directly appended to any board set."""
+    """Return True if any rack tile can be directly appended to any board set.
+
+    Used by the v1 path where all board sets are already complete (≥3 tiles).
+    See _any_trivial_extension_v2 for the v2-compatible variant.
+    """
     for tile in rack:
         for ts in board_sets:
+            if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
+                return True
+    return False
+
+
+def _any_trivial_extension_v2(rack: list[Tile], board_sets: list[TileSet]) -> bool:
+    """Return True if any rack tile trivially extends a COMPLETE board set.
+
+    v2 boards can contain orphaned partial sets (1–2 tiles) created by
+    TileRemover's sequential removal.  Fitting a tile into a 2-tile stub is
+    NOT automatically trivial — when multiple orphans are present, finding
+    which rack tile belongs to which stub is a combinatorial puzzle challenge.
+
+    We only reject if a rack tile can be appended to a COMPLETE set (≥3 tiles)
+    to produce another valid set.  That is the visually unambiguous "extend a
+    run by one" move that makes the puzzle too easy.
+    """
+    for tile in rack:
+        for ts in board_sets:
+            if len(ts.tiles) < 3:
+                continue  # partial sets are puzzle challenges, not trivial slots
             if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
                 return True
     return False

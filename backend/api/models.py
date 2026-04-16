@@ -158,6 +158,9 @@ class SolveResponse(BaseModel):
 class PuzzleRequest(BaseModel):
     difficulty: Literal["easy", "medium", "hard", "expert", "nightmare", "custom"] = "medium"
     seed: int | None = None
+    # Phase 7: Fetch a specific puzzle by ID (used by pregenerated calibration batches).
+    # When set, difficulty/seed/seen_ids are ignored and the puzzle is loaded from pool.
+    puzzle_id: str | None = None
     # Phase 5: UUIDs of puzzles the client has already seen; used to avoid duplicates
     # when drawing from the pre-generated pool.  Capped at 500 to bound request size.
     seen_ids: list[str] = Field(default_factory=list, max_length=500)
@@ -192,7 +195,9 @@ class PuzzleResponse(BaseModel):
 
 class CalibrationBatchEntry(BaseModel):
     difficulty: Literal["easy", "medium", "hard", "expert", "nightmare"]
-    seed: int
+    seed: int | None = None
+    # Phase 7: pre-generated puzzles reference pool ID for instant load.
+    puzzle_id: str | None = None
 
 
 class CalibrationBatchResponse(BaseModel):
@@ -223,6 +228,7 @@ class TelemetryRequest(BaseModel):
     difficulty: str
     seed: int | None = None
     batch_name: str | None = None
+    batch_run_id: str | None = None
     batch_index: int | None = Field(default=None, ge=0)
     generator_version: str
     composite_score: float

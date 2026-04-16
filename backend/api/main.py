@@ -404,6 +404,18 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             generator_version=result.generator_version,
         )
 
+    # Phase 7: if a specific puzzle_id was requested (pregenerated calibration batch),
+    # load directly from pool — no generation needed, instant response.
+    if request.puzzle_id:
+        store = PuzzleStore()
+        drawn = store.draw_by_id(request.puzzle_id)
+        store.close()
+        if drawn is not None:
+            result, puzzle_id = drawn
+            logger.info("puzzle_pool_by_id", puzzle_id=puzzle_id)
+            return _result_to_response(result, puzzle_id)
+        raise HTTPException(status_code=404, detail=f"Puzzle {request.puzzle_id!r} not found.")
+
     # Phase 5: for expert/nightmare try the pre-generated pool first.
     if request.difficulty in ("expert", "nightmare"):
         store = PuzzleStore()

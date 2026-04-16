@@ -160,6 +160,16 @@ class PuzzleStore:
                 return _deserialize_row(row), row["id"]
         return None
 
+    def draw_by_id(self, puzzle_id: str) -> tuple[PuzzleResult, str] | None:
+        """Return a specific puzzle by its UUID, or None if not found."""
+        row = self.conn.execute(
+            "SELECT * FROM puzzles WHERE id = ?",
+            (puzzle_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _deserialize_row(row), row["id"]
+
     def count(self, difficulty: str | None = None) -> int:
         """Return the number of stored puzzles, optionally filtered by difficulty."""
         if difficulty is not None:

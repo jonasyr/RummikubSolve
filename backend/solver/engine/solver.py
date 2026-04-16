@@ -79,10 +79,13 @@ def solve(
     model = build_ilp_model(solve_state, candidate_sets, rules, secondary_objective)
 
     # 3. Set solver options and run.
-    model.highs.setOptionValue(
-        "time_limit",
-        timeout_seconds if timeout_seconds is not None else _SOLVE_TIMEOUT_SECONDS,
-    )
+    effective_timeout = timeout_seconds if timeout_seconds is not None else _SOLVE_TIMEOUT_SECONDS
+    model.highs.setOptionValue("time_limit", effective_timeout)
+    # HiGHS time_limit is sometimes not respected in worker threads on Windows.
+    # Set a simplex iteration limit as a platform-independent hard stop.
+    # 50 000 iterations is generous for Rummikub ILPs (typical: < 5 000),
+    # but prevents an infinite loop on degenerate configurations.
+    model.highs.setOptionValue("simplex_iteration_limit", 50_000)
     model.highs.run()
 
     # 4. Extract the solution.

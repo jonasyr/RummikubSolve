@@ -69,6 +69,8 @@ export type Difficulty = "easy" | "medium" | "hard" | "expert" | "nightmare" | "
 export interface PuzzleRequest {
   difficulty?: Difficulty;
   seed?: number;
+  /** Phase 7: load a specific pregenerated puzzle by pool ID (calibration batches). */
+  puzzle_id?: string;
   /** Phase 5: IDs of puzzles already seen; prevents duplicates when drawing from pool. */
   seen_ids?: string[];
   // Phase 7a: Custom mode parameters — ignored for all non-custom difficulties.
@@ -107,7 +109,9 @@ export interface PuzzleResponse {
 
 export interface CalibrationBatchEntry {
   difficulty: Exclude<Difficulty, "custom">;
-  seed: number;
+  seed?: number;
+  /** Phase 7: pregenerated puzzles reference pool ID for instant load. */
+  puzzle_id?: string;
 }
 
 export interface CalibrationBatchResponse {
@@ -145,6 +149,7 @@ export interface TelemetryEventRequest {
   difficulty: Difficulty | string;
   seed?: number;
   batch_name?: string;
+  batch_run_id?: string;
   batch_index?: number;
   generator_version: string;
   composite_score: number;

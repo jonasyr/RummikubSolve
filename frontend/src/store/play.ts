@@ -72,7 +72,7 @@ interface PlayState {
   stuckMoments: number;
   telemetrySolvedSent: boolean;
   attemptId: string | null;
-  calibrationContext: { batchName: string; batchIndex: number } | null;
+  calibrationContext: { batchName: string; batchRunId: string; batchIndex: number } | null;
 
   // ── Actions ──────────────────────────────────────────────────────────────
   loadPuzzle: (req: PuzzleRequest, signal?: AbortSignal) => Promise<void>;
@@ -84,7 +84,7 @@ interface PlayState {
   commit: () => CommitResult;
   revert: () => void;
   setInteractionMode: (mode: "tap" | "drag") => void;
-  setCalibrationContext: (context: { batchName: string; batchIndex: number } | null) => void;
+  setCalibrationContext: (context: { batchName: string; batchRunId: string; batchIndex: number } | null) => void;
   toggleValidation: () => void;
   reset: () => void;
 }
@@ -122,7 +122,7 @@ const initialState = {
   stuckMoments: 0,
   telemetrySolvedSent: false,
   attemptId: null as string | null,
-  calibrationContext: null as { batchName: string; batchIndex: number } | null,
+  calibrationContext: null as { batchName: string; batchRunId: string; batchIndex: number } | null,
 };
 
 // ---------------------------------------------------------------------------
@@ -215,6 +215,7 @@ function maybeRecordSolved(state: PlayState): void {
   void recordTelemetryEvent("puzzle_solved", state.puzzle, {
     attempt_id: state.attemptId ?? "",
     batch_name: state.calibrationContext?.batchName,
+    batch_run_id: state.calibrationContext?.batchRunId,
     batch_index: state.calibrationContext?.batchIndex,
     elapsed_ms: Math.max(0, state.solveEndTime - state.solveStartTime),
     move_count: state.moveCount,
