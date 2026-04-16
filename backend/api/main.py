@@ -440,7 +440,11 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             detail="Could not generate a puzzle — please try again.",
         ) from exc
 
-    return _result_to_response(result)
+    # Persist the live-generated puzzle so telemetry events can be linked by puzzle_id.
+    store = PuzzleStore()
+    puzzle_id = store.store(result)
+    store.close()
+    return _result_to_response(result, puzzle_id)
 
 
 @app.post("/api/telemetry", response_model=TelemetryResponse, tags=["meta"])

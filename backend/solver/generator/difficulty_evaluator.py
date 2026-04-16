@@ -106,11 +106,11 @@ class DifficultyScore:
 # ---------------------------------------------------------------------------
 
 TIER_THRESHOLDS: dict[str, tuple[int, int]] = {
-    "easy": (0, 20),
-    "medium": (15, 35),
-    "hard": (30, 55),
-    "expert": (50, 75),
-    "nightmare": (70, 100),
+    "easy":      (0,  52),
+    "medium":    (38, 68),
+    "hard":      (55, 85),
+    "expert":    (68, 92),
+    "nightmare": (75, 100),
 }
 
 
@@ -144,8 +144,36 @@ def _red_herrings_from_candidates(
     solution: Solution,
     all_candidates: list[TileSet],
 ) -> float:
+    """Fraction of rack-tile placements that conflict with the solution.
+
+    Previous definition (any non-solution set) was always ~0.95 because the
+    ILP optimum is one of thousands of valid configurations — almost everything
+    counted as a red herring regardless of tier.
+
+    Revised definition: for each rack tile, count candidate sets that (a) contain
+    the rack tile AND (b) share at least one board tile with the solution's sets.
+    These are the genuinely misleading moves — they look valid but compete for
+    board tiles the solution actually needs, so choosing them blocks full placement.
+
+    Result: easy puzzles produce ~0.0 (few or no conflicting sets); hard/nightmare
+    produce higher values because the optimal solution uses board tiles that also
+    appear in many plausible-but-wrong alternatives.
+    """
     if not state.rack:
         return 0.0
+
+    # Board tile identifiers used by the solution (copy_id distinguishes duplicates).
+    solution_board_tile_ids: set[tuple[object, object, object, bool]] = set()
+    board_tile_ids = {
+        (t.color, t.number, t.copy_id, t.is_joker)
+        for ts in state.board_sets
+        for t in ts.tiles
+    }
+    for ts in solution.new_sets:
+        for t in ts.tiles:
+            tid = (t.color, t.number, t.copy_id, t.is_joker)
+            if tid in board_tile_ids:
+                solution_board_tile_ids.add(tid)
 
     solution_set_keys: set[frozenset[tuple[object, ...]]] = set()
     for ts in solution.new_sets:
@@ -153,25 +181,29 @@ def _red_herrings_from_candidates(
         solution_set_keys.add(key)
 
     total = 0
-    red_herrings = 0
+    conflicting = 0
     for rack_tile in state.rack:
         for cs in all_candidates:
-            contains = any(
+            contains_rack_tile = any(
                 not t.is_joker
                 and t.color == rack_tile.color
                 and t.number == rack_tile.number
                 for t in cs.tiles
             )
-            if not contains:
+            if not contains_rack_tile:
                 continue
             total += 1
             cs_key = frozenset(
                 (t.color, t.number, t.copy_id, t.is_joker) for t in cs.tiles
             )
-            if cs_key not in solution_set_keys:
-                red_herrings += 1
+            if cs_key in solution_set_keys:
+                continue  # this IS the solution — not a red herring
+            # Conflicting: uses at least one board tile that the solution also uses.
+            cs_tile_ids = {(t.color, t.number, t.copy_id, t.is_joker) for t in cs.tiles}
+            if cs_tile_ids & solution_board_tile_ids:
+                conflicting += 1
 
-    return red_herrings / total if total > 0 else 0.0
+    return conflicting / total if total > 0 else 0.0
 
 
 def _tile_ambiguity_from_candidates(
@@ -219,8 +251,9 @@ def compute_branching_factor(state: BoardState) -> float:
 def compute_red_herrings(state: BoardState, solution: Solution) -> float:
     """Fraction of locally-valid placements that are NOT in the solution (§3.2).
 
-    A "red herring" is a placement that looks valid in isolation but is not
-    part of the optimal solution.  Higher density = more wrong turns.
+    A "red herring" is a candidate placement that contains a rack tile AND
+    competes for board tiles the solution needs — choosing it would block full
+    placement.  Higher density = more genuinely misleading wrong turns.
 
     Returns 0.0 if no placements exist (rack empty or no candidates).
     """

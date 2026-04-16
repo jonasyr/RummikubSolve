@@ -296,6 +296,14 @@ _DEFAULT_MAX_ATTEMPTS_V2: dict[str, int] = {
 # Tier ordering for ±1 adjacency check in _attempt_generate_v2.
 _TIER_ORDER = ["easy", "medium", "hard", "expert", "nightmare"]
 
+# Minimum quality gates per tier for v2 puzzles (Phase 6 calibration results).
+_MIN_DISRUPTION_V2: dict[str, int] = {
+    "easy": 3, "medium": 6, "hard": 10, "expert": 14, "nightmare": 18
+}
+_MIN_FRAGILITY_V2: dict[str, float] = {
+    "easy": 0.0, "medium": 0.0, "hard": 0.1, "expert": 0.25, "nightmare": 0.4
+}
+
 try:
     import structlog as _structlog
 except ImportError:  # pragma: no cover - fallback for minimal environments
@@ -353,15 +361,37 @@ def _attempt_generate_v2(
     skip_expensive = difficulty in ("easy", "medium")
     score = DifficultyEvaluator.evaluate(state, solution, skip_expensive=skip_expensive)
 
-    # Tier check deferred until Phase 6 weight calibration.
-    # The composite score weights are initial estimates (§3.7 note) and produce
-    # inflated scores on smaller boards — every difficulty level currently scores
-    # in the "expert" band.  Once calibration data is available, re-enable:
-    #
-    #   tier_order = _TIER_ORDER
-    #   if difficulty in tier_order and score.classified_tier in tier_order:
-    #       if abs(tier_order.index(difficulty) - tier_order.index(score.classified_tier)) > 1:
-    #           return _AttemptOutcome(result=None, rejection_reason="tier_mismatch", ...)
+    # Minimum quality gates — reject perceptually trivial puzzles before tier check.
+    # Thresholds derived from Phase 6 calibration (batch phase6_batch_v1, 25 puzzles).
+    if score.disruption_score < _MIN_DISRUPTION_V2.get(difficulty, 0):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="disruption_too_low",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
+    if score.solution_fragility < _MIN_FRAGILITY_V2.get(difficulty, 0.0):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="fragility_too_low",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
+
+    # Tier check: reject puzzles whose composite score is more than 1 tier away
+    # from the requested difficulty.  Tolerance = 1 adjacent tier (e.g. an easy
+    # puzzle scoring "medium" is OK, but "expert" is rejected).
+    if difficulty in _TIER_ORDER and score.classified_tier in _TIER_ORDER:
+        if abs(_TIER_ORDER.index(difficulty) - _TIER_ORDER.index(score.classified_tier)) > 1:
+            return _AttemptOutcome(
+                result=None,
+                rejection_reason="tier_mismatch",
+                rack_size=len(rack),
+                tiles_placed=solution.tiles_placed,
+                solve_status=solution.solve_status,
+            )
 
     # Uniqueness check for expert/nightmare.
     is_unique = True

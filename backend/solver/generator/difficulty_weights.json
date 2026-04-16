@@ -10,10 +10,10 @@
     "chain_depth": 0.05
   },
   "normalization_ceilings": {
-    "branching_factor": 8.0,
-    "deductive_depth": 10.0,
-    "working_memory_load": 10.0,
-    "tile_ambiguity": 15.0,
+    "branching_factor": 40.0,
+    "deductive_depth": 16.0,
+    "working_memory_load": 14.0,
+    "tile_ambiguity": 32.0,
     "disruption_score": 50.0,
     "chain_depth": 5.0
   }

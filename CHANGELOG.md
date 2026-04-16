@@ -5,6 +5,29 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [Unreleased] — 2026-04-16 — Phase 6: Calibration Results Remediation
+
+### Backend — Difficulty scoring (P0)
+- `difficulty_weights.json`: normalization ceilings raised to match observed metric ranges; previous values (branching=8, deductive=10, working_memory=10, tile_ambiguity=15) were far below actual outputs (6–41, 9–16, 4–14, 18–34), causing all tiers to clamp to 1.0 and score 59–97 regardless of difficulty
+- `difficulty_evaluator.py`: `TIER_THRESHOLDS` recalibrated from observed distributions after ceiling fix: easy `(0,52)`, medium `(38,68)`, hard `(55,85)`, expert `(68,92)`, nightmare `(75,100)`
+- `difficulty_evaluator.py`: `red_herring_density` redesigned — old definition (non-solution sets / all sets) was always ~0.95; new definition counts only candidate placements that **conflict** with the solution by competing for the same board tiles; easy puzzles now score ~0.0, harder tiers score higher
+- `puzzle_generator.py`: tier-matching check re-enabled (was commented out since Phase 4); tolerates ±1 adjacent tier, rejects anything further
+- `puzzle_generator.py`: per-tier minimum quality gates added (`_MIN_DISRUPTION_V2`, `_MIN_FRAGILITY_V2`); rejects perceptually trivial puzzles that pass the solver but have too little rearrangement or fragility
+
+### Backend — Data quality (P1)
+- `telemetry_store.py`: `puzzle_rated` events now upsert — re-rating the same attempt deletes the previous row before inserting; duplicate ratings no longer accumulate
+- `api/main.py`: live-generated puzzles (easy/medium/hard non-pool path) are now persisted via `PuzzleStore.store()` and return a non-empty `puzzle_id`; telemetry events can now be linked to the puzzle
+- `pyproject.toml`: `numpy>=2.0.0` added as a runtime dependency
+
+### Frontend — Telemetry (P1)
+- `play.ts`: `puzzle_solved` event now includes `tiles_placed` (= `puzzle.tile_count`) and `tiles_remaining` (= 0)
+
+### Backend — Calibration tooling (P2)
+- `calibrate.py`: added `--stats` mode — queries the puzzle pool DB and prints per-tier composite score distributions (min/avg/max)
+- `calibrate.py`: added `--fit-weights` mode — fits a log-linear regression (`numpy.linalg.lstsq`) of solve time on normalised metrics across a telemetry batch; clips negative coefficients to 0 and normalises to sum=1; prints suggested `difficulty_weights.json` updates to stdout only, does not auto-write; warns if fewer than 20 solved sessions per tier
+
+---
+
 ## [Unreleased] — 2026-04-14 — Phase 0–6 calibration foundation
 
 ### Backend — Generator and Persistence

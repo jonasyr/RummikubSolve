@@ -1,4 +1,13 @@
-"""Reporting-only calibration analysis for fixed-seed telemetry batches."""
+"""Calibration analysis for fixed-seed telemetry batches.
+
+Modes:
+  --batch <name>      Per-attempt report for a named telemetry batch (default mode).
+  --stats             Score distribution summary from the puzzles DB.
+  --fit-weights       Fit linear regression on telemetry to suggest weight updates.
+                      Requires --batch and at least 20 solved sessions per tier.
+                      Outputs weight recommendations to stdout only — does NOT
+                      auto-write difficulty_weights.json.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +18,9 @@ from pathlib import Path
 from statistics import mean
 from typing import TypedDict
 
+import numpy as np
+
+from .puzzle_store import DEFAULT_DB_PATH
 from .telemetry_store import DEFAULT_TELEMETRY_DB_PATH
 
 
@@ -35,9 +47,12 @@ class AttemptSummary(TypedDict):
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--db", type=Path, default=DEFAULT_TELEMETRY_DB_PATH)
-    parser.add_argument("--batch", type=str, required=True)
+    parser.add_argument("--puzzle-db", type=Path, default=DEFAULT_DB_PATH)
+    parser.add_argument("--batch", type=str, default=None)
+    parser.add_argument("--stats", action="store_true", help="Show score distributions from the puzzle pool")
+    parser.add_argument("--fit-weights", action="store_true", help="Fit regression weights from telemetry (requires --batch)")
     return parser.parse_args()
 
 
@@ -45,8 +60,174 @@ def _safe_mean(values: list[float]) -> float:
     return mean(values) if values else 0.0
 
 
+_METRIC_COLS = [
+    "branching_factor",
+    "deductive_depth",
+    "red_herring_density",
+    "working_memory_load",
+    "tile_ambiguity",
+    "solution_fragility",
+    "disruption_score",
+    "chain_depth",
+]
+
+_WEIGHT_KEYS = [
+    "branching",
+    "deductive",
+    "red_herring",
+    "working_memory",
+    "ambiguity",
+    "fragility",
+    "disruption",
+    "chain_depth",
+]
+
+_NORMALIZATION_CEILINGS = {
+    "branching_factor": 40.0,
+    "deductive_depth": 16.0,
+    "red_herring_density": 1.0,
+    "working_memory_load": 14.0,
+    "tile_ambiguity": 32.0,
+    "solution_fragility": 1.0,
+    "disruption_score": 50.0,
+    "chain_depth": 5.0,
+}
+
+
+def _run_stats(puzzle_db: Path) -> int:
+    """Print score distribution summary from the puzzle pool DB."""
+    if not puzzle_db.exists():
+        print(f"Puzzle DB not found: {puzzle_db}")
+        return 1
+    conn = sqlite3.connect(str(puzzle_db))
+    conn.row_factory = sqlite3.Row
+    try:
+        print("Score distributions (puzzle pool):")
+        for diff in ("easy", "medium", "hard", "expert", "nightmare"):
+            rows = conn.execute(
+                """
+                SELECT COUNT(*) as n,
+                       MIN(composite_score) as lo,
+                       AVG(composite_score) as avg,
+                       MAX(composite_score) as hi
+                FROM puzzles WHERE difficulty = ?
+                """,
+                (diff,),
+            ).fetchone()
+            if rows and rows["n"] > 0:
+                print(
+                    f"  {diff:>9}: n={rows['n']:>3}  "
+                    f"min={rows['lo']:5.1f}  avg={rows['avg']:5.1f}  max={rows['hi']:5.1f}"
+                )
+            else:
+                print(f"  {diff:>9}: (no puzzles)")
+    finally:
+        conn.close()
+    return 0
+
+
+def _run_fit_weights(telemetry_db: Path, batch: str) -> int:
+    """Fit a linear regression of solve_time on normalised metrics and suggest new weights.
+
+    Uses non-negative least squares (via numpy.linalg.lstsq with clipping) to ensure
+    all weights stay >= 0.  Outputs recommendations to stdout only — does NOT write
+    difficulty_weights.json.  Requires at least 20 solved sessions per tier to be
+    meaningful.
+    """
+    conn = sqlite3.connect(str(telemetry_db))
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """
+            SELECT * FROM telemetry_events
+            WHERE batch_name = ? AND event_type = 'puzzle_solved' AND elapsed_ms IS NOT NULL
+            ORDER BY created_at
+            """,
+            (batch,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        print(f"No solved puzzle_solved events found for batch '{batch}'.")
+        return 1
+
+    by_tier: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    for row in rows:
+        by_tier[row["difficulty"]].append(row)
+
+    min_per_tier = 20
+    warnings: list[str] = []
+    for diff in ("easy", "medium", "hard", "expert", "nightmare"):
+        n = len(by_tier.get(diff, []))
+        if n < min_per_tier:
+            warnings.append(f"  WARNING: {diff} has only {n} solved sessions (need {min_per_tier}+)")
+
+    if warnings:
+        print("Data quality warnings:")
+        for w in warnings:
+            print(w)
+        print()
+
+    # Build feature matrix X (n_samples × 8) and target y (log solve time in seconds).
+    X_rows: list[list[float]] = []
+    y_vals: list[float] = []
+
+    for row in rows:
+        norm_features = []
+        for col in _METRIC_COLS:
+            val = float(row[col]) if row[col] is not None else 0.0
+            ceiling = _NORMALIZATION_CEILINGS[col]
+            norm_features.append(min(val / ceiling, 1.0))
+        X_rows.append(norm_features)
+        elapsed_s = max(float(row["elapsed_ms"]) / 1000.0, 1.0)
+        y_vals.append(float(np.log(elapsed_s)))
+
+    X = np.array(X_rows)
+    y = np.array(y_vals)
+
+    # Fit via least squares, then clip negatives and re-normalise.
+    coeffs, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+    coeffs_clipped = np.maximum(coeffs, 0.0)
+    total = coeffs_clipped.sum()
+    if total < 1e-9:
+        print("Regression produced all-zero weights — not enough signal in the data.")
+        return 1
+
+    weights_norm = coeffs_clipped / total
+    negatives = [_WEIGHT_KEYS[i] for i, c in enumerate(coeffs) if c < 0]
+
+    print(f"Fit weights from batch '{batch}' ({len(rows)} solved sessions):")
+    print()
+    if negatives:
+        print(f"  Note: {negatives} had negative coefficients → clipped to 0 and renormalised.")
+        print()
+    print("  Suggested weight updates for difficulty_weights.json:")
+    print("  {")
+    for key, w in zip(_WEIGHT_KEYS, weights_norm, strict=True):
+        print(f'    "{key}": {w:.4f},')
+    print("  }")
+    print()
+    print("  Review and apply manually — this does NOT auto-write the file.")
+    return 0
+
+
 def main() -> int:
     args = _parse_args()
+
+    if args.stats:
+        return _run_stats(args.puzzle_db)
+
+    if args.fit_weights:
+        if not args.batch:
+            print("--fit-weights requires --batch <name>")
+            return 1
+        return _run_fit_weights(args.db, args.batch)
+
+    if not args.batch:
+        print("Specify --batch <name>, --stats, or --fit-weights. Use --help for details.")
+        return 1
+
     conn = sqlite3.connect(str(args.db))
     conn.row_factory = sqlite3.Row
     try:

@@ -13,6 +13,7 @@ dependencies = [
     "highspy>=1.7.0",
     "structlog>=24.4.0",
     "sentry-sdk[fastapi]>=2.14.0",
+    "numpy>=2.0.0",
 ]
 
 [project.optional-dependencies]

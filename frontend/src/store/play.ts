@@ -222,6 +222,8 @@ function maybeRecordSolved(state: PlayState): void {
     redo_count: state.redoCount,
     commit_count: state.commitCount,
     revert_count: state.revertCount,
+    tiles_placed: state.puzzle.tile_count,
+    tiles_remaining: 0,
     stuck_moments: state.stuckMoments,
   });
 }

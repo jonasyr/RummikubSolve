@@ -76,6 +76,7 @@ class TelemetryStore:
     def __init__(self, db_path: Path = DEFAULT_TELEMETRY_DB_PATH) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(db_path))
+        self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.row_factory = sqlite3.Row
         self._create_tables()
 
@@ -87,6 +88,13 @@ class TelemetryStore:
         self.conn.commit()
 
     def store(self, event: dict[str, object]) -> str:
+        # A user can re-rate a puzzle; keep only the latest rating per attempt.
+        if event.get("event_type") == "puzzle_rated":
+            self.conn.execute(
+                "DELETE FROM telemetry_events WHERE attempt_id=? AND event_type='puzzle_rated'",
+                (event.get("attempt_id", ""),),
+            )
+
         event_id = str(uuid.uuid4())
         tile = event.get("tile")
         self.conn.execute(
