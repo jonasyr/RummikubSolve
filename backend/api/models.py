@@ -275,17 +275,14 @@ class TelemetryRequest(BaseModel):
             if self.elapsed_ms is None or self.move_count is None or self.undo_count is None:
                 raise ValueError("puzzle_solved requires elapsed_ms, move_count, and undo_count.")
         elif self.event_type == "puzzle_abandoned":
-            if (
-                self.elapsed_ms is None
-                or self.tiles_placed is None
-                or self.tiles_remaining is None
-            ):
+            if self.elapsed_ms is None or self.tiles_placed is None or self.tiles_remaining is None:
                 raise ValueError(
                     "puzzle_abandoned requires elapsed_ms, tiles_placed, and tiles_remaining."
                 )
-        elif self.event_type == "puzzle_rated":
-            if self.self_rating is None or self.self_label is None:
-                raise ValueError("puzzle_rated requires self_rating and self_label.")
+        elif self.event_type == "puzzle_rated" and (
+            self.self_rating is None or self.self_label is None
+        ):
+            raise ValueError("puzzle_rated requires self_rating and self_label.")
         return self
 
 

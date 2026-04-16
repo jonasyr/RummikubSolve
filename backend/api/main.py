@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections import Counter
 from functools import lru_cache
 from json import loads
 from pathlib import Path
-from collections import Counter
 from typing import Literal, cast
 
 import sentry_sdk
@@ -467,7 +467,9 @@ def telemetry_endpoint(request: TelemetryRequest) -> TelemetryResponse:
     return TelemetryResponse(status="ok")
 
 
-@app.get("/api/calibration-batch/{batch_name}", response_model=CalibrationBatchResponse, tags=["meta"])
+@app.get(
+    "/api/calibration-batch/{batch_name}", response_model=CalibrationBatchResponse, tags=["meta"]
+)
 def calibration_batch_endpoint(batch_name: str) -> CalibrationBatchResponse:
     """Return a fixed-seed developer calibration batch manifest."""
     try:

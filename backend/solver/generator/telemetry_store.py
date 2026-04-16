@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import uuid
+from contextlib import suppress
 from pathlib import Path
 
 from .puzzle_store import DEFAULT_DB_PATH
@@ -81,10 +82,8 @@ class TelemetryStore:
     def _create_tables(self) -> None:
         self.conn.execute(_CREATE_TABLE)
         for col_name, col_def in _MIGRATION_COLUMNS:
-            try:
+            with suppress(sqlite3.OperationalError):
                 self.conn.execute(f"ALTER TABLE telemetry_events ADD COLUMN {col_name} {col_def}")
-            except sqlite3.OperationalError:
-                pass
         self.conn.commit()
 
     def store(self, event: dict[str, object]) -> str:
@@ -100,7 +99,10 @@ class TelemetryStore:
                 from_row, from_col, to_row, to_col, elapsed_ms, move_count,
                 undo_count, redo_count, commit_count, revert_count,
                 tiles_placed, tiles_remaining, self_rating, self_label, stuck_moments, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )""",
             (
                 event_id,
                 event["event_type"],
