@@ -17,7 +17,7 @@ import type {
   TelemetrySelfLabel,
 } from "../../../../types/api";
 
-const BATCH_NAME = "phase6_batch_v1";
+const BATCH_NAME = "phase7_batch_v1";
 const STORAGE_KEY = `calibration:${BATCH_NAME}:progress`;
 const ACCESS_KEY = "calibration:access-granted";
 const ACCESS_PASSWORD = "123";

@@ -5,6 +5,39 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [Unreleased] — 2026-04-16 — Phase 7: First Clean Calibration — All Puzzles Still Trivially Easy
+
+### Result
+25 puzzles across all tiers (phase7_batch_v1) solved in under 1 minute, zero undos, all labeled "trivial" or "straightforward". The difficulty system remains non-functional. See `PUZZLE_DIFFICULTY_PROBLEM.md` for full root-cause analysis and proposed directions.
+
+| Tier      | Score (avg) | Solve time (avg) | Target      |
+|-----------|-------------|------------------|-------------|
+| easy      | 39.0        | ~4s              | 30s – 2min  |
+| medium    | 58.7        | ~7s              | 1min – 3min |
+| hard      | 59.8        | ~13s             | 2min – 5min |
+| expert    | 71.0        | ~18s             | 5min – 15min|
+| nightmare | 80.9        | ~28s             | 10min – 30min|
+
+### Added
+- `PUZZLE_DIFFICULTY_PROBLEM.md` — detailed post-mortem: root causes, history of attempts, hypotheses for a real fix, full calibration data
+- `_any_trivial_extension_v2()` — v2-specific trivial extension gate; rejects rack tiles that extend complete (≥3 tile) board sets only (partial stubs excluded to avoid 100% rejection rate)
+- `_solve_timed()` daemon-thread wrapper in `tile_remover.py` — hard Python-level deadline for HiGHS calls in AnyIO worker threads on Windows where `time_limit` is not respected
+- `batch_run_id` UUID per calibration session; emitted in `puzzle_solved`, `puzzle_rated`, `puzzle_abandoned` telemetry events
+- "New Run" button and post-completion overlay in calibration UI
+- `puzzle_id` fast-path in puzzle API — pool lookup by ID; live-generated puzzles also persisted to pool
+- `gen_calibration_batch.py` — writes output to `solver/generator/calibration_batches/` by default (no manual copying)
+- `calibrate.py --run-id` filter; per-run breakdown in default batch report
+- `phase7_batch_v1.json` calibration batch (25 puzzles, seeds 10000–10004 per tier)
+- `simplex_iteration_limit = 50_000` in HiGHS solver as platform-independent iteration cap
+
+### Changed
+- `BATCH_NAME` in calibration page updated to `phase7_batch_v1`
+- `numpy` added to `pyproject.toml` (for `--fit-weights`)
+- `_MIN_DISRUPTION_V2` / `_MIN_FRAGILITY_V2` quality gates enabled in `_attempt_generate_v2()`
+- Tier mismatch check re-enabled (was commented out since Phase 4)
+
+---
+
 ## [Unreleased] — 2026-04-16 — Phase 6: Calibration Results Remediation
 
 ### Backend — Difficulty scoring (P0)

@@ -1,0 +1,130 @@
+{
+  "batch_name": "phase7_batch_v1",
+  "entries": [
+    {
+      "difficulty": "easy",
+      "seed": 10000,
+      "puzzle_id": "9025671a-000d-4b20-b0f7-e72423240021"
+    },
+    {
+      "difficulty": "easy",
+      "seed": 10001,
+      "puzzle_id": "af45cabf-2684-464e-96ab-1146899e57fc"
+    },
+    {
+      "difficulty": "easy",
+      "seed": 10002,
+      "puzzle_id": "3339f98f-1145-4a6c-9215-31e94e71c162"
+    },
+    {
+      "difficulty": "easy",
+      "seed": 10003,
+      "puzzle_id": "5916f98e-d7d2-45b6-a7c4-3e684a871f34"
+    },
+    {
+      "difficulty": "easy",
+      "seed": 10004,
+      "puzzle_id": "891f2f70-d21d-4893-8bff-7cb4c279e559"
+    },
+    {
+      "difficulty": "medium",
+      "seed": 10000,
+      "puzzle_id": "57f49aea-aa39-42db-b229-c8091625f6bb"
+    },
+    {
+      "difficulty": "medium",
+      "seed": 10001,
+      "puzzle_id": "30adc430-f5d5-41d5-8964-5ace30b94b26"
+    },
+    {
+      "difficulty": "medium",
+      "seed": 10002,
+      "puzzle_id": "8111060d-8c57-42c8-8b5a-638fe57c2778"
+    },
+    {
+      "difficulty": "medium",
+      "seed": 10003,
+      "puzzle_id": "88db7bbf-4fad-4687-b47a-d141f0429cdc"
+    },
+    {
+      "difficulty": "medium",
+      "seed": 10004,
+      "puzzle_id": "f0beb4bf-33c0-49da-a6c3-0ee168917cf2"
+    },
+    {
+      "difficulty": "hard",
+      "seed": 10000,
+      "puzzle_id": "e6bdaabb-1128-4b12-b756-d5e07c33476d"
+    },
+    {
+      "difficulty": "hard",
+      "seed": 10001,
+      "puzzle_id": "4d7cd0f4-7ce3-41e9-bb5a-0e87b9a88a59"
+    },
+    {
+      "difficulty": "hard",
+      "seed": 10002,
+      "puzzle_id": "112ed7bf-366b-4bef-b6a2-cafadce2f37a"
+    },
+    {
+      "difficulty": "hard",
+      "seed": 10003,
+      "puzzle_id": "2f68882a-900b-4d45-8361-299772228bbe"
+    },
+    {
+      "difficulty": "hard",
+      "seed": 10004,
+      "puzzle_id": "bdd0472c-0a9e-44a4-a952-8eba0d51e76a"
+    },
+    {
+      "difficulty": "expert",
+      "seed": 10000,
+      "puzzle_id": "9949dd49-5c2a-4052-8128-c97f8414cb4a"
+    },
+    {
+      "difficulty": "expert",
+      "seed": 10001,
+      "puzzle_id": "828a8b79-fff9-4d41-8f12-89ca6e22b614"
+    },
+    {
+      "difficulty": "expert",
+      "seed": 10002,
+      "puzzle_id": "9f3bbe8a-f570-41b0-8a8e-49ed30fa7521"
+    },
+    {
+      "difficulty": "expert",
+      "seed": 10003,
+      "puzzle_id": "431d61da-b41a-423f-8c54-2db4a3a64e94"
+    },
+    {
+      "difficulty": "expert",
+      "seed": 10004,
+      "puzzle_id": "2dd19559-7c76-40cf-be98-ad7d92408d1b"
+    },
+    {
+      "difficulty": "nightmare",
+      "seed": 10000,
+      "puzzle_id": "4142cc71-bb78-4df3-84a7-e6dcdc0b85a2"
+    },
+    {
+      "difficulty": "nightmare",
+      "seed": 10001,
+      "puzzle_id": "0c7e1e46-f164-4f2e-84de-b587a627dbe9"
+    },
+    {
+      "difficulty": "nightmare",
+      "seed": 10002,
+      "puzzle_id": "04dfd754-d528-450d-aed7-3b9ddcdaee1b"
+    },
+    {
+      "difficulty": "nightmare",
+      "seed": 10003,
+      "puzzle_id": "e9e18b19-7a3e-4717-a46a-9acba6ce6fd9"
+    },
+    {
+      "difficulty": "nightmare",
+      "seed": 10004,
+      "puzzle_id": "e7186839-f083-4c43-a354-5b7af64e274f"
+    }
+  ]
+}

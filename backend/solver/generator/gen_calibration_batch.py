@@ -7,10 +7,16 @@ load it instantly by puzzle_id — no on-the-fly generation required.
 
 Usage::
 
+    # Output goes to solver/generator/calibration_batches/<batch-name>.json by default
     python -m solver.generator.gen_calibration_batch \\
-        --output calibration_batches/phase7_batch_v1.json \\
+        --batch-name phase8_batch_v1 \\
         --count 5 \\
         --seed-start 10000
+
+    # Or specify an explicit output path:
+    python -m solver.generator.gen_calibration_batch \\
+        --output /some/other/path/phase8_batch_v1.json \\
+        --count 5
 
 Output JSON structure::
 
@@ -44,11 +50,15 @@ def _parse_args() -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    _default_output_dir = Path(__file__).resolve().parent / "calibration_batches"
     parser.add_argument(
         "--output",
         type=Path,
-        required=True,
-        help="Output path for the batch JSON file",
+        default=None,
+        help=(
+            "Output path for the batch JSON file. "
+            f"Defaults to {_default_output_dir}/<batch-name>.json"
+        ),
     )
     parser.add_argument(
         "--count",
@@ -92,7 +102,19 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
 
-    batch_name = args.batch_name or args.output.stem
+    _default_output_dir = Path(__file__).resolve().parent / "calibration_batches"
+
+    # Resolve batch_name first (needed to build the default output path).
+    # If --output is given, its stem takes precedence over --batch-name when
+    # both are omitted; if only --batch-name is given we use it as the stem.
+    if args.output is None and args.batch_name is None:
+        raise SystemExit(
+            "Either --output or --batch-name must be specified.\n"
+            "Example: --batch-name phase8_batch_v1"
+        )
+    batch_name: str = args.batch_name or args.output.stem  # type: ignore[union-attr]
+    output_path: Path = args.output or (_default_output_dir / f"{batch_name}.json")
+
     store = PuzzleStore(args.db)
 
     entries: list[dict[str, object]] = []
@@ -144,7 +166,6 @@ def main() -> int:
 
     store.close()
 
-    output_path = args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"batch_name": batch_name, "entries": entries}
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
