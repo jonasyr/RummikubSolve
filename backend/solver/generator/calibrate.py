@@ -47,12 +47,21 @@ class AttemptSummary(TypedDict):
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--db", type=Path, default=DEFAULT_TELEMETRY_DB_PATH)
     parser.add_argument("--puzzle-db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--batch", type=str, default=None)
-    parser.add_argument("--stats", action="store_true", help="Show score distributions from the puzzle pool")
-    parser.add_argument("--fit-weights", action="store_true", help="Fit regression weights from telemetry (requires --batch)")
+    parser.add_argument(
+        "--stats", action="store_true", help="Show score distributions from the puzzle pool"
+    )
+    parser.add_argument(
+        "--fit-weights",
+        action="store_true",
+        help="Fit regression weights from telemetry (requires --batch)",
+    )
     return parser.parse_args()
 
 
@@ -161,7 +170,9 @@ def _run_fit_weights(telemetry_db: Path, batch: str) -> int:
     for diff in ("easy", "medium", "hard", "expert", "nightmare"):
         n = len(by_tier.get(diff, []))
         if n < min_per_tier:
-            warnings.append(f"  WARNING: {diff} has only {n} solved sessions (need {min_per_tier}+)")
+            warnings.append(
+                f"  WARNING: {diff} has only {n} solved sessions (need {min_per_tier}+)"
+            )
 
     if warnings:
         print("Data quality warnings:")

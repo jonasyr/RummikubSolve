@@ -298,10 +298,18 @@ _TIER_ORDER = ["easy", "medium", "hard", "expert", "nightmare"]
 
 # Minimum quality gates per tier for v2 puzzles (Phase 6 calibration results).
 _MIN_DISRUPTION_V2: dict[str, int] = {
-    "easy": 3, "medium": 6, "hard": 10, "expert": 14, "nightmare": 18
+    "easy": 3,
+    "medium": 6,
+    "hard": 10,
+    "expert": 14,
+    "nightmare": 18,
 }
 _MIN_FRAGILITY_V2: dict[str, float] = {
-    "easy": 0.0, "medium": 0.0, "hard": 0.1, "expert": 0.25, "nightmare": 0.4
+    "easy": 0.0,
+    "medium": 0.0,
+    "hard": 0.1,
+    "expert": 0.25,
+    "nightmare": 0.4,
 }
 
 try:
@@ -383,15 +391,18 @@ def _attempt_generate_v2(
     # Tier check: reject puzzles whose composite score is more than 1 tier away
     # from the requested difficulty.  Tolerance = 1 adjacent tier (e.g. an easy
     # puzzle scoring "medium" is OK, but "expert" is rejected).
-    if difficulty in _TIER_ORDER and score.classified_tier in _TIER_ORDER:
-        if abs(_TIER_ORDER.index(difficulty) - _TIER_ORDER.index(score.classified_tier)) > 1:
-            return _AttemptOutcome(
-                result=None,
-                rejection_reason="tier_mismatch",
-                rack_size=len(rack),
-                tiles_placed=solution.tiles_placed,
-                solve_status=solution.solve_status,
-            )
+    if (
+        difficulty in _TIER_ORDER
+        and score.classified_tier in _TIER_ORDER
+        and abs(_TIER_ORDER.index(difficulty) - _TIER_ORDER.index(score.classified_tier)) > 1
+    ):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="tier_mismatch",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
 
     # Uniqueness check for expert/nightmare.
     is_unique = True
