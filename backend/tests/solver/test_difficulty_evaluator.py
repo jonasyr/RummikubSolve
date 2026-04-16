@@ -78,19 +78,19 @@ def test_classify_tier_easy():
 
 
 def test_classify_tier_medium():
-    assert classify_tier(20.0) == "medium"
+    assert classify_tier(45.0) == "medium"
 
 
 def test_classify_tier_hard():
-    assert classify_tier(35.0) == "hard"
+    assert classify_tier(60.0) == "hard"
 
 
 def test_classify_tier_expert():
-    assert classify_tier(55.0) == "expert"
+    assert classify_tier(70.0) == "expert"
 
 
 def test_classify_tier_nightmare():
-    assert classify_tier(75.0) == "nightmare"
+    assert classify_tier(80.0) == "nightmare"
 
 
 def test_classify_tier_boundary_nightmare():
@@ -116,11 +116,11 @@ def test_composite_score_all_zeros():
 def test_composite_score_all_max():
     """All metrics at normalisation ceiling → score == 100.0."""
     score = compute_composite_score(
-        branching_factor=8.0,
-        deductive_depth=10.0,
+        branching_factor=40.0,
+        deductive_depth=16.0,
         red_herring_density=1.0,
-        working_memory_load=10.0,
-        tile_ambiguity=15.0,
+        working_memory_load=14.0,
+        tile_ambiguity=32.0,
         solution_fragility=1.0,
         disruption_score=50,
         chain_depth=5,
