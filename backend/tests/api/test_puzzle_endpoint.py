@@ -395,3 +395,7 @@ async def test_response_has_v2_fields(client: AsyncClient) -> None:
     assert data["composite_score"] >= 0.0
     assert data["branching_factor"] >= 0.0
     assert data["generator_version"] == "v2.0.0"
+    assert "template_id" in data, "template_id missing from response"
+    assert "template_version" in data, "template_version missing from response"
+    assert data["template_id"] == "legacy"
+    assert data["template_version"] == "0"

@@ -171,6 +171,8 @@ describe("lastPuzzleMeta", () => {
       tile_ambiguity: 3,
       solution_fragility: 0.1,
       generator_version: "v2.0.0",
+      template_id: "legacy",
+      template_version: "0",
     });
     await store().loadPuzzle({ difficulty: "expert" });
     expect(store().lastPuzzleMeta).toEqual({
@@ -197,6 +199,8 @@ describe("lastPuzzleMeta", () => {
       tile_ambiguity: 1,
       solution_fragility: 0,
       generator_version: "v2.0.0",
+      template_id: "legacy",
+      template_version: "0",
     });
     await store().loadPuzzle({ difficulty: "easy" });
     expect(store().lastPuzzleMeta?.chainDepth).toBe(0);
@@ -221,6 +225,8 @@ describe("lastPuzzleMeta", () => {
       tile_ambiguity: 7,
       solution_fragility: 0.2,
       generator_version: "v2.0.0",
+      template_id: "legacy",
+      template_version: "0",
     });
     await store().loadPuzzle({ difficulty: "nightmare" });
     expect(store().lastPuzzleMeta?.difficulty).toBe("nightmare");
@@ -244,6 +250,8 @@ describe("lastPuzzleMeta", () => {
       tile_ambiguity: 2,
       solution_fragility: 0.1,
       generator_version: "v2.0.0",
+      template_id: "legacy",
+      template_version: "0",
     });
     await store().loadPuzzle({ difficulty: "medium" });
     expect(store().lastPuzzleMeta).not.toBeNull();

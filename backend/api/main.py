@@ -402,6 +402,8 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             tile_ambiguity=result.tile_ambiguity,
             solution_fragility=result.solution_fragility,
             generator_version=result.generator_version,
+            template_id=getattr(result, "template_id", "legacy"),
+            template_version=getattr(result, "template_version", "0"),
         )
 
     # Phase 7: if a specific puzzle_id was requested (pregenerated calibration batch),
