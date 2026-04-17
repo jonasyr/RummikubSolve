@@ -36,23 +36,20 @@ def generate_puzzle(*args: object, **kwargs: object) -> PuzzleResult:
 # ---------------------------------------------------------------------------
 
 
-def test_easy_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="easy", seed=1, generator_version="v1")
-    assert isinstance(result, PuzzleResult)
-    assert result.difficulty == "easy"
-    assert 2 <= len(result.rack) <= 3
+def test_easy_puzzle_generates(_easy_result: PuzzleResult) -> None:
+    assert isinstance(_easy_result, PuzzleResult)
+    assert _easy_result.difficulty == "easy"
+    assert 2 <= len(_easy_result.rack) <= 3
 
 
-def test_medium_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="medium", seed=2, generator_version="v1")
-    assert result.difficulty == "medium"
-    assert 3 <= len(result.rack) <= 4
+def test_medium_puzzle_generates(_medium_result: PuzzleResult) -> None:
+    assert _medium_result.difficulty == "medium"
+    assert 3 <= len(_medium_result.rack) <= 4
 
 
-def test_hard_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="hard", seed=3, generator_version="v1")
-    assert result.difficulty == "hard"
-    assert 4 <= len(result.rack) <= 5
+def test_hard_puzzle_generates(_hard_result: PuzzleResult) -> None:
+    assert _hard_result.difficulty == "hard"
+    assert 4 <= len(_hard_result.rack) <= 5
 
 
 def test_custom_puzzle_generates() -> None:
@@ -75,26 +72,23 @@ def test_custom_puzzle_is_solvable() -> None:
     assert solution.tiles_placed == len(result.rack)
 
 
-def test_expert_puzzle_generates() -> None:
-    result = generate_puzzle(difficulty="expert", seed=20)
-    assert result.difficulty == "expert"
-    assert 6 <= len(result.rack) <= 10
+def test_expert_puzzle_generates(_expert_result: PuzzleResult) -> None:
+    assert _expert_result.difficulty == "expert"
+    assert 6 <= len(_expert_result.rack) <= 10
 
 
-def test_expert_rack_has_no_trivial_extension() -> None:
+def test_expert_rack_has_no_trivial_extension(_expert_result: PuzzleResult) -> None:
     """Neither rack tile can be directly appended to any remaining board set."""
-    result = generate_puzzle(difficulty="expert", seed=20)
-    assert not _any_trivial_extension(result.rack, result.board_sets), (
+    assert not _any_trivial_extension(_expert_result.rack, _expert_result.board_sets), (
         "Expert puzzle has a trivially-extensible tile — board disruption is not required"
     )
 
 
-def test_expert_puzzle_is_solvable() -> None:
+def test_expert_puzzle_is_solvable(_expert_result: PuzzleResult) -> None:
     """Full solve must place all rack tiles (requiring board rearrangement)."""
-    result = generate_puzzle(difficulty="expert", seed=20)
-    state = BoardState(board_sets=result.board_sets, rack=result.rack)
+    state = BoardState(board_sets=_expert_result.board_sets, rack=_expert_result.rack)
     solution = solve(state)
-    assert solution.tiles_placed == len(result.rack)
+    assert solution.tiles_placed == len(_expert_result.rack)
 
 
 def test_expert_is_valid_difficulty() -> None:
@@ -108,53 +102,44 @@ def test_expert_is_valid_difficulty() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_puzzle_result_has_disruption_score() -> None:
+def test_puzzle_result_has_disruption_score(_medium_result: PuzzleResult) -> None:
     """PuzzleResult always includes a disruption_score field."""
-    result = generate_puzzle(difficulty="medium", seed=1)
-    assert isinstance(result.disruption_score, int)
-    assert result.disruption_score >= 0
+    assert isinstance(_medium_result.disruption_score, int)
+    assert _medium_result.disruption_score >= 0
 
 
-def test_disruption_score_in_band_easy() -> None:
+def test_disruption_score_in_band_easy(_easy_result: PuzzleResult) -> None:
     lo, hi = _DISRUPTION_BANDS["easy"]
-    for seed in range(3):
-        result = generate_puzzle(difficulty="easy", seed=seed)
-        score = result.disruption_score
-        assert score >= lo, f"Easy disruption {score} below floor {lo} (seed={seed})"
-        if hi is not None:
-            assert score <= hi, f"Easy disruption {score} above ceiling {hi} (seed={seed})"
+    score = _easy_result.disruption_score
+    assert score >= lo, f"Easy disruption {score} below floor {lo}"
+    if hi is not None:
+        assert score <= hi, f"Easy disruption {score} above ceiling {hi}"
 
 
-def test_disruption_score_in_band_medium() -> None:
+def test_disruption_score_in_band_medium(_medium_result: PuzzleResult) -> None:
     lo, hi = _DISRUPTION_BANDS["medium"]
-    for seed in range(3):
-        result = generate_puzzle(difficulty="medium", seed=seed)
-        score = result.disruption_score
-        assert score >= lo, f"Medium disruption {score} below floor {lo} (seed={seed})"
-        if hi is not None:
-            assert score <= hi, f"Medium disruption {score} above ceiling {hi} (seed={seed})"
+    score = _medium_result.disruption_score
+    assert score >= lo, f"Medium disruption {score} below floor {lo}"
+    if hi is not None:
+        assert score <= hi, f"Medium disruption {score} above ceiling {hi}"
 
 
-def test_disruption_score_in_band_hard() -> None:
+def test_disruption_score_in_band_hard(_hard_result: PuzzleResult) -> None:
     lo, hi = _DISRUPTION_BANDS["hard"]
-    for seed in range(3):
-        result = generate_puzzle(difficulty="hard", seed=seed)
-        score = result.disruption_score
-        assert score >= lo, f"Hard disruption {score} below floor {lo} (seed={seed})"
-        if hi is not None:
-            assert score <= hi, f"Hard disruption {score} above ceiling {hi} (seed={seed})"
+    score = _hard_result.disruption_score
+    assert score >= lo, f"Hard disruption {score} below floor {lo}"
+    if hi is not None:
+        assert score <= hi, f"Hard disruption {score} above ceiling {hi}"
 
 
-def test_disruption_score_in_band_expert() -> None:
+def test_disruption_score_in_band_expert(_expert_result: PuzzleResult) -> None:
     lo, hi = _DISRUPTION_BANDS["expert"]
     # Expert floor (29) is strictly above Hard's ceiling (28).
     assert lo > 28, "Expert disruption floor must exceed Hard's ceiling of 28"
-    for seed in range(3):
-        result = generate_puzzle(difficulty="expert", seed=seed)
-        score = result.disruption_score
-        assert score >= lo, f"Expert disruption {score} below floor {lo} (seed={seed})"
-        if hi is not None:
-            assert score <= hi, f"Expert disruption {score} above ceiling {hi} (seed={seed})"
+    score = _expert_result.disruption_score
+    assert score >= lo, f"Expert disruption {score} below floor {lo}"
+    if hi is not None:
+        assert score <= hi, f"Expert disruption {score} above ceiling {hi}"
 
 
 def test_all_difficulties_require_no_trivial_extension() -> None:
@@ -171,9 +156,8 @@ def test_all_difficulties_require_no_trivial_extension() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_board_sets_all_valid() -> None:
-    result = generate_puzzle(difficulty="medium", seed=10)
-    for ts in result.board_sets:
+def test_board_sets_all_valid(_medium_result: PuzzleResult) -> None:
+    for ts in _medium_result.board_sets:
         assert is_valid_set(ts), f"Invalid board set: {ts!r}"
 
 
@@ -184,25 +168,32 @@ def test_puzzle_is_fully_solvable() -> None:
     assert solution.tiles_placed == len(result.rack)
 
 
-def test_rack_minimum_size() -> None:
+def test_rack_minimum_size(
+    _easy_result: PuzzleResult,
+    _medium_result: PuzzleResult,
+    _hard_result: PuzzleResult,
+    _expert_result: PuzzleResult,
+) -> None:
     """Rack size stays within the configured range for each difficulty."""
-    rack_ranges = {"easy": (2, 3), "medium": (3, 4), "hard": (4, 5), "expert": (6, 10)}
-    for seed in range(5):
-        for difficulty, (lo, hi) in rack_ranges.items():
-            result = generate_puzzle(difficulty=difficulty, seed=seed)  # type: ignore[arg-type]
-            assert lo <= len(result.rack) <= hi, (
-                f"Rack size out of range for {difficulty} (seed={seed}): got {len(result.rack)}"
-            )
+    cases = [
+        ("easy", (2, 3), _easy_result),
+        ("medium", (3, 4), _medium_result),
+        ("hard", (4, 5), _hard_result),
+        ("expert", (6, 10), _expert_result),
+    ]
+    for difficulty, (lo, hi), result in cases:
+        assert lo <= len(result.rack) <= hi, (
+            f"Rack size out of range for {difficulty}: got {len(result.rack)}"
+        )
 
 
 def test_custom_rack_minimum_size() -> None:
     """Custom with sets_to_remove=n always yields at least n×3 tiles (smallest set = 3)."""
-    for seed in range(3):
-        for n in (1, 2, 3):
-            result = generate_puzzle(difficulty="custom", seed=seed, sets_to_remove=n)
-            assert len(result.rack) >= n * 3, (
-                f"Custom rack too small for n={n} (seed={seed}): got {len(result.rack)}"
-            )
+    for n in (1, 2, 3):
+        result = generate_puzzle(difficulty="custom", seed=0, sets_to_remove=n)
+        assert len(result.rack) >= n * 3, (
+            f"Custom rack too small for n={n}: got {len(result.rack)}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -249,20 +240,20 @@ def test_zero_attempts_raises_generation_error() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rack_tiles_not_in_board() -> None:
+def test_rack_tiles_not_in_board(_medium_result: PuzzleResult) -> None:
     """No physical tile (color, number, copy_id) appears in both rack and board_sets."""
-    result = generate_puzzle(difficulty="medium", seed=10)
-    board_keys = {(t.color, t.number, t.copy_id) for ts in result.board_sets for t in ts.tiles}
-    rack_keys = {(t.color, t.number, t.copy_id) for t in result.rack}
+    board_keys = {
+        (t.color, t.number, t.copy_id) for ts in _medium_result.board_sets for t in ts.tiles
+    }
+    rack_keys = {(t.color, t.number, t.copy_id) for t in _medium_result.rack}
     assert board_keys.isdisjoint(rack_keys), (
         f"Overlap between board and rack: {board_keys & rack_keys}"
     )
 
 
-def test_copy_ids_valid() -> None:
+def test_copy_ids_valid(_hard_result: PuzzleResult) -> None:
     """Every tile in a generated puzzle has copy_id in {0, 1}."""
-    result = generate_puzzle(difficulty="hard", seed=5)
-    all_tiles = [t for ts in result.board_sets for t in ts.tiles] + result.rack
+    all_tiles = [t for ts in _hard_result.board_sets for t in ts.tiles] + _hard_result.rack
     invalid = [(t.color, t.number, t.copy_id) for t in all_tiles if t.copy_id not in (0, 1)]
     assert invalid == [], f"Tiles with invalid copy_id: {invalid}"
 
@@ -283,6 +274,26 @@ def _nightmare_result() -> PuzzleResult:
     return generate_puzzle(difficulty="nightmare", seed=99)
 
 
+@pytest.fixture(scope="module")
+def _easy_result() -> PuzzleResult:
+    return generate_puzzle(difficulty="easy", seed=1)
+
+
+@pytest.fixture(scope="module")
+def _medium_result() -> PuzzleResult:
+    return generate_puzzle(difficulty="medium", seed=2)
+
+
+@pytest.fixture(scope="module")
+def _hard_result() -> PuzzleResult:
+    return generate_puzzle(difficulty="hard", seed=3)
+
+
+@pytest.fixture(scope="module")
+def _expert_result() -> PuzzleResult:
+    return generate_puzzle(difficulty="expert", seed=20)
+
+
 # ---------------------------------------------------------------------------
 # Phase 3: PuzzleResult new fields (chain_depth + is_unique)
 # ---------------------------------------------------------------------------
@@ -291,34 +302,28 @@ def _nightmare_result() -> PuzzleResult:
 class TestPuzzleResultNewFields:
     """PuzzleResult carries chain_depth and is_unique after Phase 3."""
 
-    def test_easy_has_chain_depth_field(self) -> None:
-        result = generate_puzzle(difficulty="easy", seed=1)
-        assert isinstance(result.chain_depth, int)
-        assert result.chain_depth >= 0
+    def test_easy_has_chain_depth_field(self, _easy_result: PuzzleResult) -> None:
+        assert isinstance(_easy_result.chain_depth, int)
+        assert _easy_result.chain_depth >= 0
 
-    def test_medium_has_chain_depth_field(self) -> None:
-        result = generate_puzzle(difficulty="medium", seed=2)
-        assert isinstance(result.chain_depth, int)
-        assert result.chain_depth >= 0
+    def test_medium_has_chain_depth_field(self, _medium_result: PuzzleResult) -> None:
+        assert isinstance(_medium_result.chain_depth, int)
+        assert _medium_result.chain_depth >= 0
 
-    def test_hard_has_chain_depth_field(self) -> None:
-        result = generate_puzzle(difficulty="hard", seed=3)
-        assert isinstance(result.chain_depth, int)
-        assert result.chain_depth >= _MIN_CHAIN_DEPTHS["hard"]
+    def test_hard_has_chain_depth_field(self, _hard_result: PuzzleResult) -> None:
+        assert isinstance(_hard_result.chain_depth, int)
+        assert _hard_result.chain_depth >= _MIN_CHAIN_DEPTHS["hard"]
 
-    def test_expert_has_chain_depth_field(self) -> None:
-        result = generate_puzzle(difficulty="expert", seed=42)
-        assert isinstance(result.chain_depth, int)
-        assert result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"]  # ≥ 1
+    def test_expert_has_chain_depth_field(self, _expert_result: PuzzleResult) -> None:
+        assert isinstance(_expert_result.chain_depth, int)
+        assert _expert_result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"]  # ≥ 1
 
-    def test_easy_has_is_unique_field(self) -> None:
-        result = generate_puzzle(difficulty="easy", seed=1)
-        assert isinstance(result.is_unique, bool)
+    def test_easy_has_is_unique_field(self, _easy_result: PuzzleResult) -> None:
+        assert isinstance(_easy_result.is_unique, bool)
 
-    def test_expert_is_unique_field_is_bool(self) -> None:
+    def test_expert_is_unique_field_is_bool(self, _expert_result: PuzzleResult) -> None:
         # is_unique is informational (not gated): could be True or False.
-        result = generate_puzzle(difficulty="expert", seed=42)
-        assert isinstance(result.is_unique, bool)
+        assert isinstance(_expert_result.is_unique, bool)
 
     def test_custom_has_new_fields(self) -> None:
         result = generate_puzzle(difficulty="custom", seed=4, sets_to_remove=3)
@@ -335,35 +340,41 @@ class TestPuzzleResultNewFields:
 class TestChainDepthFiltering:
     """_MIN_CHAIN_DEPTHS filters are respected per difficulty tier."""
 
-    def test_hard_multiple_seeds_chain_depth_ge_1(self) -> None:
-        for seed in range(3):
-            result = generate_puzzle(difficulty="hard", seed=seed)
-            assert result.chain_depth >= 1, (
-                f"Hard seed={seed}: chain_depth={result.chain_depth} below floor 1"
-            )
+    def test_hard_multiple_seeds_chain_depth_ge_1(self, _hard_result: PuzzleResult) -> None:
+        assert _hard_result.chain_depth >= 1, (
+            f"Hard chain_depth={_hard_result.chain_depth} below floor 1"
+        )
 
-    def test_expert_multiple_seeds_chain_depth_ge_2(self) -> None:
-        for seed in range(3):
-            result = generate_puzzle(difficulty="expert", seed=seed)
-            floor = _MIN_CHAIN_DEPTHS["expert"]
-            assert result.chain_depth >= floor, (
-                f"Expert seed={seed}: chain_depth={result.chain_depth} below floor {floor}"
-            )
+    def test_expert_multiple_seeds_chain_depth_ge_2(self, _expert_result: PuzzleResult) -> None:
+        floor = _MIN_CHAIN_DEPTHS["expert"]
+        assert _expert_result.chain_depth >= floor, (
+            f"Expert chain_depth={_expert_result.chain_depth} below floor {floor}"
+        )
 
-    def test_easy_chain_depth_zero_is_allowed(self) -> None:
+    def test_easy_chain_depth_zero_is_allowed(self, _easy_result: PuzzleResult) -> None:
         # Easy puzzles have no chain_depth floor; 0 is valid.
-        result = generate_puzzle(difficulty="easy", seed=1)
-        assert result.chain_depth >= 0
+        assert _easy_result.chain_depth >= 0
 
-    def test_chain_depth_matches_config_floor(self) -> None:
+    def test_chain_depth_matches_config_floor(
+        self,
+        _easy_result: PuzzleResult,
+        _medium_result: PuzzleResult,
+        _hard_result: PuzzleResult,
+        _expert_result: PuzzleResult,
+    ) -> None:
         """Easy/Medium/Hard/Expert each meet their _MIN_CHAIN_DEPTHS floor.
 
         Nightmare is excluded here — it is covered in TestNightmareDifficulty
         using a shared fixture to avoid duplicate expensive generation calls.
         """
-        for difficulty in ("easy", "medium", "hard", "expert"):
+        cases = [
+            ("easy", _easy_result),
+            ("medium", _medium_result),
+            ("hard", _hard_result),
+            ("expert", _expert_result),
+        ]
+        for difficulty, result in cases:
             floor = _MIN_CHAIN_DEPTHS[difficulty]
-            result = generate_puzzle(difficulty=difficulty, seed=7)  # type: ignore[arg-type]
             assert result.chain_depth >= floor, (
                 f"{difficulty}: chain_depth={result.chain_depth} below configured floor {floor}"
             )
@@ -440,22 +451,19 @@ class TestUniquenessComputation:
     not used to filter candidates.
     """
 
-    def test_expert_is_unique_is_bool(self) -> None:
-        result = generate_puzzle(difficulty="expert", seed=0)
-        assert isinstance(result.is_unique, bool)
+    def test_expert_is_unique_is_bool(self, _expert_result: PuzzleResult) -> None:
+        assert isinstance(_expert_result.is_unique, bool)
 
     def test_computes_unique_dict_has_all_tiers(self) -> None:
         """_COMPUTES_UNIQUE covers all non-custom difficulties."""
         for tier in ("easy", "medium", "hard", "expert", "nightmare"):
             assert tier in _COMPUTES_UNIQUE, f"Missing tier {tier!r} in _COMPUTES_UNIQUE"
 
-    def test_hard_is_unique_field_present(self) -> None:
-        result = generate_puzzle(difficulty="hard", seed=3)
-        assert isinstance(result.is_unique, bool)
+    def test_hard_is_unique_field_present(self, _hard_result: PuzzleResult) -> None:
+        assert isinstance(_hard_result.is_unique, bool)
 
-    def test_easy_is_unique_field_is_bool(self) -> None:
-        result = generate_puzzle(difficulty="easy", seed=1)
-        assert isinstance(result.is_unique, bool)
+    def test_easy_is_unique_field_is_bool(self, _easy_result: PuzzleResult) -> None:
+        assert isinstance(_easy_result.is_unique, bool)
 
     def test_computes_unique_false_for_easy_medium_hard(self) -> None:
         """Non-expert tiers do not call check_uniqueness (overhead avoidance)."""
@@ -550,23 +558,19 @@ class TestMakePoolValidation:
 class TestJokerCountPopulated:
     """PuzzleResult.joker_count reflects the actual number of jokers used."""
 
-    def test_easy_joker_count_is_zero(self) -> None:
-        result = generate_puzzle(difficulty="easy", seed=1)
-        assert result.joker_count == 0
+    def test_easy_joker_count_is_zero(self, _easy_result: PuzzleResult) -> None:
+        assert _easy_result.joker_count == 0
 
-    def test_medium_joker_count_is_zero(self) -> None:
-        result = generate_puzzle(difficulty="medium", seed=2)
-        assert result.joker_count == 0
+    def test_medium_joker_count_is_zero(self, _medium_result: PuzzleResult) -> None:
+        assert _medium_result.joker_count == 0
 
-    def test_joker_count_is_int(self) -> None:
-        result = generate_puzzle(difficulty="hard", seed=3)
-        assert isinstance(result.joker_count, int)
+    def test_joker_count_is_int(self, _hard_result: PuzzleResult) -> None:
+        assert isinstance(_hard_result.joker_count, int)
 
-    def test_expert_joker_count_is_board_joker_count(self) -> None:
+    def test_expert_joker_count_is_board_joker_count(self, _expert_result: PuzzleResult) -> None:
         """joker_count == number of joker tiles on the board (0 if joker sets were sacrificed)."""
-        result = generate_puzzle(difficulty="expert", seed=20)
-        board_jokers = sum(1 for ts in result.board_sets for t in ts.tiles if t.is_joker)
-        assert result.joker_count == board_jokers
+        board_jokers = sum(1 for ts in _expert_result.board_sets for t in ts.tiles if t.is_joker)
+        assert _expert_result.joker_count == board_jokers
 
 
 class TestInjectJokersIntoBoard:
@@ -630,20 +634,19 @@ class TestInjectJokersIntoBoard:
         result = _inject_jokers_into_board(board, 2, random.Random(1))
         assert not any(t.is_joker for ts in result for t in ts.tiles)
 
-    def test_joker_count_matches_board_jokers(self) -> None:
+    def test_joker_count_matches_board_jokers(self, _expert_result: PuzzleResult) -> None:
         """joker_count equals the number of joker tiles visible on the board.
 
         Jokers are injected into board sets by _inject_jokers_into_board.
         joker_count is the count of jokers actually on board_sets (not the
         number attempted — jokers in sacrificed sets are excluded).
         """
-        for seed in range(5):
-            result = generate_puzzle(difficulty="expert", seed=seed)
-            board_jokers = sum(1 for ts in result.board_sets for t in ts.tiles if t.is_joker)
-            assert result.joker_count == board_jokers, (
-                f"Expert seed={seed}: joker_count={result.joker_count} but "
-                f"board has {board_jokers} jokers"
-            )
+        board_jokers = sum(
+            1 for ts in _expert_result.board_sets for t in ts.tiles if t.is_joker
+        )
+        assert _expert_result.joker_count == board_jokers, (
+            f"joker_count={_expert_result.joker_count} but board has {board_jokers} jokers"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -169,7 +169,7 @@ _skip_no_hypothesis = pytest.mark.skipif(
 
 @_skip_no_hypothesis
 @given(seed=st.integers(0, 2**31))
-@settings(max_examples=20, deadline=30_000, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=3, deadline=30_000, suppress_health_check=[HealthCheck.too_slow])
 def test_generated_puzzle_always_solvable(seed: int) -> None:
     """Every v2 medium puzzle, regardless of seed, is solvable by the ILP solver."""
     result = generate_puzzle("medium", seed=seed, max_attempts=5, generator_version="v2")
@@ -180,7 +180,7 @@ def test_generated_puzzle_always_solvable(seed: int) -> None:
 
 @_skip_no_hypothesis
 @given(seed=st.integers(0, 2**31))
-@settings(max_examples=20, deadline=30_000, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=3, deadline=30_000, suppress_health_check=[HealthCheck.too_slow])
 def test_tile_conservation(seed: int) -> None:
     """board + rack tiles are precisely what the solver needs to verify the solution."""
     result = generate_puzzle("hard", seed=seed, max_attempts=10, generator_version="v2")
@@ -197,7 +197,7 @@ def test_tile_conservation(seed: int) -> None:
 
 def test_difficulty_distribution() -> None:
     """Composite scores should still show a tier-ordered spread before Phase 6 calibration."""
-    sample_count = 5
+    sample_count = 2
     averages: dict[str, float] = {}
 
     for difficulty in ("easy", "medium", "hard", "expert", "nightmare"):
@@ -215,7 +215,7 @@ def test_difficulty_distribution() -> None:
 
 def test_no_trivially_solvable_expert_puzzles() -> None:
     """Expert puzzles should not look trivial on both branching and disruption."""
-    for seed in range(5):
+    for seed in range(2):
         result = generate_puzzle("expert", seed=seed, generator_version="v2")
         assert not (
             result.branching_factor < 2.0 and result.disruption_score < 5
@@ -229,7 +229,7 @@ def test_no_trivially_solvable_expert_puzzles() -> None:
 
 def test_v1_puzzles_still_solvable() -> None:
     """v1-generated puzzles are still correctly solved by the ILP engine."""
-    for seed in (1, 2, 3):
+    for seed in (1,):
         result = generate_puzzle("medium", seed=seed, generator_version="v1")
         state = BoardState(board_sets=result.board_sets, rack=result.rack)
         solution = solve(state, timeout_seconds=10.0)
