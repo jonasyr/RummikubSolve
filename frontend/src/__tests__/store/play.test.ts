@@ -48,6 +48,8 @@ const makePuzzleResponse = (
   tile_ambiguity: 0,
   solution_fragility: 0,
   generator_version: "v2.0.0",
+  template_id: "legacy",
+  template_version: "0",
 });
 
 beforeEach(() => {

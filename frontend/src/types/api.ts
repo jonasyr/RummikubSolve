@@ -84,6 +84,7 @@ export interface PuzzleRequest {
   min_chain_depth?: number;
   /** Custom: minimum disruption score required. Range 0–60, default 0. */
   min_disruption?: number;
+  template_id?: string;
 }
 
 export interface PuzzleResponse {
@@ -105,6 +106,8 @@ export interface PuzzleResponse {
   tile_ambiguity: number;
   solution_fragility: number;
   generator_version: string;
+  template_id: string;
+  template_version: string;
 }
 
 export interface CalibrationBatchEntry {

@@ -164,6 +164,7 @@ class PuzzleRequest(BaseModel):
     # Phase 5: UUIDs of puzzles the client has already seen; used to avoid duplicates
     # when drawing from the pre-generated pool.  Capped at 500 to bound request size.
     seen_ids: list[str] = Field(default_factory=list, max_length=500)
+    template_id: str | None = None
     # Phase 7a: Custom mode parameters — ignored for all non-custom difficulties.
     sets_to_remove: int = Field(3, ge=1, le=8)  # sets to sacrifice (expanded from 5 to 8)
     min_board_sets: int = Field(8, ge=5, le=25)  # board sets before sacrifice
@@ -191,6 +192,8 @@ class PuzzleResponse(BaseModel):
     tile_ambiguity: float = 0.0
     solution_fragility: float = 0.0
     generator_version: str = "v1"
+    template_id: str = "legacy"
+    template_version: str = "0"
 
 
 class CalibrationBatchEntry(BaseModel):
