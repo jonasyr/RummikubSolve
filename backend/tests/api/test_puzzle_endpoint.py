@@ -265,14 +265,15 @@ class TestPoolIntegration:
     async def test_expert_fallback_when_pool_empty(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When store.draw() returns None, live generation is used and puzzle_id is ''."""
+        """When pool is empty, live generation runs and the result is persisted."""
         mock_store = MagicMock()
         mock_store.draw.return_value = None
+        mock_store.store.return_value = "test-live-expert-id"
         monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
 
         r = await client.post("/api/puzzle", json={"difficulty": "expert", "seed": 42})
         assert r.status_code == 200
-        assert r.json()["puzzle_id"] == ""
+        assert r.json()["puzzle_id"] == "test-live-expert-id"
 
     async def test_seen_ids_forwarded_to_store(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch, _pool_result: object
@@ -303,8 +304,9 @@ class TestPoolIntegration:
     async def test_easy_does_not_use_pool(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Easy difficulty bypasses the pool entirely — PuzzleStore is never instantiated."""
+        """Easy difficulty bypasses the pool draw — store.draw is never called."""
         mock_store = MagicMock()
+        mock_store.store.return_value = "test-live-easy-id"
         monkeypatch.setattr("api.main.PuzzleStore", lambda *a, **kw: mock_store)
 
         r = await client.post("/api/puzzle", json={"difficulty": "easy", "seed": 1})
