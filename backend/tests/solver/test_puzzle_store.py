@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -275,3 +276,100 @@ class TestV2RoundTrip:
 
     def test_roundtrip_seed(self) -> None:
         assert self.result.seed == self.original.seed
+
+
+# ---------------------------------------------------------------------------
+# TestTemplateMetadata — Issue #28
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _minimal_result() -> PuzzleResult:
+    """Minimal PuzzleResult with no board/rack tiles — sufficient for schema tests."""
+    return PuzzleResult(board_sets=[], rack=[], difficulty="easy", disruption_score=0)
+
+
+class TestTemplateMetadata:
+    def test_default_template_id_is_legacy(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "p.db")
+        puzzle_id = store.store(_minimal_result)
+        row = store.conn.execute(
+            "SELECT template_id, template_version FROM puzzles WHERE id = ?", (puzzle_id,)
+        ).fetchone()
+        store.close()
+        assert row["template_id"] == "legacy"
+        assert row["template_version"] == "0"
+
+    def test_template_id_round_trip(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "p.db")
+        puzzle_id = store.store(
+            _minimal_result,
+            template_id="T1_joker_displacement_v1",
+            template_version="1",
+        )
+        row = store.conn.execute(
+            "SELECT template_id, template_version FROM puzzles WHERE id = ?", (puzzle_id,)
+        ).fetchone()
+        store.close()
+        assert row["template_id"] == "T1_joker_displacement_v1"
+        assert row["template_version"] == "1"
+
+    def test_list_by_template_returns_matching_ids(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "p.db")
+        id_t1 = store.store(_minimal_result, template_id="T1")
+        store.store(_minimal_result, template_id="T2")
+        results = store.list_by_template("T1")
+        store.close()
+        assert results == [id_t1]
+
+    def test_existing_db_gets_columns_via_migration(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        db_path = tmp_path / "old.db"
+        # Create a DB with the old schema (no template columns).
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("""
+            CREATE TABLE puzzles (
+                id TEXT PRIMARY KEY, difficulty TEXT NOT NULL,
+                board_json TEXT NOT NULL, rack_json TEXT NOT NULL,
+                chain_depth INTEGER NOT NULL, disruption INTEGER NOT NULL,
+                rack_size INTEGER NOT NULL, board_size INTEGER NOT NULL,
+                is_unique INTEGER NOT NULL DEFAULT 0,
+                joker_count INTEGER NOT NULL DEFAULT 0,
+                seed INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                generator_version TEXT NOT NULL DEFAULT 'v1',
+                composite_score REAL NOT NULL DEFAULT 0.0,
+                branching_factor REAL NOT NULL DEFAULT 0.0,
+                deductive_depth REAL NOT NULL DEFAULT 0.0,
+                red_herring_density REAL NOT NULL DEFAULT 0.0,
+                working_memory_load REAL NOT NULL DEFAULT 0.0,
+                tile_ambiguity REAL NOT NULL DEFAULT 0.0,
+                solution_fragility REAL NOT NULL DEFAULT 0.0
+            )
+        """)
+        conn.execute(
+            """INSERT INTO puzzles
+               (id, difficulty, board_json, rack_json, chain_depth, disruption,
+                rack_size, board_size, is_unique, joker_count)
+               VALUES ('old-id', 'easy', '[]', '[]', 0, 0, 0, 0, 0, 0)"""
+        )
+        conn.commit()
+        conn.close()
+
+        # Reopen via PuzzleStore — migration should add the new columns.
+        store = PuzzleStore(db_path)
+        drawn = store.draw_by_id("old-id")
+        row = store.conn.execute(
+            "SELECT template_id, template_version FROM puzzles WHERE id = 'old-id'"
+        ).fetchone()
+        store.close()
+        assert drawn is not None
+        assert row["template_id"] == "legacy"
+        assert row["template_version"] == "0"
