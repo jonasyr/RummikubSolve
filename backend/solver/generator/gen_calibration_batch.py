@@ -36,13 +36,13 @@ import json
 import logging
 from pathlib import Path
 
-from .puzzle_generator import PuzzleGenerationError, generate_puzzle
+from .puzzle_generator import Difficulty, PuzzleGenerationError, generate_puzzle
 from .puzzle_store import DEFAULT_DB_PATH, PuzzleStore
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-_DIFFICULTIES = ["easy", "medium", "hard", "expert", "nightmare"]
+_DIFFICULTIES: list[Difficulty] = ["easy", "medium", "hard", "expert", "nightmare"]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -112,7 +112,7 @@ def main() -> int:
             "Either --output or --batch-name must be specified.\n"
             "Example: --batch-name phase8_batch_v1"
         )
-    batch_name: str = args.batch_name or args.output.stem  # type: ignore[union-attr]
+    batch_name: str = args.batch_name or args.output.stem
     output_path: Path = args.output or (_default_output_dir / f"{batch_name}.json")
 
     store = PuzzleStore(args.db)
