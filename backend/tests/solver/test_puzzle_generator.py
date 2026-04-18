@@ -737,17 +737,21 @@ class TestPregenTier:
         """
         pc = _PREGEN_CONSTRAINTS["expert"]
         assert _pregen_expert_result.disruption_score >= pc["min_disruption"], (
-            f"pregen expert: disruption {_pregen_expert_result.disruption_score} < {pc['min_disruption']}"
+            f"pregen expert: disruption {_pregen_expert_result.disruption_score}"
+            f" < {pc['min_disruption']}"
         )
         assert _pregen_expert_result.chain_depth >= pc["min_chain_depth"], (
-            f"pregen expert: chain_depth {_pregen_expert_result.chain_depth} < {pc['min_chain_depth']}"
+            f"pregen expert: chain_depth {_pregen_expert_result.chain_depth}"
+            f" < {pc['min_chain_depth']}"
         )
 
     def test_pregen_result_is_solvable(self, _pregen_expert_result: PuzzleResult) -> None:
         """pregen=True puzzle is still fully solvable."""
         from solver.engine.solver import solve
         from solver.models.board_state import BoardState
-        state = BoardState(board_sets=_pregen_expert_result.board_sets, rack=_pregen_expert_result.rack)
+        state = BoardState(
+            board_sets=_pregen_expert_result.board_sets, rack=_pregen_expert_result.rack
+        )
         solution = solve(state)
         assert solution.tiles_placed == len(_pregen_expert_result.rack)
 

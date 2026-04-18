@@ -234,7 +234,10 @@ def test_no_trivially_solvable_expert_puzzles(_v2_expert: PuzzleResult) -> None:
     """Expert puzzles should not look trivial on both branching and disruption."""
     assert not (
         _v2_expert.branching_factor < 2.0 and _v2_expert.disruption_score < 5
-    ), f"Expert (seed=4) looks trivial: branching={_v2_expert.branching_factor}, disruption={_v2_expert.disruption_score}"
+    ), (
+        f"Expert (seed=4) looks trivial: branching={_v2_expert.branching_factor},"
+        f" disruption={_v2_expert.disruption_score}"
+    )
 
 
 # ---------------------------------------------------------------------------
