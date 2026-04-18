@@ -91,10 +91,9 @@ def test_expert_puzzle_is_solvable(_expert_result: PuzzleResult) -> None:
     assert solution.tiles_placed == len(_expert_result.rack)
 
 
-def test_expert_is_valid_difficulty() -> None:
+def test_expert_is_valid_difficulty(_expert_result: PuzzleResult) -> None:
     """'expert' must not raise ValueError (regression guard)."""
-    result = generate_puzzle(difficulty="expert", seed=99)
-    assert result.difficulty == "expert"
+    assert _expert_result.difficulty == "expert"
 
 
 # ---------------------------------------------------------------------------
@@ -142,12 +141,21 @@ def test_disruption_score_in_band_expert(_expert_result: PuzzleResult) -> None:
         assert score <= hi, f"Expert disruption {score} above ceiling {hi}"
 
 
-def test_all_difficulties_require_no_trivial_extension() -> None:
+def test_all_difficulties_require_no_trivial_extension(
+    _easy_result: PuzzleResult,
+    _medium_result: PuzzleResult,
+    _hard_result: PuzzleResult,
+    _expert_result: PuzzleResult,
+) -> None:
     """Every non-custom difficulty must reject trivially-extensible racks."""
-    for difficulty in ("easy", "medium", "hard", "expert"):
-        result = generate_puzzle(difficulty=difficulty, seed=42)  # type: ignore[arg-type]
+    for difficulty, result in [
+        ("easy", _easy_result),
+        ("medium", _medium_result),
+        ("hard", _hard_result),
+        ("expert", _expert_result),
+    ]:
         assert not _any_trivial_extension(result.rack, result.board_sets), (
-            f"{difficulty} puzzle (seed=42) has a trivially-extensible rack tile"
+            f"{difficulty} puzzle has a trivially-extensible rack tile"
         )
 
 
@@ -292,6 +300,16 @@ def _hard_result() -> PuzzleResult:
 @pytest.fixture(scope="module")
 def _expert_result() -> PuzzleResult:
     return generate_puzzle(difficulty="expert", seed=20)
+
+
+@pytest.fixture(scope="module")
+def _pregen_expert_result() -> PuzzleResult:
+    """Generate a pregen=True expert puzzle once for the module.
+
+    Used by TestPregenTier tests that verify stricter thresholds, so the
+    expensive pregen generation (chain ≥ 3, disruption ≥ 38) runs only once.
+    """
+    return generate_puzzle(difficulty="expert", seed=7, pregen=True)
 
 
 # ---------------------------------------------------------------------------
@@ -700,40 +718,38 @@ class TestPregenTier:
                 f"not > live {_DEFAULT_MAX_ATTEMPTS[tier]}"  # type: ignore[attr-defined]
             )
 
-    def test_pregen_false_uses_live_thresholds(self) -> None:
+    def test_pregen_false_uses_live_thresholds(self, _expert_result: PuzzleResult) -> None:
         """Default pregen=False produces puzzles meeting live (not pregen) thresholds.
 
         Expert live floor is disruption ≥ 32, chain ≥ 2. Pregen floor is ≥ 38 / ≥ 3.
         A live puzzle may have disruption in [32, 37] or chain == 2 — still valid.
         """
-        result = generate_puzzle(difficulty="expert", seed=0)
         live_lo, _ = _DISRUPTION_BANDS["expert"]
-        assert result.disruption_score >= live_lo
-        assert result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"]
+        assert _expert_result.disruption_score >= live_lo
+        assert _expert_result.chain_depth >= _MIN_CHAIN_DEPTHS["expert"]
 
-    def test_pregen_true_result_meets_stricter_thresholds(self) -> None:
+    def test_pregen_true_result_meets_stricter_thresholds(
+        self, _pregen_expert_result: PuzzleResult
+    ) -> None:
         """pregen=True puzzle meets _PREGEN_CONSTRAINTS (not just live thresholds).
 
-        Uses a higher max_attempts override to keep test duration bounded.
         Expert pregen requires chain ≥ 3 and disruption ≥ 38.
         """
-        result = generate_puzzle(difficulty="expert", seed=7, pregen=True)
         pc = _PREGEN_CONSTRAINTS["expert"]
-        assert result.disruption_score >= pc["min_disruption"], (
-            f"pregen expert: disruption {result.disruption_score} < {pc['min_disruption']}"
+        assert _pregen_expert_result.disruption_score >= pc["min_disruption"], (
+            f"pregen expert: disruption {_pregen_expert_result.disruption_score} < {pc['min_disruption']}"
         )
-        assert result.chain_depth >= pc["min_chain_depth"], (
-            f"pregen expert: chain_depth {result.chain_depth} < {pc['min_chain_depth']}"
+        assert _pregen_expert_result.chain_depth >= pc["min_chain_depth"], (
+            f"pregen expert: chain_depth {_pregen_expert_result.chain_depth} < {pc['min_chain_depth']}"
         )
 
-    def test_pregen_result_is_solvable(self) -> None:
+    def test_pregen_result_is_solvable(self, _pregen_expert_result: PuzzleResult) -> None:
         """pregen=True puzzle is still fully solvable."""
         from solver.engine.solver import solve
         from solver.models.board_state import BoardState
-        result = generate_puzzle(difficulty="expert", seed=7, pregen=True)
-        state = BoardState(board_sets=result.board_sets, rack=result.rack)
+        state = BoardState(board_sets=_pregen_expert_result.board_sets, rack=_pregen_expert_result.rack)
         solution = solve(state)
-        assert solution.tiles_placed == len(result.rack)
+        assert solution.tiles_placed == len(_pregen_expert_result.rack)
 
 
 # ---------------------------------------------------------------------------
