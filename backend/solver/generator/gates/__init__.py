@@ -1,4 +1,5 @@
-"""Structural and ILP gates for the template-based puzzle generation pipeline."""
+"""Structural, heuristic, and ILP gates for the template-based puzzle generation pipeline."""
+from solver.generator.gates.heuristic_solver import HeuristicSolver, SolverMove
 from solver.generator.gates.structural import (
     check_joker_structural,
     check_no_single_home,
@@ -8,6 +9,8 @@ from solver.generator.gates.structural import (
 )
 
 __all__ = [
+    "HeuristicSolver",
+    "SolverMove",
     "check_joker_structural",
     "check_no_single_home",
     "check_no_trivial_extension",
