@@ -1,0 +1,33 @@
+{
+  "board_sets": [
+    {
+      "type": "run",
+      "tiles": [
+        {"color": "blue", "number": 5, "joker": false},
+        {"color": "blue", "number": 6, "joker": false},
+        {"color": "blue", "number": 7, "joker": false}
+      ]
+    }
+  ],
+  "rack": [
+    {"color": "blue", "number": 8, "joker": false},
+    {"color": "red",  "number": 8, "joker": false}
+  ],
+  "difficulty": "hard",
+  "seed": null,
+  "tile_count": 2,
+  "disruption_score": 0,
+  "chain_depth": 2,
+  "is_unique": true,
+  "puzzle_id": "",
+  "composite_score": 0.0,
+  "branching_factor": 0.0,
+  "deductive_depth": 0.0,
+  "red_herring_density": 0.0,
+  "working_memory_load": 0.0,
+  "tile_ambiguity": 0.0,
+  "solution_fragility": 0.0,
+  "generator_version": "hand-crafted",
+  "template_id": "legacy",
+  "template_version": "0"
+}
