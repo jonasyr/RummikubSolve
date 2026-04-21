@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from solver.models.board_state import BoardState
 from solver.models.tile import Tile
-from solver.models.tileset import TileSet
+from solver.models.tileset import SetType, TileSet
 from solver.validator.rule_checker import is_valid_board, is_valid_set
 
 
@@ -72,8 +72,102 @@ def _copy_board(board: list[TileSet]) -> list[TileSet]:
     return [TileSet(type=ts.type, tiles=list(ts.tiles)) for ts in board]
 
 
+_TileKey = tuple[str, str, int, bool]
+_StateKey = tuple[tuple[_TileKey, ...], tuple[tuple[_TileKey, ...], ...]]
+
+
+def _state_key(
+    rack: list[Tile],
+    board: list[TileSet],
+) -> _StateKey:
+    """Return a canonical, hashable key for (rack, board) used for cycle detection.
+
+    Uses sorted tuples so the key is independent of internal list order while
+    still distinguishing tile copies (via ``copy_id``).
+    """
+    def _tile_key(t: Tile) -> tuple[str, str, int, bool]:
+        # Use str() so joker's None color/number sort cleanly alongside enums.
+        return (str(t.color), str(t.number), t.copy_id, t.is_joker)
+
+    rack_key = tuple(sorted(_tile_key(t) for t in rack))
+    board_key = tuple(
+        sorted(
+            tuple(sorted(_tile_key(t) for t in ts.tiles))
+            for ts in board
+        )
+    )
+    return (rack_key, board_key)
+
+
 def _is_valid_extension(ts: TileSet, tile: Tile) -> bool:
-    return is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile]))
+    """Return True if *tile* can be placed into *ts*.
+
+    Both rules use a **relaxed** check for small stubs (< 3 tiles) and
+    gap-runs, mirroring how the v2 puzzle generator creates puzzles: it removes
+    tiles from valid board sets and places them in the rack, potentially leaving
+    gap-runs (e.g. ``[K3..K7, K10, K11]`` when ``K8`` and ``K9`` are removed)
+    or single-tile group stubs (e.g. ``[Y11]`` when ``Bl11`` and ``R11`` are
+    removed).  Neither ``K8`` nor ``Bl11`` alone would pass a strict validity
+    check, yet each is a legitimate intermediate placement.
+
+    **Groups**: strict for sets with ≥ 3 tiles; relaxed for stubs of 1–2 tiles.
+    A tile "fits" a small group stub if it shares the same number and introduces
+    a *new* colour (groups require all distinct colours).
+
+    **Runs**: always relaxed.  A tile fits a run if it shares the colour, is not
+    an exact duplicate (same ``copy_id`` *and* number), and either extends one
+    end by 1 or fills an internal gap.
+
+    The final board validity is confirmed by :func:`is_valid_board` once the
+    rack is empty; intermediate placements that leave a set temporarily invalid
+    are expected.
+    """
+    extended = TileSet(type=ts.type, tiles=ts.tiles + [tile])
+    if is_valid_set(extended):
+        return True  # always accept fully valid extensions
+
+    # ------------------------------------------------------------------
+    # Group — relaxed stub extension (1 or 2 tiles already in the set).
+    # A fully-valid 3-tile group can only be extended to 4 via is_valid_set
+    # (handled above), so no further relaxation for len >= 3.
+    # ------------------------------------------------------------------
+    if ts.type == SetType.GROUP:
+        if len(ts.tiles) >= 3:
+            return False
+        if tile.is_joker:
+            return True  # jokers can substitute any colour
+        non_jokers = [t for t in ts.tiles if not t.is_joker]
+        # Different number → never fits a group.
+        if non_jokers and non_jokers[0].number != tile.number:
+            return False
+        # Same colour already present → groups require all distinct colours.
+        return not any(not t.is_joker and t.color == tile.color for t in ts.tiles)
+
+    # ------------------------------------------------------------------
+    # Run — relaxed gap-fill check.
+    # ------------------------------------------------------------------
+    if tile.is_joker:
+        return True  # jokers can fill any position in a run
+
+    non_jokers = [t for t in ts.tiles if not t.is_joker]
+    # Wrong colour → never fits.
+    if non_jokers and tile.color != non_jokers[0].color:
+        return False
+    # Exact duplicate (same number AND copy_id) → never fits.
+    if any(t.number == tile.number and t.copy_id == tile.copy_id for t in ts.tiles):
+        return False
+
+    numbers = [t.number for t in non_jokers if t.number is not None]
+    if not numbers:
+        return True  # set contains only jokers; any tile fits
+
+    if tile.number is None:
+        return False  # malformed non-joker tile
+
+    mn, mx = min(numbers), max(numbers)
+    n: int = tile.number
+    # Fits at lower end, upper end, or fills an internal gap.
+    return (n == mn - 1) or (n == mx + 1) or (mn < n < mx and n not in numbers)
 
 
 class HeuristicSolver:
@@ -101,11 +195,23 @@ class HeuristicSolver:
 
         Works on a deep copy of *state* so the caller's object is never
         mutated.
+
+        Cycle detection: if the same (rack, board) state is revisited the
+        solver gives up immediately (returning ``False``).  Rules 3 & 4 keep
+        the rack size constant and can produce reversible swaps; without this
+        guard the loop may run forever.
         """
         working_rack: list[Tile] = deepcopy(state.rack)
         working_board: list[TileSet] = deepcopy(state.board_sets)
 
+        visited: set[_StateKey] = set()
+
         while working_rack:
+            key = _state_key(working_rack, working_board)
+            if key in visited:
+                return False  # cycle detected — no progress possible
+            visited.add(key)
+
             move = (
                 self._find_single_home(working_rack, working_board)
                 or self._find_stub_completion(working_rack, working_board)
@@ -164,10 +270,25 @@ class HeuristicSolver:
         board_sets: list[TileSet],
         depth_remaining: int,
     ) -> SolverMove | None:
-        """Return an atomic break+place move if breaking a ≥4-tile set enables a placement."""
+        """Return an atomic break+place move if breaking a ≥4-tile set enables a placement.
+
+        **Two-phase search** — Rule 3 is fully explored before Rule 4:
+
+        Phase 1 (Rule 3): scan every valid (set, tile) break and check whether the
+        released tile gives an *original* rack tile a unique home (Rule 1) or
+        completes a 2-tile stub (Rule 2).  Return on the first hit.
+
+        Phase 2 (Rule 4): only if Phase 1 found nothing *and* ``depth_remaining ≥ 2``,
+        scan again and recurse into a second break.  Running Phase 2 only after
+        Phase 1 is exhausted ensures the solver always prefers shallower moves,
+        which prevents premature Rule-4 choices that can strand later rack tiles.
+        """
         if depth_remaining < 1:
             return None
 
+        # ------------------------------------------------------------------
+        # Phase 1 — Rule 3: one break + direct Rule 1/2 placement.
+        # ------------------------------------------------------------------
         for i, ts in enumerate(board_sets):
             if len(ts.tiles) < 4:
                 continue
@@ -178,18 +299,15 @@ class HeuristicSolver:
                 if not is_valid_set(remainder):
                     continue
 
-                # Post-break board: set i replaced by its remainder.
                 broken_board = [
                     remainder if k == i else board_sets[k]
                     for k in range(len(board_sets))
                 ]
                 released_tile = ts.tiles[j]
-                # scratch_rack = original rack + released tile at end.
                 scratch_rack = rack + [released_tile]
 
-                # Check Rule 1 on scratch state.
                 # sub_rack_tile_idx must be an original rack tile (idx < len(rack));
-                # placing the released tile back (idx == len(rack)) makes no progress.
+                # placing the released tile back makes no progress.
                 sub1 = self._find_single_home(scratch_rack, broken_board)
                 if sub1 is not None and sub1.rack_tile_idx < len(rack):
                     return SolverMove(
@@ -200,7 +318,6 @@ class HeuristicSolver:
                         sub_board_set_idx=sub1.board_set_idx,
                     )
 
-                # Check Rule 2 on scratch state (same progress constraint).
                 sub2 = self._find_stub_completion(scratch_rack, broken_board)
                 if sub2 is not None and sub2.rack_tile_idx < len(rack):
                     return SolverMove(
@@ -211,19 +328,36 @@ class HeuristicSolver:
                         sub_board_set_idx=sub2.board_set_idx,
                     )
 
-                # Rule 4: allow one more nested break.
-                if depth_remaining >= 2:
+        # ------------------------------------------------------------------
+        # Phase 2 — Rule 4: one break + nested break.  Only reached when
+        # Phase 1 found no direct Rule 1/2 trigger.
+        # ------------------------------------------------------------------
+        if depth_remaining >= 2:
+            for i, ts in enumerate(board_sets):
+                if len(ts.tiles) < 4:
+                    continue
+
+                for j in range(len(ts.tiles)):
+                    remainder_tiles = [t for k, t in enumerate(ts.tiles) if k != j]
+                    remainder = TileSet(type=ts.type, tiles=remainder_tiles)
+                    if not is_valid_set(remainder):
+                        continue
+
+                    broken_board = [
+                        remainder if k == i else board_sets[k]
+                        for k in range(len(board_sets))
+                    ]
+                    released_tile = ts.tiles[j]
+                    scratch_rack = rack + [released_tile]
+
                     inner = self._try_single_break(
                         scratch_rack, broken_board, depth_remaining - 1
                     )
                     if inner is not None:
-                        # inner is a Rule 3 move on (scratch_rack, broken_board).
-                        # Encode as Rule 4 with full inner-break info.
                         return SolverMove(
                             rule=4,
                             break_set_idx=i,
                             released_tile_idx=j,
-                            # outer scratch info not needed; inner encodes the rest:
                             inner_break_set_idx=inner.break_set_idx,
                             inner_released_tile_idx=inner.released_tile_idx,
                             inner_sub_rack_tile_idx=inner.sub_rack_tile_idx,
