@@ -7,49 +7,18 @@ proving the gate tightening works and will continue to work across refactors.
 Easy and medium difficulty entries from the batch are used (10 puzzles total)
 to keep the suite runtime reasonable; hard/expert/nightmare v2 generation can
 take minutes per puzzle.
+
+The ``phase7_easy_medium`` fixture is defined in ``conftest.py`` and shared
+with ``test_heuristic_solver.py`` to avoid regenerating the same puzzles twice.
 """
 from __future__ import annotations
-
-import json
-from pathlib import Path
-from typing import Any
 
 import pytest
 
 from solver.generator.gates.structural import check_no_trivial_extension
-from solver.generator.puzzle_generator import PuzzleResult, generate_puzzle
+from solver.generator.puzzle_generator import PuzzleResult
 
 pytestmark = pytest.mark.slow
-
-_BATCH_PATH = (
-    Path(__file__).parents[3]  # backend/
-    / "solver/generator/calibration_batches/phase7_batch_v1.json"
-)
-
-_FAST_DIFFICULTIES = {"easy", "medium"}
-
-
-def _load_fast_entries() -> list[dict[str, Any]]:
-    entries: list[dict[str, Any]] = json.loads(_BATCH_PATH.read_text())["entries"]
-    return [e for e in entries if e["difficulty"] in _FAST_DIFFICULTIES]
-
-
-# ---------------------------------------------------------------------------
-# Module-scoped fixture — generate easy+medium Phase 7 puzzles once per module
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def _phase7_results() -> list[tuple[str, int, PuzzleResult]]:
-    """Generate 10 Phase 7 v2 puzzles (easy+medium) once for the whole module."""
-    return [
-        (
-            e["difficulty"],
-            e["seed"],
-            generate_puzzle(e["difficulty"], seed=e["seed"], generator_version="v2"),
-        )
-        for e in _load_fast_entries()
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -58,11 +27,11 @@ def _phase7_results() -> list[tuple[str, int, PuzzleResult]]:
 
 
 def test_phase7_puzzles_generate_successfully(
-    _phase7_results: list[tuple[str, int, PuzzleResult]],
+    phase7_easy_medium: list[tuple[str, int, PuzzleResult]],
 ) -> None:
     """All 10 easy/medium Phase 7 v2 puzzles generate without error and have tiles."""
-    assert len(_phase7_results) == 10
-    for difficulty, seed, result in _phase7_results:
+    assert len(phase7_easy_medium) == 10
+    for difficulty, seed, result in phase7_easy_medium:
         assert result.rack, f"[{difficulty} seed={seed}] rack is empty"
         assert result.board_sets, f"[{difficulty} seed={seed}] board_sets is empty"
         assert result.generator_version == "v2.0.0", (
@@ -76,7 +45,7 @@ def test_phase7_puzzles_generate_successfully(
 
 
 def test_phase7_strict_gate_rejects_trivially_extensible_puzzles(
-    _phase7_results: list[tuple[str, int, PuzzleResult]],
+    phase7_easy_medium: list[tuple[str, int, PuzzleResult]],
 ) -> None:
     """Strict trivial-extension gate rejects >=6 of 10 Phase 7 v2 puzzles.
 
@@ -86,7 +55,7 @@ def test_phase7_strict_gate_rejects_trivially_extensible_puzzles(
     and the test fails.
     """
     rejected: list[tuple[str, int, str]] = []
-    for difficulty, seed, result in _phase7_results:
+    for difficulty, seed, result in phase7_easy_medium:
         ok, reason = check_no_trivial_extension(result.rack, result.board_sets)
         if not ok:
             rejected.append((difficulty, seed, reason))

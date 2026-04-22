@@ -5,6 +5,33 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [Unreleased] — 2026-04-22 — Rebuild Plan: Phase A (Infrastructure) + Phase B (Gates & Heuristic Solver)
+
+Implements §7 Phase A and Phase B of `Puzzle Generation Rebuild Plan.md`.
+All 8 issues (#27–#33, #67) closed; 8 PRs merged (#64–#72).
+
+### Phase A — Infrastructure scaffolding (issues #27–#29, #67; PRs #64–#68)
+
+- `solver/generator/gates/` package created with skeleton files for `structural.py`, `ilp.py`, `heuristic_solver.py`
+- `solver/generator/templates/` package created with skeleton files for `base.py`, `__init__.py`, and templates T1–T5
+- `solver/generator/generator_core.py` and `legacy_sacrifice.py` stubs created
+- `PuzzleStore` schema extended: `template_id TEXT DEFAULT 'legacy'` and `template_version TEXT DEFAULT '0'` columns added via `_MIGRATION_COLUMNS` idiom; backwards-compatible with existing pool rows
+- `PuzzleResponse` and `PuzzleRequest` extended with `template_id` / `template_version` fields (additive; no breaking change)
+- `tests/api/test_puzzle_endpoint.py` split into fast (mocked ILP, ~2s) and slow (real solver, ~500s) suites via `@pytest.mark.slow`; removed ~1200s redundant puzzle generation in CI
+
+### Phase B — Structural gates and heuristic solver (issues #30–#33; PRs #69–#72)
+
+- `gates/structural.py` — three pre-ILP gates: `check_no_trivial_extension` (strict, any board set size), `check_no_single_home`, `check_joker_structural`; plus `run_pre_ilp_gates` / `run_post_ilp_gates` combiners
+- `gates/__init__.py` — re-exports all gate functions
+- `gates/heuristic_solver.py` — `HeuristicSolver.solves()` 4-rule priority loop with cycle detection and greedy fallback; see deviation notes in `Puzzle Generation Rebuild Plan.md §Implementation Notes`
+- `tests/solver/gates/test_structural_integration.py` — 27 tests covering all gate combinations + Phase 7 easy/medium regression
+- `tests/solver/gates/test_heuristic_solver.py` — 65 fast tests + slow Phase 7 regression for all 25 calibration puzzles; 6 parametrised hard-fixture tests
+- `tests/solver/gates/conftest.py` — session-scoped `phase7_easy_medium` (10 puzzles) and `phase7_hard_expert_nightmare` (15 puzzles) fixtures shared between both test modules
+- `tests/fixtures/golden_puzzles/hard_001–006.json` — 6 hand-crafted `PuzzleResponse`-shaped fixtures that `HeuristicSolver.solves()` must return `False` for
+- `tests/fixtures/golden_puzzles/README.md` — fixture format documentation
+
+---
+
 ## [Unreleased] — 2026-04-16 — Phase 7: First Clean Calibration — All Puzzles Still Trivially Easy
 
 ### Result
