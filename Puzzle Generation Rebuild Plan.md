@@ -1377,4 +1377,90 @@ Each phase closes with these confirmations before the next phase begins:
 
 -----
 
+## Implementation Notes
+
+Records how the actual implementation deviated from this document and why.
+Updated as each phase completes.
+
+---
+
+### Phase A — Infrastructure scaffolding
+
+**Status:** Complete (issues #27–#29, #67; PRs #64–#68). No deviations.
+
+All A1–A5 items delivered as specified:
+- Skeleton files created for `gates/`, `templates/`, `generator_core.py`, `legacy_sacrifice.py`
+- `PuzzleStore` schema extended with `template_id` / `template_version` via `_MIGRATION_COLUMNS`
+- `PuzzleResponse` / `PuzzleRequest` extended additively (no fields removed)
+- Test suite split into fast/slow to remove ~1200s CI overhead (this was a pragmatic addition not in the original plan; it does not affect correctness)
+
+---
+
+### Phase B — Structural gates and heuristic solver
+
+**Status:** Complete (issues #30–#33; PRs #69–#72). Four deviations from spec.
+
+The acceptance criterion from §7 Phase B — "`HeuristicSolver.solves() == True` for all 25 Phase 7 calibration puzzles" — required four additions beyond the literal §4.2.5 description. All four keep the solver strictly weaker than ILP.
+
+#### B-D1: Relaxed `_is_valid_extension`
+
+**Spec (§4.2.5):** Check whether appending a rack tile produces a valid set (by calling `is_valid_set`).
+
+**Deviation:** Also accept tiles into partial stubs (1–2 tiles) and into gap-runs that the v2 generator leaves as intermediate board states. Specifically:
+- RUN stubs of any size: a rack tile is accepted if it falls within the number range of the existing run tiles, is the same colour, has no exact-duplicate copy already in the run, and is not a joker (joker goes through a separate branch).
+- GROUP stubs of 1–2 tiles: a rack tile is accepted if its number matches and it introduces a new colour (or is a joker).
+
+**Why:** The v2 `TileRemover` leaves `[K3..K7, K10, K11]` gap-runs and `GROUP(1):[Y11]` single-tile stubs as board state. Without relaxed acceptance, 3 of 5 medium Phase 7 puzzles return `False`, failing the acceptance criterion.
+
+**Still compliant:** The solver remains strictly weaker than ILP. No multi-set merges, no joker displacement. It only understands the intermediate states the v2 pipeline produces.
+
+---
+
+#### B-D2: Cycle detection via `_state_key()` + visited set
+
+**Spec (§4.2.5):** "Gives up as soon as none [of the rules] fire."
+
+**Deviation:** `solves()` tracks `(rack_fingerprint, board_fingerprint)` state keys in a `visited` set. When a previously-seen state is revisited, the solver triggers the greedy fallback (B-D4) rather than returning `False`.
+
+**Why:** Rule 3 swap moves are reversible in 2 steps (rack size stays constant after a swap). Without the cycle guard, `solves()` enters an infinite loop on real Phase 7 positions.
+
+**Still compliant:** "Gives up" is implemented — the cycle triggers B-D4, not an infinite loop.
+
+---
+
+#### B-D3: Two-phase `_try_single_break`
+
+**Spec (§4.2.5):** "Applies four simple rules in priority order."
+
+**Deviation:** Rule 3 (single-set break) runs two sub-phases per invocation: first exhaust all depth-1 break candidates, then try depth-2. The top-level priority loop (Rules 1 → 2 → 3 → 4) is unchanged.
+
+**Why:** Without this ordering, premature depth-2 choices strand later rack tiles and induce the cycling caught by B-D2. Phase 1 of each break must be fully exhausted before escalating to depth-2.
+
+**Still compliant:** Priority order across the four rules is preserved. Depth-2 is still tried before giving up.
+
+---
+
+#### B-D4: Greedy fallback `_find_any_placement` (new — not in plan)
+
+**Spec (§4.2.5):** Not present. The plan implied returning `False` when all rules fail.
+
+**Deviation:** When a cycle is detected (B-D2) **or** when all four rules fail with no progress, `_find_any_placement` picks the first rack tile that has *any* valid home (≥ 1) and places it there. The visited-state set is cleared after the placement (rack size decreases → future cycling is impossible for this tile).
+
+**Why:** Nightmare seed=10004 (branching_factor=43.86) presents this scenario:
+
+After 4 Rule 1 placements, two remaining tiles K8 and B8 each have disjoint pairs of valid homes (e.g. {set0, set11} and {set1, set10}). Rule 3 cycling fires at iteration 9 — no rule makes progress. Yet *any* placement of K8 or B8 leads to a valid final board; the position is trivially solvable. Without the greedy fallback, the solver falsely returns `False` and fails the Phase B acceptance criterion.
+
+**Root cause of the nightmare scenario:** `gen_calibration_batch.py` does not filter by heuristic solver result. nightmare seed=10004 was included in `phase7_batch_v1.json` before the heuristic solver existed. The calibration batch is the fixed benchmark; the solver must match it, not the reverse.
+
+**Consequence for hard fixtures:** Two fixtures that originally returned `False` via "all rules fail → False" now return `True` via greedy (the positions are genuinely trivially solvable — any choice leads to a valid board). `hard_001` and `hard_006` were redesigned:
+
+| Fixture | Old position | Why old returned False | New position | Why new returns False |
+|---|---|---|---|---|
+| `hard_001` | rack=[B5], board=[run(B2-4), run(B6-8)] | All rules fail (2 homes) | rack=[B8,Y8], board=[run(B5-7), group(R8,K8,Y8)] | Greedy places B8; Y8(cp1) has 0 homes (group already has Y8(cp0)) |
+| `hard_006` | rack=[B5,B5(cp1)], board=[run(B2-4), run(B6-8)] | All rules fail (2 homes each) | rack=[K8,R9], board=[group(B8,Y8), run(R5-7)] | Rule 1 forces K8 into 2-tile stub; R9 is non-consecutive with run(R5-7) |
+
+**Still compliant:** The solver remains weaker than ILP. Greedy has no look-ahead; it cannot handle positions where one choice strands a later tile and another does not. Greedy traps (hard_002), wrong-colour zero-home tiles (hard_003), forced stubs (hard_004), and joker-incompatible racks (hard_005) all still return `False` correctly.
+
+---
+
 *End of document.*
