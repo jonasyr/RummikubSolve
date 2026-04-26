@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import type { TileColor } from "../types/api";
+import { TILE_BG_CLASSES, JOKER_BG_CLASSES, PLACEHOLDER_BG_CLASSES } from "./tile-colors";
 
 interface TileProps {
   color?: TileColor | null;
@@ -14,14 +15,6 @@ interface TileProps {
   selected?: boolean;
   onClick?: () => void;
 }
-
-// Static map so Tailwind JIT can detect all class names at build time.
-const BG: Record<TileColor, string> = {
-  blue: "bg-tile-blue text-white",
-  red: "bg-tile-red text-white",
-  black: "bg-tile-black text-white",
-  yellow: "bg-tile-yellow text-gray-900",
-};
 
 export default function Tile({
   color,
@@ -44,10 +37,10 @@ export default function Tile({
         : "w-9 h-10 text-sm";
 
   const bgClass = isJoker
-    ? "bg-gray-800 text-yellow-400"
+    ? JOKER_BG_CLASSES
     : color
-      ? BG[color]
-      : "bg-gray-300 text-gray-600";
+      ? TILE_BG_CLASSES[color]
+      : PLACEHOLDER_BG_CLASSES;
 
   // selected (blue) takes visual precedence over highlighted (yellow)
   const ringCls = selected
@@ -70,7 +63,14 @@ export default function Tile({
       className={`relative inline-block${onClick ? " cursor-pointer" : ""}`}
       onClick={onClick}
     >
-      <div className={classes}>{isJoker ? "★" : (number ?? "?")}</div>
+      <div
+        className={classes}
+        data-skin-kind="css"
+        data-tile-color={isJoker ? undefined : (color ?? undefined)}
+        data-tile-joker={isJoker ? "true" : undefined}
+      >
+        {isJoker ? "★" : (number ?? "?")}
+      </div>
       {label && (
         <div className="text-center mt-0.5">
           <span className="text-[8px] font-medium leading-none px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap">

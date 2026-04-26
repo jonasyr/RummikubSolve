@@ -2,17 +2,10 @@
 
 import { useTranslations } from "next-intl";
 import type { TileColor, TileInput } from "../types/api";
+import { TILE_BG_CLASSES } from "./tile-colors";
 
 const COLORS: TileColor[] = ["blue", "red", "black", "yellow"];
 const NUMBERS = Array.from({ length: 13 }, (_, i) => i + 1);
-
-// Static map — Tailwind JIT must see all class names at build time.
-const TILE_BG: Record<TileColor, string> = {
-  blue: "bg-tile-blue text-white",
-  red: "bg-tile-red text-white",
-  black: "bg-tile-black text-white",
-  yellow: "bg-tile-yellow text-gray-900",
-};
 
 interface Props {
   onSelect: (tile: TileInput) => void;
@@ -46,7 +39,7 @@ export default function TileGridPicker({ onSelect, tileCount }: Props) {
                   "relative w-full aspect-[5/6] rounded font-bold",
                   "flex items-center justify-center",
                   "border border-white/20 select-none",
-                  TILE_BG[color],
+                  TILE_BG_CLASSES[color],
                   atMax
                     ? "opacity-40 cursor-not-allowed"
                     : "cursor-pointer hover:brightness-110 active:scale-95 transition-transform",
