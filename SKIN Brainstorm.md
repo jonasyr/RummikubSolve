@@ -407,7 +407,7 @@ reproduziert wird.
 
 ## 4. Detaillierter Implementierungsplan in Phasen
 
-### Phase 0 — Vorbereitung und Konsolidierung
+### Phase 0 — Vorbereitung und Konsolidierung ✅ DONE
 
 **Ziel:** Doppelte Farb-Maps beseitigen, Test-Baseline stabilisieren.
 
@@ -459,7 +459,7 @@ constants and add data-attributes”).
 
 -----
 
-### Phase 1 — Skin-Abstraktion mit transparentem Default
+### Phase 1 — Skin-Abstraktion mit transparentem Default ✅ DONE
 
 **Ziel:** `Tile` rendert über einen `SkinRenderer`; Default-Skin produziert
 das exakt gleiche DOM wie vorher.
@@ -532,7 +532,7 @@ Zustand, keine Farben.
 
 -----
 
-### Phase 2 — Skin-Auswahl-Store + Persistierung
+### Phase 2 — Skin-Auswahl-Store + Persistierung ✅ DONE
 
 **Ziel:** Skin per API wechseln, Auswahl überlebt Reload.
 
@@ -592,7 +592,7 @@ localStorage, unknown id, race).
 
 -----
 
-### Phase 3 — Sprite-Atlas-Renderer + Preloader
+### Phase 3 — Sprite-Atlas-Renderer + Preloader ✅ DONE
 
 **Ziel:** Infrastruktur für bildbasierte Skins, noch ohne reales Asset.
 
