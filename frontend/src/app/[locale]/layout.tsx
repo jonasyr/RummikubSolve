@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import "../globals.css";
 import { routing } from "../../i18n/routing";
+import { SkinProvider } from "../../lib/skins/context";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -57,7 +58,9 @@ export default async function LocaleLayout({
     <html lang={locale}>
       <body>
         <NextIntlClientProvider>
-          {children}
+          <SkinProvider>
+            {children}
+          </SkinProvider>
         </NextIntlClientProvider>
       </body>
     </html>

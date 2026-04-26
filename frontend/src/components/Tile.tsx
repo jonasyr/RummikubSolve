@@ -2,7 +2,8 @@
 
 import { useTranslations } from "next-intl";
 import type { TileColor } from "../types/api";
-import { TILE_BG_CLASSES, JOKER_BG_CLASSES, PLACEHOLDER_BG_CLASSES } from "./tile-colors";
+import { useActiveSkinRenderer } from "../lib/skins/context";
+import type { TileRenderContext } from "../lib/skins/types";
 
 interface TileProps {
   color?: TileColor | null;
@@ -28,6 +29,14 @@ export default function Tile({
   onClick,
 }: TileProps) {
   const t = useTranslations("tile");
+  const renderer = useActiveSkinRenderer();
+
+  const ctx: TileRenderContext = {
+    color: color ?? null,
+    number: number ?? null,
+    isJoker,
+    size,
+  };
 
   const sizeClass =
     size === "xs"
@@ -36,11 +45,7 @@ export default function Tile({
         ? "w-7 h-8 text-xs"
         : "w-9 h-10 text-sm";
 
-  const bgClass = isJoker
-    ? JOKER_BG_CLASSES
-    : color
-      ? TILE_BG_CLASSES[color]
-      : PLACEHOLDER_BG_CLASSES;
+  const { className: bgClass, style: bgStyle } = renderer.containerStyle(ctx);
 
   // selected (blue) takes visual precedence over highlighted (yellow)
   const ringCls = selected
@@ -65,11 +70,12 @@ export default function Tile({
     >
       <div
         className={classes}
-        data-skin-kind="css"
+        style={bgStyle}
+        data-skin-kind={renderer.manifest.kind}
         data-tile-color={isJoker ? undefined : (color ?? undefined)}
         data-tile-joker={isJoker ? "true" : undefined}
       >
-        {isJoker ? "★" : (number ?? "?")}
+        {renderer.renderTileBody(ctx)}
       </div>
       {label && (
         <div className="text-center mt-0.5">
