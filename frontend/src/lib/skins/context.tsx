@@ -3,13 +3,15 @@
 import React, { createContext, useContext } from "react";
 import type { SkinRenderer } from "./types";
 import { defaultSkinRenderer } from "./default-skin";
+import { getSkinRenderer } from "./registry";
+import { useSkinStore } from "../../store/skin";
 
 const SkinContext = createContext<SkinRenderer>(defaultSkinRenderer);
 
 export function SkinProvider({ children }: { children: React.ReactNode }) {
-  // Phase 1: always the default renderer. Phase 2 will read from the Zustand store.
+  const activeSkinId = useSkinStore((s) => s.activeSkinId);
   return (
-    <SkinContext.Provider value={defaultSkinRenderer}>
+    <SkinContext.Provider value={getSkinRenderer(activeSkinId)}>
       {children}
     </SkinContext.Provider>
   );
