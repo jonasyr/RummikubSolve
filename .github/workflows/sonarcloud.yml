@@ -9,6 +9,9 @@ jobs:
   sonar:
     name: Coverage & SonarCloud scan
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write  # required for SonarCloud PR decoration (posting comments)
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
