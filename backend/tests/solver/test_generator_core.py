@@ -19,6 +19,8 @@ from solver.generator.generator_core import generate_puzzle
 from solver.generator.puzzle_result import PuzzleGenerationError, PuzzleResult
 from solver.generator.templates.base import Template, TemplateInstance, TemplateInvariantError
 from solver.models.board_state import Solution
+from solver.models.tile import Color, Tile
+from solver.models.tileset import SetType, TileSet
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -49,6 +51,67 @@ def _make_minimal_instance(
     )
 
 
+def _make_good_board_sets() -> list[TileSet]:
+    """Two full 4-tile groups that cannot be trivially extended by any rack tile."""
+    g1 = TileSet(
+        type=SetType.GROUP,
+        tiles=[
+            Tile(Color.BLUE, 1, 0),
+            Tile(Color.RED, 1, 0),
+            Tile(Color.YELLOW, 1, 0),
+            Tile(Color.BLACK, 1, 0),
+        ],
+    )
+    g2 = TileSet(
+        type=SetType.GROUP,
+        tiles=[
+            Tile(Color.BLUE, 2, 0),
+            Tile(Color.RED, 2, 0),
+            Tile(Color.YELLOW, 2, 0),
+            Tile(Color.BLACK, 2, 0),
+        ],
+    )
+    return [g1, g2]
+
+
+def _make_good_rack() -> list[Tile]:
+    """Three rack tiles that form group(B3,R3,Y3) — the unique ILP solution."""
+    return [
+        Tile(Color.BLUE, 3, 0),
+        Tile(Color.RED, 3, 0),
+        Tile(Color.YELLOW, 3, 0),
+    ]
+
+
+def _register_stub_hard(
+    registry: dict[str, Template],
+    declared_chain_depth: int = 0,
+) -> None:
+    """Register a concrete hard-tier stub template with the known-good puzzle."""
+    board_sets = _make_good_board_sets()
+    rack = _make_good_rack()
+    instance = TemplateInstance(
+        template_id="__stub_hard__",
+        template_version="1",
+        tier="hard",
+        board_sets=board_sets,
+        rack=rack,
+        declared_chain_depth=declared_chain_depth,
+        declared_disruption_min=0,
+        construction_notes={},
+    )
+
+    class _StubHard(Template):
+        template_id = "__stub_hard__"
+        template_version = "1"
+        tier = "hard"
+
+        def generate(self, rng: random.Random) -> TemplateInstance:
+            return instance
+
+    registry["__stub_hard__"] = _StubHard()
+
+
 def _register_dummy(
     registry: dict[str, Template],
     tid: str = "t_dummy",
@@ -62,7 +125,7 @@ def _register_dummy(
     class _D(Template):
         template_id = tid
         template_version = ver
-        tier = "expert"  # type: ignore[assignment]  # ClassVar on ABC, OK in concrete subclass
+        tier = "expert"
 
         def generate(self, rng: random.Random) -> TemplateInstance:
             return instance
@@ -175,7 +238,7 @@ class TestHappyPath:
             _PATCH_PRE, return_value=(True, [])
         ), patch(_PATCH_ILP, return_value=(True, "", fake_sol)), patch(
             _PATCH_POST, return_value=(True, [])
-        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(
+        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(  # type: ignore[call-overload]
             _PATCH_DISRUPTION, return_value=7
         ):
             result = generate_puzzle("expert", seed=1, template_id="t_ok", max_attempts=1)
@@ -197,7 +260,7 @@ class TestSeedBehaviour:
             _PATCH_PRE, return_value=(True, [])
         ), patch(_PATCH_ILP, return_value=(True, "", fake_sol)), patch(
             _PATCH_POST, return_value=(True, [])
-        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(
+        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(  # type: ignore[call-overload]
             _PATCH_DISRUPTION, return_value=0
         ):
             result = generate_puzzle("expert", seed=42, template_id="t_dummy", max_attempts=1)
@@ -215,7 +278,7 @@ class TestSeedBehaviour:
             _PATCH_PRE, return_value=(True, [])
         ), patch(_PATCH_ILP, return_value=(True, "", fake_sol)), patch(
             _PATCH_POST, return_value=(True, [])
-        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(
+        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(  # type: ignore[call-overload]
             _PATCH_DISRUPTION, return_value=0
         ):
             result = generate_puzzle("expert", seed=None, template_id="t_dummy", max_attempts=1)
@@ -235,7 +298,7 @@ class TestTemplateSelection:
             _PATCH_PRE, return_value=(True, [])
         ), patch(_PATCH_ILP, return_value=(True, "", fake_sol)), patch(
             _PATCH_POST, return_value=(True, [])
-        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(
+        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(  # type: ignore[call-overload]
             _PATCH_DISRUPTION, return_value=0
         ):
             result = generate_puzzle(
@@ -262,7 +325,7 @@ class TestGateRetryBehaviour:
 
         with patch(_PATCH_ENUM, return_value=[]), patch(_PATCH_PRE, pre_mock), patch(
             _PATCH_ILP, return_value=(True, "", fake_sol)
-        ), patch(_PATCH_POST, return_value=(True, [])), patch(
+        ), patch(_PATCH_POST, return_value=(True, [])), patch(  # type: ignore[call-overload]
             _PATCH_HS, **{"return_value.solves.return_value": False}
         ), patch(_PATCH_DISRUPTION, return_value=0):
             result = generate_puzzle("expert", seed=1, template_id="t_dummy", max_attempts=3)
@@ -309,9 +372,84 @@ class TestGateRetryBehaviour:
             _PATCH_PRE, return_value=(True, [])
         ), patch(_PATCH_ILP, side_effect=ilp_responses), patch(
             _PATCH_POST, return_value=(True, [])
-        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(
+        ), patch(_PATCH_HS, **{"return_value.solves.return_value": False}), patch(  # type: ignore[call-overload]
             _PATCH_DISRUPTION, return_value=0
         ):
             result = generate_puzzle("expert", seed=1, template_id="t_dummy", max_attempts=3)
 
         assert isinstance(result, PuzzleResult)
+
+
+@pytest.mark.slow
+class TestEndToEnd:
+    """End-to-end integration tests using a real stub template and real gate pipeline.
+
+    The stub puzzle is:
+      board = [group(B1,R1,Y1,K1), group(B2,R2,Y2,K2)]
+      rack  = [B3, R3, Y3]
+
+    Gate analysis:
+    - check_no_trivial_extension: PASS — rack tiles can't extend 4-tile groups (dup color)
+    - check_no_single_home:       PASS — each rack tile has 2 candidate homes (run + group)
+    - ILP solve + uniqueness:     PASS — unique solution is group(B3,R3,Y3); K tiles can only
+                                         appear in groups so the 3-run alternative leaves them
+                                         as orphans
+    - Post-ILP structural:        PASS — no board jokers present
+    - Heuristic solver:           PASS (returns False) — greedy fallback finds no extension
+                                         for any rack tile against either 4-tile group
+    """
+
+    def test_success_returns_puzzle_result(
+        self, isolated_registry: dict[str, Template]
+    ) -> None:
+        """Real full pipeline: stub puzzle passes all gates → valid PuzzleResult."""
+        _register_stub_hard(isolated_registry)
+
+        result = generate_puzzle("hard", seed=1, template_id="__stub_hard__")
+
+        assert isinstance(result, PuzzleResult)
+        assert result.template_id == "__stub_hard__"
+        assert result.difficulty == "hard"
+        assert result.is_unique is True
+        assert result.seed == 1
+
+    def test_non_unique_loop_exhausts(
+        self, isolated_registry: dict[str, Template]
+    ) -> None:
+        """check_uniqueness stubbed False → loop exhausts → PuzzleGenerationError."""
+        _register_stub_hard(isolated_registry)
+
+        with patch(
+            "solver.generator.gates.ilp.check_uniqueness", return_value=False
+        ), pytest.raises(PuzzleGenerationError, match="hard"):
+            generate_puzzle("hard", seed=1, template_id="__stub_hard__", max_attempts=2)
+
+    def test_chain_depth_invariant_raises_immediately(
+        self, isolated_registry: dict[str, Template]
+    ) -> None:
+        """declared_chain_depth=5 but real ILP returns 0 → TemplateInvariantError, no retry."""
+        _register_stub_hard(isolated_registry, declared_chain_depth=5)
+
+        with pytest.raises(TemplateInvariantError, match="chain_too_shallow"):
+            generate_puzzle("hard", seed=1, template_id="__stub_hard__", max_attempts=5)
+
+    def test_seed_determinism(
+        self, isolated_registry: dict[str, Template]
+    ) -> None:
+        """Same seed twice produces identical PuzzleResult metric fields."""
+        _register_stub_hard(isolated_registry)
+
+        r1 = generate_puzzle("hard", seed=42, template_id="__stub_hard__")
+        r2 = generate_puzzle("hard", seed=42, template_id="__stub_hard__")
+
+        assert r1.seed == r2.seed == 42
+        assert r1.template_id == r2.template_id
+        assert r1.chain_depth == r2.chain_depth
+        assert r1.disruption_score == r2.disruption_score
+
+    def test_no_templates_for_tier_raises(
+        self, isolated_registry: dict[str, Template]
+    ) -> None:
+        """Empty registry for the tier → PuzzleGenerationError immediately."""
+        with pytest.raises(PuzzleGenerationError, match="No templates registered"):
+            generate_puzzle("hard", seed=1)
