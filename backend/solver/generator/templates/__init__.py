@@ -140,7 +140,7 @@ def list_templates(tier: str | None = None) -> list[str]:
 # Each import triggers the @register_template decorator and populates the
 # registry automatically.  Import order does not matter.
 # ---------------------------------------------------------------------------
-# from solver.generator.templates import t1_joker_displacement  # noqa: F401
+from solver.generator.templates import t1_joker_displacement  # noqa: F401,E402
 # from solver.generator.templates import t2_false_extension     # noqa: F401
 # from solver.generator.templates import t3_multi_group_merge   # noqa: F401
 # from solver.generator.templates import t4_run_group_transform # noqa: F401
