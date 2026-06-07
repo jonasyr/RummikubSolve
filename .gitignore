@@ -75,3 +75,6 @@ Thumbs.db
 
 # Dev notes / temp files
 backend/.tmp
+
+# Plan docs (local only)
+docs/
