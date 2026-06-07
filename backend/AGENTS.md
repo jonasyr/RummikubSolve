@@ -73,9 +73,11 @@ backend/
 │   └── validator/         # Rule checker, solution verifier
 └── tests/
     ├── api/               # Puzzle endpoint, solve endpoint
+    ├── fixtures/
+    │   └── templates/     # Snapshot fixtures (e.g. t1_seed_1.json) for regression testing
     └── solver/
         ├── gates/         # ILP gate, structural, heuristic solver
-        ├── templates/     # T1 template tests (248 tests)
+        ├── templates/     # T1 template tests (fast structural + slow ILP)
         └── test_generator_core.py
 ```
 
@@ -107,6 +109,8 @@ backend/
 ### Template System
 Templates extend `Template` ABC, decorate with `@register_template`, implement `generate(rng: random.Random) -> TemplateInstance`. The `rng` is the sole randomness source. Templates are imported in `templates/__init__.py` to trigger registration.
 
+`@register_template` idempotency: re-decorating the same class (e.g. module re-import during test collection) is silently ignored; registering a different class with a duplicate `template_id` raises `ValueError` immediately.
+
 ### ILP Gate Logic (as of branch #38)
 `run_ilp_gates()` flow:
 1. `solve()` → primary solution
@@ -125,7 +129,7 @@ This means lower-difficulty alternatives (chain_depth below the tier threshold) 
 `puzzle_endpoint()` checks `request.template_id`: if non-null and non-"legacy" → routes to `generate_template_puzzle()` from `generator_core`; otherwise → legacy `generate_puzzle()` from `puzzle_generator`.
 
 ### Test Fixture Pattern
-Slow ILP tests use `@pytest.mark.slow`. Fast structural tests (no ILP) check invariants over 20 seeds. Module-scoped fixtures share expensive solver results within a test class.
+Slow ILP tests use `@pytest.mark.slow`. Fast structural tests (no ILP) check invariants over 20 seeds (`_SEEDS_FAST = range(1, 21)`); slow ILP tests run over 10 seeds (`_SEEDS_ILP = range(1, 11)`). Module-scoped fixtures share expensive solver results within a test class. Fast tests mock `run_ilp_gates` via the `_PATCH_ILP` pattern. JSON snapshot fixtures in `tests/fixtures/templates/` (e.g. `t1_seed_1.json`) lock deterministic template output for regression detection.
 
 <!-- END AUTO-MANAGED -->
 
@@ -146,11 +150,12 @@ Slow ILP tests use `@pytest.mark.slow`. Fast structural tests (no ILP) check inv
 - **#37 (PR #76)** — End-to-end integration tests for `generator_core`
 
 ### In progress (branch #38, not yet merged):
-- T1 Joker Displacement Chain template (`t1_joker_displacement.py`)
+- T1 Joker Displacement Chain template (`t1_joker_displacement.py`) fully implemented
 - ILP gate refactored: `check_uniqueness` → `find_alternative_solution` + `find_deep_chain_solution`
 - `chain_too_shallow` now retried (not re-raised as `TemplateInvariantError`)
 - T1 test UI added to `PlayPuzzleControls.tsx` (T1 seed input + "T1 test" button)
-- 248 template tests + 59 gate/API/generator tests all pass
+- Snapshot fixture `tests/fixtures/templates/t1_seed_1.json` added for regression testing
+- Full template test suite (fast structural + slow ILP) in `tests/solver/templates/`
 
 ### Key design decisions:
 - **Template construction pivoted from original plan in `.tmp`**: Original design had S0 as a RUN with joker, S1 as a GROUP. Final implementation uses S0 as a 4-colour GROUP (max capacity blocks all trivial extensions cleanly) and S1 as a C-colour RUN. This made the uniqueness argument cleaner.
@@ -165,7 +170,8 @@ Slow ILP tests use `@pytest.mark.slow`. Fast structural tests (no ILP) check inv
 - **`check_uniqueness` is now `find_alternative_solution`** — returns `Solution | None`, not `bool`. Any code importing `check_uniqueness` from `solver.engine.solver` is broken.
 - **Do not import `check_uniqueness`** — it no longer exists. Use `find_alternative_solution` or `find_deep_chain_solution`.
 - **Puzzle generation is offline** — `generate_template_puzzle()` can take seconds. The `/api/puzzle` endpoint is not latency-sensitive; use it for pre-generation only.
-- **Slow tests require real ILP** — never mock `solve()` in slow tests; mock the entire `run_ilp_gates()` function instead (`_PATCH_ILP`).
+- **Slow tests require real ILP** — never mock `solve()` in slow tests; mock the entire `run_ilp_gates()` function instead (`_PATCH_ILP` pattern in test modules).
+- **Snapshot fixtures** — `tests/fixtures/templates/t1_seed_1.json` locks template output for seed=1. When intentionally changing template structure, regenerate the fixture; unexpected diffs signal regressions.
 - **Template n range clamped to {3..7}** — n=8 is excluded: n+2=10 is adjacent to D3 distractor start (11), enabling a trivial extension. If adding new templates with similar structure, verify the range.
 - **Frontend test file exists**: `frontend/src/__tests__/components/play/PlayPuzzleControls.test.tsx` is untracked — needs to be staged before PR.
 
