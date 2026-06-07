@@ -114,12 +114,28 @@ class TestRunIlpGates:
         assert solution is fake
 
     def test_not_unique_rejected(self) -> None:
-        """Mock: check_uniqueness returns False — gate rejects with 'not_unique'."""
-        with patch("solver.generator.gates.ilp.check_uniqueness", return_value=False):
-            ok, reason, solution = run_ilp_gates(_SIMPLE_STATE, declared_chain_depth=0)
+        """Mock: alternative solution at same depth — gate rejects with 'not_unique'."""
+        # Primary has chain_depth=3 (>= declared=3) so find_deep_chain_solution is skipped.
+        primary = _fake_solution(placed_tiles=[_B4], chain_depth=3)
+        alt = _fake_solution(placed_tiles=[_B4], chain_depth=5)
+        with patch("solver.generator.gates.ilp.solve", return_value=primary):
+            with patch("solver.generator.gates.ilp.find_alternative_solution", return_value=alt):
+                ok, reason, solution = run_ilp_gates(_SIMPLE_STATE, declared_chain_depth=3)
 
         assert ok is False
         assert reason == "not_unique"
+        assert solution is not None
+
+    def test_lower_depth_alternative_not_rejected(self) -> None:
+        """Mock: alternative exists but chain_depth < declared — gate passes."""
+        primary = _fake_solution(placed_tiles=[_B4], chain_depth=3)
+        alt = _fake_solution(placed_tiles=[_B4], chain_depth=2)
+        with patch("solver.generator.gates.ilp.solve", return_value=primary):
+            with patch("solver.generator.gates.ilp.find_alternative_solution", return_value=alt):
+                ok, reason, solution = run_ilp_gates(_SIMPLE_STATE, declared_chain_depth=3)
+
+        assert ok is True
+        assert reason == ""
         assert solution is not None
 
     def test_chain_depth_too_shallow(self) -> None:

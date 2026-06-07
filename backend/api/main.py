@@ -1,6 +1,10 @@
 """FastAPI application entry point.
 
-Phase 2 scope: health check + POST /api/solve.
+Endpoints:
+    GET  /health          — liveness probe
+    POST /api/solve       — optimal move solver
+    POST /api/puzzle      — puzzle generation
+    POST /api/telemetry   — client telemetry
 
 Run locally:
     uvicorn api.main:app --reload --port 8000
@@ -113,10 +117,19 @@ async def health() -> dict[str, str]:
 
 from solver.config.rules import RulesConfig  # noqa: E402
 from solver.engine.solver import solve as _run_solver  # noqa: E402
+from solver.generator.generator_core import (  # noqa: E402
+    generate_puzzle as generate_template_puzzle,
+)
 from solver.generator.puzzle_generator import (  # noqa: E402
     PuzzleGenerationError,
     PuzzleResult,
     generate_puzzle,
+)
+from solver.generator.puzzle_result import (  # noqa: E402
+    PuzzleGenerationError as TemplatePuzzleGenerationError,
+)
+from solver.generator.puzzle_result import (  # noqa: E402
+    PuzzleResult as TemplatePuzzleResult,
 )
 from solver.generator.puzzle_store import PuzzleStore  # noqa: E402
 from solver.generator.set_changes import (  # noqa: E402
@@ -405,6 +418,54 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             template_id=getattr(result, "template_id", "legacy"),
             template_version=getattr(result, "template_version", "0"),
         )
+
+    def _template_result_to_response(
+        result: TemplatePuzzleResult,
+        puzzle_id: str = "",
+    ) -> PuzzleResponse:
+        return PuzzleResponse(
+            board_sets=[
+                BoardSetInput(
+                    type=ts.type.value,
+                    tiles=[_tile_to_input(tile) for tile in ts.tiles],
+                )
+                for ts in result.board_sets
+            ],
+            rack=[_tile_to_input(tile) for tile in result.rack],
+            difficulty=result.difficulty,
+            seed=result.seed,
+            tile_count=len(result.rack),
+            disruption_score=result.disruption_score,
+            chain_depth=result.chain_depth,
+            is_unique=result.is_unique,
+            puzzle_id=puzzle_id,
+            composite_score=0.0,
+            branching_factor=0.0,
+            deductive_depth=0.0,
+            red_herring_density=0.0,
+            working_memory_load=0.0,
+            tile_ambiguity=0.0,
+            solution_fragility=0.0,
+            generator_version="template",
+            template_id=result.template_id,
+            template_version=result.template_version,
+        )
+
+    if request.template_id == "T1_joker_displacement_v1":
+        try:
+            template_result = generate_template_puzzle(
+                difficulty="expert",
+                seed=request.seed,
+                template_id=request.template_id,
+                max_attempts=10,
+            )
+        except TemplatePuzzleGenerationError as exc:
+            logger.warning("template_puzzle_generation_failed", error=str(exc))
+            raise HTTPException(
+                status_code=503,
+                detail="Could not generate a template puzzle — please try again.",
+            ) from exc
+        return _template_result_to_response(template_result)
 
     # Phase 7: if a specific puzzle_id was requested (pregenerated calibration batch),
     # load directly from pool — no generation needed, instant response.

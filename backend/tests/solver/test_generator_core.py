@@ -17,7 +17,7 @@ import pytest
 import solver.generator.templates as registry_module
 from solver.generator.generator_core import generate_puzzle
 from solver.generator.puzzle_result import PuzzleGenerationError, PuzzleResult
-from solver.generator.templates.base import Template, TemplateInstance, TemplateInvariantError
+from solver.generator.templates.base import Template, TemplateInstance
 from solver.models.board_state import Solution
 from solver.models.tile import Color, Tile
 from solver.models.tileset import SetType, TileSet
@@ -212,18 +212,24 @@ class TestAttemptExhaustion:
 
 
 class TestTemplateInvariantError:
-    def test_chain_too_shallow_is_not_retried(
+    def test_chain_too_shallow_is_retried_and_exhausts(
         self, isolated_registry: dict[str, Template]
     ) -> None:
-        """ILP reason 'chain_too_shallow:...' re-raises TemplateInvariantError immediately."""
+        """ILP reason 'chain_too_shallow:...' is retried; exhausting attempts raises PuzzleGenerationError.
+
+        chain_too_shallow can occur when the ILP's exclusion mechanism cannot
+        distinguish the deep-chain solution from lower-depth solutions sharing the
+        same template indices (an ILP limitation, not a template design bug).
+        The generator retries with different seeds rather than crashing.
+        """
         _register_dummy(isolated_registry)
 
         with patch(_PATCH_ENUM, return_value=[]), patch(
             _PATCH_PRE, return_value=(True, [])
         ), patch(_PATCH_ILP, return_value=(False, "chain_too_shallow:0<5", None)), pytest.raises(
-            TemplateInvariantError, match="chain_too_shallow"
+            PuzzleGenerationError
         ):
-            generate_puzzle("expert", seed=1, max_attempts=10)
+            generate_puzzle("expert", seed=1, max_attempts=3)
 
 
 class TestHappyPath:
@@ -416,21 +422,21 @@ class TestEndToEnd:
     def test_non_unique_loop_exhausts(
         self, isolated_registry: dict[str, Template]
     ) -> None:
-        """check_uniqueness stubbed False → loop exhausts → PuzzleGenerationError."""
+        """not_unique result → loop exhausts → PuzzleGenerationError."""
         _register_stub_hard(isolated_registry)
 
-        with patch(
-            "solver.generator.gates.ilp.check_uniqueness", return_value=False
-        ), pytest.raises(PuzzleGenerationError, match="hard"):
+        with patch(_PATCH_ILP, return_value=(False, "not_unique", None)), pytest.raises(
+            PuzzleGenerationError, match="hard"
+        ):
             generate_puzzle("hard", seed=1, template_id="__stub_hard__", max_attempts=2)
 
-    def test_chain_depth_invariant_raises_immediately(
+    def test_chain_depth_not_achievable_exhausts_attempts(
         self, isolated_registry: dict[str, Template]
     ) -> None:
-        """declared_chain_depth=5 but real ILP returns 0 → TemplateInvariantError, no retry."""
+        """declared_chain_depth=5 but ILP never achieves it → retried → PuzzleGenerationError."""
         _register_stub_hard(isolated_registry, declared_chain_depth=5)
 
-        with pytest.raises(TemplateInvariantError, match="chain_too_shallow"):
+        with pytest.raises(PuzzleGenerationError):
             generate_puzzle("hard", seed=1, template_id="__stub_hard__", max_attempts=5)
 
     def test_seed_determinism(

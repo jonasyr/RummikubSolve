@@ -185,20 +185,18 @@ def solve(
     return solution
 
 
-def check_uniqueness(
+def find_alternative_solution(
     state: BoardState,
     solution: Solution,
     rules: RulesConfig | None = None,
     timeout_seconds: float | None = None,
-) -> bool:
-    """Return True if *solution* is the ONLY arrangement that places solution.tiles_placed tiles.
+) -> Solution | None:
+    """Return the best alternative Solution if one exists, else None.
 
-    Re-solves the ILP with the first solution's active sets excluded via the
-    constraint:
-        Σ_{s ∈ active} y[s] ≤ len(active) − 1
-    If the re-solve places fewer tiles (or becomes infeasible), the original
-    solution is unique.  If an alternative arrangement places the same number of
-    tiles, the puzzle is NOT unique (a player could find either solution).
+    Runs the uniqueness ILP with the first solution's active sets excluded.
+    If an alternative arrangement places the same number of tiles, returns
+    that arrangement as a Solution (chain_depth computed; moves=[]).
+    Returns None when no alternative exists (puzzle is unique).
 
     Cost: roughly doubles solve time because we run HiGHS twice.  Designed
     for offline puzzle pre-generation where latency is not critical.
@@ -208,22 +206,20 @@ def check_uniqueness(
         solution: A Solution returned by solve().  Must have active_set_indices
                   populated (always true when obtained from solve()).
         rules:    Rule variant configuration.  Uses defaults if None.
+        timeout_seconds: ILP time limit.  Uses _UNIQUENESS_TIMEOUT_SECONDS if None.
 
     Returns:
-        True  — solution is the unique optimum.
-        False — an alternative arrangement achieves the same tile count.
+        None      — no alternative exists; puzzle is unique.
+        Solution  — an alternative arrangement with the same tile count.
+                    Callers can inspect .chain_depth, .tiles_placed, etc.
     """
     if rules is None:
         rules = RulesConfig()
 
-    # If no tiles were placed there is nothing to be unique about.
     if solution.tiles_placed == 0 or not solution.active_set_indices:
-        return True
+        return None
 
-    # Re-use the same sub-problem state as solve() did.
     solve_state = BoardState(board_sets=[], rack=state.rack) if rules.is_first_turn else state
-
-    # Re-enumerate candidate sets (deterministic: same state → same list).
     candidate_sets = enumerate_valid_sets(solve_state)
 
     model2 = build_ilp_model(
@@ -239,9 +235,118 @@ def check_uniqueness(
     model2.highs.run()
 
     try:
-        _, placed2, _, _, _ = extract_solution(model2)
+        new_sets2, placed2, remaining2, is_optimal2, active2 = extract_solution(model2)
     except ValueError:
-        # Infeasible → no alternative arrangement exists.
-        return True
+        return None
 
-    return len(placed2) < solution.tiles_placed
+    if len(placed2) < solution.tiles_placed:
+        return None
+
+    if rules.is_first_turn:
+        new_sets2 = list(state.board_sets) + new_sets2
+    chain_depth2 = compute_chain_depth(state.board_sets, new_sets2, placed2)
+    return Solution(
+        new_sets=new_sets2,
+        placed_tiles=placed2,
+        remaining_rack=remaining2,
+        is_optimal=is_optimal2,
+        solve_time_ms=0.0,
+        solve_status="success",
+        chain_depth=chain_depth2,
+        active_set_indices=active2,
+    )
+
+
+def find_deep_chain_solution(
+    state: BoardState,
+    n_tiles: int,
+    min_chain_depth: int,
+    rules: RulesConfig | None = None,
+    timeout_seconds: float | None = None,
+    initially_excluded: list[list[int]] | None = None,
+    max_iterations: int = 20,
+) -> Solution | None:
+    """Search all optimal solutions for one with chain_depth >= min_chain_depth.
+
+    Iteratively excludes sub-optimal (low-depth) solutions until a deep-chain
+    solution is found or all solutions placing n_tiles are exhausted.
+
+    Used by run_ilp_gates when the primary ILP solution's chain_depth is below
+    the declared minimum — the ILP solver may prefer a shallower rearrangement
+    as its primary even when a deep-chain solution exists.
+
+    Args:
+        state:              Board + rack state.
+        n_tiles:            Required placement count.  Solutions placing fewer
+                            tiles are not considered (search stops immediately).
+        min_chain_depth:    Minimum chain_depth to accept.
+        rules:              Rule variant configuration.  Defaults used if None.
+        timeout_seconds:    Per-ILP-call time limit.
+        initially_excluded: Active-set-index lists to exclude from the very first
+                            call (e.g. the primary solution already known to be
+                            below the required depth).
+        max_iterations:     Hard cap on ILP calls to prevent infinite loops on
+                            boards with many optimal solutions.
+
+    Returns:
+        A Solution with chain_depth >= min_chain_depth, or None if no such
+        solution exists within max_iterations calls.
+    """
+    if rules is None:
+        rules = RulesConfig()
+
+    solve_state = BoardState(board_sets=[], rack=state.rack) if rules.is_first_turn else state
+    candidate_sets = enumerate_valid_sets(solve_state)
+    excluded: list[list[int]] = list(initially_excluded) if initially_excluded else []
+    eff_timeout = timeout_seconds if timeout_seconds is not None else _UNIQUENESS_TIMEOUT_SECONDS
+
+    for _ in range(max_iterations):
+        model = build_ilp_model(solve_state, candidate_sets, rules, excluded_solutions=excluded)
+        model.highs.setOptionValue("time_limit", eff_timeout)
+        model.highs.run()
+
+        try:
+            new_sets, placed, remaining, is_optimal, active = extract_solution(model)
+        except ValueError:
+            return None
+
+        if len(placed) < n_tiles:
+            return None
+
+        if rules.is_first_turn:
+            new_sets = list(state.board_sets) + new_sets
+        chain_depth = compute_chain_depth(state.board_sets, new_sets, placed)
+
+        if chain_depth >= min_chain_depth:
+            return Solution(
+                new_sets=new_sets,
+                placed_tiles=placed,
+                remaining_rack=remaining,
+                is_optimal=is_optimal,
+                solve_time_ms=0.0,
+                solve_status="success",
+                chain_depth=chain_depth,
+                active_set_indices=active,
+            )
+
+        excluded.append(active)
+
+    return None
+
+
+def check_uniqueness(
+    state: BoardState,
+    solution: Solution,
+    rules: RulesConfig | None = None,
+    timeout_seconds: float | None = None,
+) -> bool:
+    """Return True if *solution* is the ONLY arrangement that places solution.tiles_placed tiles.
+
+    Thin wrapper around find_alternative_solution().  Use that function directly
+    when you need to inspect properties of the alternative (e.g. chain_depth).
+
+    Returns:
+        True  — no alternative arrangement exists (puzzle is unique).
+        False — an alternative arrangement achieves the same tile count.
+    """
+    return find_alternative_solution(state, solution, rules, timeout_seconds) is None

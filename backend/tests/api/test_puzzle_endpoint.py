@@ -12,8 +12,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from api.main import app
+from api.main import app, puzzle_endpoint
+from api.models import PuzzleRequest
 from solver.generator.puzzle_generator import PuzzleResult
+from solver.generator.puzzle_result import PuzzleResult as TemplatePuzzleResult
+from solver.models.tile import Color, Tile
+from solver.models.tileset import SetType, TileSet
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -43,20 +47,45 @@ def _make_fake_result(
     )
 
 
+def _make_fake_template_result(seed: int | None = None) -> TemplatePuzzleResult:
+    return TemplatePuzzleResult(
+        board_sets=[
+            TileSet(
+                type=SetType.GROUP,
+                tiles=[
+                    Tile(color=Color.RED, number=9, copy_id=0),
+                    Tile(color=Color.BLUE, number=9, copy_id=0),
+                    Tile(color=Color.BLACK, number=9, copy_id=0),
+                    Tile.joker(copy_id=0),
+                ],
+            )
+        ],
+        rack=[Tile(color=Color.YELLOW, number=9, copy_id=0)],
+        difficulty="expert",
+        seed=seed,
+        template_id="T1_joker_displacement_v1",
+        template_version="1",
+        chain_depth=3,
+        disruption_score=8,
+        is_unique=True,
+        joker_count=0,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:  # type: ignore[misc]
+async def client() -> AsyncGenerator[AsyncClient, None]:
     """Real client — calls the actual solver. Use only for slow tests."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
 @pytest.fixture
-async def fast_client() -> AsyncGenerator[AsyncClient, None]:  # type: ignore[misc]
+async def fast_client() -> AsyncGenerator[AsyncClient, None]:
     """Client with generate_puzzle and PuzzleStore mocked — no solver, < 1s per test."""
     mock_store = MagicMock()
     mock_store.draw.return_value = None
@@ -125,6 +154,39 @@ async def test_default_difficulty_uses_medium(fast_client: AsyncClient) -> None:
     r = await fast_client.post("/api/puzzle", json={})
     assert r.status_code == 200
     assert r.json()["difficulty"] == "medium"
+
+
+def test_t1_template_id_routes_to_template_generator() -> None:
+    with patch(
+        "api.main.generate_template_puzzle",
+        return_value=_make_fake_template_result(seed=7),
+    ) as mock_generate:
+        response = puzzle_endpoint(
+            PuzzleRequest(
+                difficulty="expert",
+                seed=7,
+                template_id="T1_joker_displacement_v1",
+                sets_to_remove=3,
+                min_board_sets=8,
+                max_board_sets=14,
+                min_chain_depth=0,
+                min_disruption=0,
+            )
+        )
+
+    assert response.difficulty == "expert"
+    assert response.seed == 7
+    assert response.template_id == "T1_joker_displacement_v1"
+    assert response.template_version == "1"
+    assert response.generator_version == "template"
+    assert response.chain_depth >= 3
+    assert response.tile_count == len(response.rack)
+    mock_generate.assert_called_once_with(
+        difficulty="expert",
+        seed=7,
+        template_id="T1_joker_displacement_v1",
+        max_attempts=10,
+    )
 
 
 async def test_custom_board_size_params_accepted(fast_client: AsyncClient) -> None:
