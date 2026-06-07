@@ -267,19 +267,44 @@ class TestGateCompliance:
 class TestGeneratorCoreIntegration:
     @pytest.mark.slow
     def test_generate_puzzle_expert_succeeds_majority_of_seeds(self) -> None:
-        """≥80 of 100 seeds must produce a valid puzzle within 10 attempts."""
+        """≥80 of 100 seeds must produce a valid puzzle within 10 attempts.
+
+        Prints per-reason rejection breakdown for debugging.
+        Reasons come from structlog output — search for 'puzzle_rejected'
+        in captured log lines above this summary.
+        """
+        import collections
+
+        import structlog.testing
+
         successes = 0
-        for seed in range(1, 101):
-            try:
-                generate_puzzle(
-                    difficulty="expert",
-                    seed=seed,
-                    template_id=_TEMPLATE_ID,
-                    max_attempts=10,
-                )
-                successes += 1
-            except PuzzleGenerationError:
-                pass
+        rejection_counts: dict[str, int] = collections.defaultdict(int)
+
+        with structlog.testing.capture_logs() as cap:
+            for seed in range(1, 101):
+                before = len(cap)
+                try:
+                    generate_puzzle(
+                        difficulty="expert",
+                        seed=seed,
+                        template_id=_TEMPLATE_ID,
+                        max_attempts=10,
+                    )
+                    successes += 1
+                except PuzzleGenerationError:
+                    for entry in cap[before:]:
+                        if entry.get("event") == "puzzle_rejected":
+                            rejection_counts[str(entry.get("reason", "unknown"))] += 1
+
+        failures = 100 - successes
+        print(
+            f"\nRejection-rate: {successes}/100 seeds succeeded, {failures} exhausted budget"
+        )
+        if rejection_counts:
+            breakdown = ", ".join(
+                f"{r}={n}" for r, n in sorted(rejection_counts.items(), key=lambda x: -x[1])
+            )
+            print(f"Per-reason rejection counts: {breakdown}")
         assert successes >= 80, (
             f"Only {successes}/100 seeds succeeded (need ≥ 80)"
         )

@@ -215,7 +215,8 @@ class TestTemplateInvariantError:
     def test_chain_too_shallow_is_retried_and_exhausts(
         self, isolated_registry: dict[str, Template]
     ) -> None:
-        """ILP reason 'chain_too_shallow:...' is retried; exhausting attempts raises PuzzleGenerationError.
+        """ILP reason 'chain_too_shallow:...' is retried; exhausting attempts raises
+        PuzzleGenerationError.
 
         chain_too_shallow can occur when the ILP's exclusion mechanism cannot
         distinguish the deep-chain solution from lower-depth solutions sharing the

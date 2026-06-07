@@ -93,7 +93,7 @@ Result: `HeuristicSolver.solves() == False` for all valid instances. ✓
 - Once S0 is fixed (`new_A`), the joker is free. Its only valid destination is S1 — the only set where substituting for `C(n+3)[0]` keeps the run valid.
 - `C(n+3)[0]` freed from S1 forms the chain-colour member in `new_C`. The completers `X(n+3)[0]` and `Y(n+3)[0]` are copy-blocked from the blocker runs, so `new_C` is their only valid group home.
 
-`check_uniqueness` gate enforces this at runtime. Seeds that happen to allow an alternative path (~5–15%) are rejected by the gate and retried.
+`find_alternative_solution` gate enforces this at runtime. Seeds that happen to allow an alternative path (~5–15%) are rejected by the gate and retried.
 
 ### Expected rejection rates
 
