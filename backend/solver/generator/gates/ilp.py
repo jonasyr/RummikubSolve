@@ -28,7 +28,7 @@ from __future__ import annotations
 
 __all__ = ["run_ilp_gates"]
 
-from solver.engine.solver import check_uniqueness, solve
+from solver.engine.solver import find_alternative_solution, find_deep_chain_solution, solve
 from solver.models.board_state import BoardState, Solution
 
 _FALLBACK_STATUSES = frozenset({"timeout_fallback", "infeasible_fallback"})
@@ -52,7 +52,7 @@ def run_ilp_gates(
     solve_timeout:
         Seconds allowed for the primary ILP solve.  Passed to ``solve()``.
     uniqueness_timeout:
-        Seconds allowed for the uniqueness ILP.  Passed to ``check_uniqueness()``.
+        Seconds allowed for the uniqueness ILP.  Passed to ``find_*`` helpers.
 
     Returns
     -------
@@ -63,10 +63,10 @@ def run_ilp_gates(
     - ``"not_solvable"`` — solver could not place all rack tiles.
     - ``"solve_status:<status>"`` — solver used a fallback path (timeout /
       infeasible).
-    - ``"not_unique"`` — an alternative arrangement achieves the same
-      tile-placement count.
-    - ``"chain_too_shallow:<actual><declared>"`` — template invariant
-      violated; chain depth below the declared minimum.
+    - ``"chain_too_shallow:<actual><declared>"`` — no optimal solution
+      achieves the declared chain depth (template invariant violated).
+    - ``"not_unique"`` — another optimal arrangement also achieves
+      chain_depth >= declared (two expert-level paths exist).
     """
     # Step 1: attempt to solve.
     solution = solve(state, timeout_seconds=solve_timeout)
@@ -79,17 +79,35 @@ def run_ilp_gates(
     if solution.solve_status in _FALLBACK_STATUSES:
         return False, f"solve_status:{solution.solve_status}", solution
 
-    # Step 4–5: the optimal solution must be unique.
-    if not check_uniqueness(state, solution, timeout_seconds=uniqueness_timeout):
-        return False, "not_unique", solution
-
-    # Step 6: template chain-depth invariant.
+    # Step 4: find an optimal solution with chain_depth >= declared.
+    # The primary ILP solution may have lower chain_depth (the solver optimises
+    # tile placement, not chain depth).  Search all optimal solutions for one
+    # that meets the tier threshold.
     if solution.chain_depth < declared_chain_depth:
-        return (
-            False,
-            f"chain_too_shallow:{solution.chain_depth}<{declared_chain_depth}",
-            solution,
+        deep = find_deep_chain_solution(
+            state,
+            n_tiles=solution.tiles_placed,
+            min_chain_depth=declared_chain_depth,
+            timeout_seconds=uniqueness_timeout,
+            initially_excluded=(
+                [solution.active_set_indices] if solution.active_set_indices else None
+            ),
         )
+        if deep is None:
+            return (
+                False,
+                f"chain_too_shallow:{solution.chain_depth}<{declared_chain_depth}",
+                solution,
+            )
+        solution = deep  # Proceed with the deep-chain solution.
+
+    # Step 5: the deep-chain solution must be unique at the declared difficulty tier.
+    # An alternative that places the same tile count but has chain_depth below
+    # declared_chain_depth is a lower-difficulty arrangement — not a competing
+    # expert-level path.  Only reject when the alternative meets the tier threshold.
+    alt = find_alternative_solution(state, solution, timeout_seconds=uniqueness_timeout)
+    if alt is not None and alt.chain_depth >= declared_chain_depth:
+        return False, "not_unique", solution
 
     # All checks passed.
     return True, "", solution

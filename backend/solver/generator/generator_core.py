@@ -12,8 +12,8 @@
 6. Heuristic solver gate (human-analog triviality check).
 
 On any gate failure the attempt is logged and a new seed / template is tried.
-``TemplateInvariantError`` is re-raised immediately (not retried) because a
-``chain_too_shallow`` result indicates a template bug, not a random seed failure.
+A ``chain_too_shallow`` result from the ILP gate is retried like any other
+rejection — the ILP may pick a shallow primary even when a deep solution exists.
 
 See ``Puzzle Generation Rebuild Plan.md`` §4.2.2 and §4.5.
 """
@@ -33,7 +33,6 @@ from solver.generator.gates.structural import run_post_ilp_gates, run_pre_ilp_ga
 from solver.generator.puzzle_result import PuzzleGenerationError, PuzzleResult
 from solver.generator.set_enumerator import enumerate_valid_sets
 from solver.generator.templates import get_template, list_templates
-from solver.generator.templates.base import TemplateInvariantError
 from solver.models.board_state import BoardState
 
 logger = structlog.get_logger(__name__)
@@ -83,10 +82,6 @@ def generate_puzzle(
     PuzzleGenerationError
         When no valid puzzle is produced within *max_attempts*, or when the
         registry contains no templates for the requested tier.
-    TemplateInvariantError
-        When the ILP solver returns a ``chain_depth`` below the template's
-        declared minimum.  This indicates a **template bug** and is never
-        retried.
     """
     effective_seed = seed if seed is not None else random.randrange(2**32)
     rng = random.Random(effective_seed)
@@ -139,15 +134,6 @@ def generate_puzzle(
             state, instance.declared_chain_depth
         )
         if not ilp_ok:
-            # chain_too_shallow is a template-design bug, not a seed failure.
-            # Re-raise immediately so the caller can fix the template rather
-            # than silently exhausting the retry budget.
-            if ilp_reason.startswith("chain_too_shallow:"):
-                raise TemplateInvariantError(
-                    f"Template {template.template_id!r} declared "
-                    f"chain_depth>={instance.declared_chain_depth} "
-                    f"but the solver returned: {ilp_reason}"
-                )
             logger.info(
                 "puzzle_rejected",
                 template_id=template.template_id,

@@ -1,0 +1,79 @@
+{
+  "template_id": "T1_joker_displacement_v1",
+  "template_version": "1",
+  "tier": "expert",
+  "board_sets": [
+    {
+      "type": "group",
+      "tiles": [
+        {"color": "red",    "number": 9,    "copy_id": 0, "is_joker": false},
+        {"color": "blue",   "number": 9,    "copy_id": 0, "is_joker": false},
+        {"color": "black",  "number": 9,    "copy_id": 0, "is_joker": false},
+        {"color": null,     "number": null, "copy_id": 0, "is_joker": true}
+      ]
+    },
+    {
+      "type": "run",
+      "tiles": [
+        {"color": "red", "number": 8,  "copy_id": 0, "is_joker": false},
+        {"color": "red", "number": 9,  "copy_id": 1, "is_joker": false},
+        {"color": "red", "number": 10, "copy_id": 0, "is_joker": false}
+      ]
+    },
+    {
+      "type": "run",
+      "tiles": [
+        {"color": "blue", "number": 8,  "copy_id": 0, "is_joker": false},
+        {"color": "blue", "number": 9,  "copy_id": 1, "is_joker": false},
+        {"color": "blue", "number": 10, "copy_id": 1, "is_joker": false}
+      ]
+    },
+    {
+      "type": "run",
+      "tiles": [
+        {"color": "black", "number": 8,  "copy_id": 0, "is_joker": false},
+        {"color": "black", "number": 9,  "copy_id": 1, "is_joker": false},
+        {"color": "black", "number": 10, "copy_id": 1, "is_joker": false}
+      ]
+    },
+    {
+      "type": "group",
+      "tiles": [
+        {"color": "red",   "number": 1, "copy_id": 0, "is_joker": false},
+        {"color": "blue",  "number": 1, "copy_id": 0, "is_joker": false},
+        {"color": "black", "number": 1, "copy_id": 0, "is_joker": false}
+      ]
+    },
+    {
+      "type": "run",
+      "tiles": [
+        {"color": "yellow", "number": 1, "copy_id": 0, "is_joker": false},
+        {"color": "yellow", "number": 2, "copy_id": 0, "is_joker": false},
+        {"color": "yellow", "number": 3, "copy_id": 0, "is_joker": false}
+      ]
+    },
+    {
+      "type": "run",
+      "tiles": [
+        {"color": "yellow", "number": 11, "copy_id": 0, "is_joker": false},
+        {"color": "yellow", "number": 12, "copy_id": 0, "is_joker": false},
+        {"color": "yellow", "number": 13, "copy_id": 0, "is_joker": false}
+      ]
+    }
+  ],
+  "rack": [
+    {"color": "yellow", "number": 9,  "copy_id": 0, "is_joker": false},
+    {"color": "blue",   "number": 10, "copy_id": 0, "is_joker": false},
+    {"color": "black",  "number": 10, "copy_id": 0, "is_joker": false}
+  ],
+  "declared_chain_depth": 3,
+  "declared_disruption_min": 8,
+  "construction_notes": {
+    "chain_color": "red",
+    "color_x": "blue",
+    "color_y": "black",
+    "color_z": "yellow",
+    "base_n": 7,
+    "joker_substitutes": "yellow:9"
+  }
+}
