@@ -156,7 +156,13 @@ Lower-difficulty alternatives (chain_depth below the tier threshold) do not coun
 `puzzle_endpoint()` checks `request.template_id`: non-null and non-"legacy" → routes to `generate_template_puzzle()` from `generator_core`; otherwise → legacy `generate_puzzle()` from `puzzle_generator`.
 
 ### Test Fixture Pattern
-Slow ILP tests use `@pytest.mark.slow`. Fast structural tests (no ILP) check invariants over 20 seeds (`_SEEDS_FAST = range(1, 21)`). Module-scoped fixtures share expensive solver results within a test class. Fast tests mock `run_ilp_gates` via `_PATCH_ILP`. JSON snapshot fixtures in `tests/fixtures/templates/` (e.g. `t1_seed_1.json`) lock deterministic output for regression detection.
+Slow ILP tests use `@pytest.mark.slow`. Fast structural tests (no ILP) check invariants over 20 seeds (`_SEEDS_FAST = range(1, 21)`); slow gate compliance tests use 10 seeds (`_SEEDS_ILP = range(1, 11)`). Module-scoped fixtures share expensive solver results within a test class. Fast tests mock `run_ilp_gates` via `_PATCH_ILP`. JSON snapshot fixtures in `tests/fixtures/templates/` (e.g. `t1_seed_1.json`) lock deterministic output for regression detection.
+
+`isolated_registry` fixture (in `test_generator_core.py`) monkeypatches `TEMPLATE_REGISTRY` to an empty dict for the duration of each test — prevents cross-test registry pollution when templates auto-register on import. Patch constants (`_PATCH_PRE`, `_PATCH_ILP`, `_PATCH_POST`, `_PATCH_HS`, `_PATCH_DISRUPTION`, `_PATCH_ENUM`) all target the import site in `generator_core`, not the definition site.
+
+`test_ilp_gate.py` tests `run_ilp_gates()` directly with real ILP (happy path, not_solvable, chain_too_shallow) and mocks (`find_alternative_solution`, timeout_fallback). Lower-depth alternatives (`alt.chain_depth < declared_chain_depth`) do NOT trigger `not_unique` — gate passes.
+
+`test_puzzle_generator_v2.py` is the Phase 5 v2 pipeline test suite (§7.2–§7.6). The entire module is marked `pytestmark = pytest.mark.slow`. Module-scoped fixtures `_v2_easy/_v2_medium/_v2_hard/_v2_expert/_v2_nightmare` (seeds 1–5) are generated once per session to avoid ~1200s of redundant ILP calls. Exception: §7.6 performance tests (`test_easy_v2_generation_under_5s`, `test_board_builder_under_200ms`) are NOT marked slow — they assert fast wall-clock bounds. `test_difficulty_distribution` checks composite scores in [0,100] and easy < medium ordering but does NOT enforce strict adjacent-tier ordering (hard/expert/nightmare) due to HiGHS non-determinism in `solution_fragility`. Hypothesis tests (`test_generated_puzzle_always_solvable`, `test_tile_conservation`) use `max_examples=1` and `assume(False)` on `PuzzleGenerationError` to skip seeds where low `max_attempts` exhausts budget.
 
 ### Frontend State Pattern
 Zustand store in `src/store/`. Play mode state (rack, board, solution) lives in a single store slice. Components dispatch camelCase actions; no direct mutation.
@@ -186,6 +192,11 @@ Zustand store in `src/store/`. Play mode state (rack, board, solution) lives in 
 - T1 test UI added to `PlayPuzzleControls.tsx` (T1 seed input + "T1 test" button)
 - Snapshot fixture `tests/fixtures/templates/t1_seed_1.json` added for regression testing
 - Full template test suite in `tests/solver/templates/` (fast structural + slow ILP)
+- Template authoring guide (`solver/generator/templates/README.md`): authoring contract, code review checklist, T1 chain construction proof, why-unique argument, rejection-rate table by gate
+- `test_ilp_gate.py`: uses `find_alternative_solution` mock; covers lower-depth-alternative pass case and `solve_status:timeout_fallback` rejection
+- `test_t1_joker_displacement.py`: 20-seed structural invariant tests + 10-seed slow gate compliance; checks `construction_notes` keys (`chain_color`, `base_n`, `joker_substitutes`)
+- `test_generator_core.py`: `isolated_registry` fixture prevents cross-test registry pollution; 6 patch constants all target import site in `generator_core`
+- `test_puzzle_generator_v2.py`: Phase 5 v2 pipeline suite — §7.2 integration (solvability + store round-trip for all 7 metric fields), §7.3 property (Hypothesis, max_examples=1), §7.4 simulation (difficulty distribution, non-trivial expert guard), §7.5 regression (v1 backward compatibility), §7.6 performance (easy < 5s, BoardBuilder < 200ms); module-scoped fixtures added after perf optimization to eliminate redundant puzzle generation
 
 ### Key design decisions:
 - **T1 template pivot**: Original design had S0 as a RUN with joker, S1 as a GROUP. Final implementation uses S0 as a 4-colour GROUP (max capacity blocks trivial extensions cleanly) and S1 as a C-colour RUN.
@@ -203,6 +214,8 @@ Zustand store in `src/store/`. Play mode state (rack, board, solution) lives in 
 - **Snapshot fixtures** — `tests/fixtures/templates/t1_seed_1.json` locks template output for seed=1. Unexpected diffs signal regressions; intentional changes require fixture regeneration.
 - **Template n range clamped to {3..7}** — n=8 excluded: n+2=10 is adjacent to D3 distractor start (11), enabling trivial extension. Verify range when adding new templates with similar structure.
 - **Frontend tests**: use `npm run test` (Vitest) for unit tests and `npm run e2e` (Playwright) for browser flows — always run both before marking frontend tasks done.
+- **Template README required** — `solver/generator/templates/README.md` documents the authoring contract (required docstring sections, code review checklist) and per-template invariants (chain construction, why-unique proof, rejection-rate table). Every new template must have a section there before merging.
+- **ILP gate reason format** — rejection reasons from `run_ilp_gates()`: `not_solvable`, `not_unique`, `chain_too_shallow:<actual><declared>` (e.g. `chain_too_shallow:2<999`), `solve_status:<status>` (e.g. `solve_status:timeout_fallback`). Use `.startswith()` checks, not equality, for `chain_too_shallow`.
 
 <!-- END AUTO-MANAGED -->
 
