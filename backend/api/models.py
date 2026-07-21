@@ -42,7 +42,10 @@ class TileInput(BaseModel):
 
 class BoardSetInput(BaseModel):
     type: Literal["run", "group"]
-    tiles: list[TileInput] = Field(min_length=3, max_length=13)
+    # min_length=1 (not 3) to support v2 puzzle boards which may include
+    # "orphaned" sets — partial tile groups left after individual tile removal.
+    # The ILP solver handles these via its tile-conservation constraints.
+    tiles: list[TileInput] = Field(min_length=1, max_length=13)
 
 
 class RulesInput(BaseModel):
@@ -155,23 +158,142 @@ class SolveResponse(BaseModel):
 class PuzzleRequest(BaseModel):
     difficulty: Literal["easy", "medium", "hard", "expert", "nightmare", "custom"] = "medium"
     seed: int | None = None
+    # Phase 7: Fetch a specific puzzle by ID (used by pregenerated calibration batches).
+    # When set, difficulty/seed/seen_ids are ignored and the puzzle is loaded from pool.
+    puzzle_id: str | None = None
     # Phase 5: UUIDs of puzzles the client has already seen; used to avoid duplicates
     # when drawing from the pre-generated pool.  Capped at 500 to bound request size.
     seen_ids: list[str] = Field(default_factory=list, max_length=500)
+    template_id: str | None = None
     # Phase 7a: Custom mode parameters — ignored for all non-custom difficulties.
-    sets_to_remove: int = Field(3, ge=1, le=8)    # sets to sacrifice (expanded from 5 to 8)
-    min_board_sets: int = Field(8, ge=5, le=25)   # board sets before sacrifice
+    sets_to_remove: int = Field(3, ge=1, le=8)  # sets to sacrifice (expanded from 5 to 8)
+    min_board_sets: int = Field(8, ge=5, le=25)  # board sets before sacrifice
     max_board_sets: int = Field(14, ge=5, le=25)  # board sets before sacrifice
-    min_chain_depth: int = Field(0, ge=0, le=4)   # minimum solution chain depth
-    min_disruption: int = Field(0, ge=0, le=60)   # minimum disruption score
+    min_chain_depth: int = Field(0, ge=0, le=4)  # minimum solution chain depth
+    min_disruption: int = Field(0, ge=0, le=60)  # minimum disruption score
 
 
 class PuzzleResponse(BaseModel):
     board_sets: list[BoardSetInput]
     rack: list[TileInput]
     difficulty: str
+    seed: int | None = None
     tile_count: int
     disruption_score: int
-    chain_depth: int = 0    # Phase 3: longest rearrangement chain depth
+    chain_depth: int = 0  # Phase 3: longest rearrangement chain depth
     is_unique: bool = True  # Phase 3: solution uniqueness verified for Expert/Nightmare
-    puzzle_id: str = ""     # Phase 5: UUID for pool-drawn puzzles; "" for live-generated
+    puzzle_id: str = ""  # Phase 5: UUID for pool-drawn puzzles; "" for live-generated
+    # Phase 4 (v2 generator) — populated when generator_version="v2"; 0.0/"v1" otherwise.
+    composite_score: float = 0.0
+    branching_factor: float = 0.0
+    deductive_depth: float = 0.0
+    red_herring_density: float = 0.0
+    working_memory_load: float = 0.0
+    tile_ambiguity: float = 0.0
+    solution_fragility: float = 0.0
+    generator_version: str = "v1"
+    template_id: str = "legacy"
+    template_version: str = "0"
+
+
+class CalibrationBatchEntry(BaseModel):
+    difficulty: Literal["easy", "medium", "hard", "expert", "nightmare"]
+    seed: int | None = None
+    # Phase 7: pre-generated puzzles reference pool ID for instant load.
+    puzzle_id: str | None = None
+
+
+class CalibrationBatchResponse(BaseModel):
+    batch_name: str
+    entries: list[CalibrationBatchEntry]
+
+
+class TelemetryTileInput(BaseModel):
+    color: Literal["blue", "red", "black", "yellow"] | None = None
+    number: int | None = None
+    joker: bool = False
+
+
+class TelemetryRequest(BaseModel):
+    event_type: Literal[
+        "puzzle_loaded",
+        "tile_placed",
+        "tile_moved",
+        "tile_returned_to_rack",
+        "undo_pressed",
+        "puzzle_solved",
+        "puzzle_abandoned",
+        "puzzle_rated",
+    ]
+    event_at: str
+    puzzle_id: str = ""
+    attempt_id: str = ""
+    difficulty: str
+    seed: int | None = None
+    batch_name: str | None = None
+    batch_run_id: str | None = None
+    batch_index: int | None = Field(default=None, ge=0)
+    generator_version: str
+    composite_score: float
+    branching_factor: float
+    deductive_depth: float
+    red_herring_density: float
+    working_memory_load: float
+    tile_ambiguity: float
+    solution_fragility: float
+    disruption_score: int
+    chain_depth: int
+    tile: TelemetryTileInput | None = None
+    from_row: int | None = None
+    from_col: int | None = None
+    to_row: int | None = None
+    to_col: int | None = None
+    elapsed_ms: int | None = Field(default=None, ge=0)
+    move_count: int | None = Field(default=None, ge=0)
+    undo_count: int | None = Field(default=None, ge=0)
+    redo_count: int | None = Field(default=None, ge=0)
+    commit_count: int | None = Field(default=None, ge=0)
+    revert_count: int | None = Field(default=None, ge=0)
+    tiles_placed: int | None = Field(default=None, ge=0)
+    tiles_remaining: int | None = Field(default=None, ge=0)
+    self_rating: int | None = Field(default=None, ge=1, le=10)
+    self_label: Literal["trivial", "straightforward", "challenging", "brutal"] | None = None
+    stuck_moments: int | None = Field(default=None, ge=0)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_event_payload(self) -> TelemetryRequest:
+        if self.event_type == "tile_placed":
+            if self.tile is None or self.to_row is None or self.to_col is None:
+                raise ValueError("tile_placed requires tile, to_row, and to_col.")
+        elif self.event_type == "tile_moved":
+            if (
+                self.tile is None
+                or self.from_row is None
+                or self.from_col is None
+                or self.to_row is None
+                or self.to_col is None
+            ):
+                raise ValueError(
+                    "tile_moved requires tile, from_row, from_col, to_row, and to_col."
+                )
+        elif self.event_type == "tile_returned_to_rack":
+            if self.tile is None:
+                raise ValueError("tile_returned_to_rack requires tile.")
+        elif self.event_type == "puzzle_solved":
+            if self.elapsed_ms is None or self.move_count is None or self.undo_count is None:
+                raise ValueError("puzzle_solved requires elapsed_ms, move_count, and undo_count.")
+        elif self.event_type == "puzzle_abandoned":
+            if self.elapsed_ms is None or self.tiles_placed is None or self.tiles_remaining is None:
+                raise ValueError(
+                    "puzzle_abandoned requires elapsed_ms, tiles_placed, and tiles_remaining."
+                )
+        elif self.event_type == "puzzle_rated" and (
+            self.self_rating is None or self.self_label is None
+        ):
+            raise ValueError("puzzle_rated requires self_rating and self_label.")
+        return self
+
+
+class TelemetryResponse(BaseModel):
+    status: Literal["ok"]

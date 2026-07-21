@@ -24,6 +24,7 @@ Solvability is guaranteed by construction. Joker-free in v1.
 
 from __future__ import annotations
 
+import logging
 import random
 from collections import Counter
 from dataclasses import dataclass
@@ -35,7 +36,12 @@ from ..models.board_state import BoardState
 from ..models.tile import Color, Tile
 from ..models.tileset import TileSet
 from ..validator.rule_checker import is_valid_set
+from .board_builder import BoardBuilder
+from .difficulty_evaluator import DifficultyEvaluator
 from .set_enumerator import enumerate_groups, enumerate_runs, enumerate_valid_sets
+from .tile_pool import assign_copy_ids as _assign_copy_ids
+from .tile_pool import make_tile_pool as _make_pool
+from .tile_remover import TileRemover
 
 Difficulty = Literal["easy", "medium", "hard", "expert", "nightmare", "custom"]
 
@@ -197,9 +203,20 @@ class PuzzleResult:
     rack: list[Tile]
     difficulty: Difficulty
     disruption_score: int
+    seed: int | None = None
     chain_depth: int = 0
     is_unique: bool = True
     joker_count: int = 0
+    # v2 fields — populated by _attempt_generate_v2(); default to 0.0/"v1"
+    # so that v1-generated results remain fully compatible.
+    branching_factor: float = 0.0
+    deductive_depth: float = 0.0
+    red_herring_density: float = 0.0
+    working_memory_load: float = 0.0
+    tile_ambiguity: float = 0.0
+    solution_fragility: float = 0.0
+    composite_score: float = 0.0
+    generator_version: str = "v1"
 
 
 @dataclass(frozen=True)
@@ -234,6 +251,227 @@ class _AttemptOutcome:
     chain_depth: int | None = None
 
 
+# ---------------------------------------------------------------------------
+# v2 generation (BoardBuilder + TileRemover + DifficultyEvaluator)
+# ---------------------------------------------------------------------------
+
+# Board/rack sizing and overlap bias per difficulty tier for v2 (§4.1).
+_BOARD_SIZE_RANGES_V2: dict[str, tuple[int, int]] = {
+    "easy": (6, 9),
+    "medium": (8, 11),
+    "hard": (10, 13),
+    "expert": (12, 15),
+    "nightmare": (13, 16),
+    "custom": (8, 14),
+}
+
+_RACK_SIZE_RANGES_V2: dict[str, tuple[int, int]] = {
+    "easy": (2, 3),
+    "medium": (3, 4),
+    "hard": (4, 5),
+    "expert": (5, 7),
+    "nightmare": (6, 8),
+    "custom": (3, 6),
+}
+
+_OVERLAP_BIASES_V2: dict[str, float] = {
+    "easy": 0.3,
+    "medium": 0.4,
+    "hard": 0.5,
+    "expert": 0.7,
+    "nightmare": 0.85,
+    "custom": 0.5,
+}
+
+# Per-difficulty attempt limits for the v2 outer retry loop.
+_DEFAULT_MAX_ATTEMPTS_V2: dict[str, int] = {
+    # Live generation limits (easy/medium/hard): kept low to avoid HiGHS worker-thread
+    # hang on Windows where time_limit is not respected in AnyIO threads.
+    # The trivial_extension filter increases the rejection rate, but 503 on live
+    # generation is acceptable — calibration uses gen_calibration_batch.py with
+    # explicit max_attempts=2000 for offline pregeneration.
+    "easy": 50,
+    "medium": 80,
+    "hard": 120,
+    # Pool-miss fallback only — called rarely since expert/nightmare are pool-first.
+    "expert": 2000,
+    "nightmare": 3000,
+    "custom": 100,
+}
+
+# Tier ordering for ±1 adjacency check in _attempt_generate_v2.
+_TIER_ORDER = ["easy", "medium", "hard", "expert", "nightmare"]
+
+# Minimum quality gates per tier for v2 puzzles (Phase 6 calibration results).
+_MIN_DISRUPTION_V2: dict[str, int] = {
+    "easy": 3,
+    "medium": 6,
+    "hard": 10,
+    "expert": 14,
+    "nightmare": 18,
+}
+_MIN_FRAGILITY_V2: dict[str, float] = {
+    "easy": 0.0,
+    "medium": 0.0,
+    "hard": 0.1,
+    "expert": 0.25,
+    "nightmare": 0.4,
+}
+
+try:
+    import structlog as _structlog
+except ImportError:  # pragma: no cover - fallback for minimal environments
+    _structlog = None  # type: ignore[assignment]
+
+logger = _structlog.get_logger(__name__) if _structlog is not None else logging.getLogger(__name__)
+
+
+def _attempt_generate_v2(
+    rng: random.Random,
+    difficulty: Difficulty,
+    solve_timeout: float | None = None,
+) -> _AttemptOutcome:
+    """New v2 generation: BoardBuilder → TileRemover → DifficultyEvaluator (§4.1).
+
+    Replaces the sacrifice-based approach with strategic tile removal and
+    multi-metric difficulty scoring.
+    """
+    board_sets = BoardBuilder.build(
+        rng=rng,
+        board_size_range=_BOARD_SIZE_RANGES_V2.get(difficulty, (8, 14)),
+        overlap_bias=_OVERLAP_BIASES_V2.get(difficulty, 0.5),
+    )
+
+    if len(board_sets) < 4:
+        return _AttemptOutcome(result=None, rejection_reason="board_too_small")
+
+    removal_result = TileRemover.remove(
+        board_sets=board_sets,
+        rng=rng,
+        rack_size_range=_RACK_SIZE_RANGES_V2.get(difficulty, (3, 6)),
+        strategy="maximize_cascade",
+        # Do NOT pass solve_timeout here — TileRemover uses its own short default
+        # (_REMOVAL_STEP_TIMEOUT = 2.0 s) for intermediate solvability checks.
+        # A long solve_timeout inflates per-attempt time when HiGHS is slow.
+    )
+
+    if removal_result is None:
+        return _AttemptOutcome(result=None, rejection_reason="removal_failed")
+
+    remaining_board, rack, _ = removal_result
+
+    # Quality gate: reject if any rack tile trivially extends a COMPLETE board set.
+    # v2 boards may contain orphaned partial sets (1–2 tile stubs) from sequential
+    # removal — completing those is a puzzle challenge, not a trivial move.
+    # Only complete sets (≥3 tiles) produce visually obvious "extend the run" slots.
+    # Placed BEFORE solve() so rejected attempts skip the expensive solver call.
+    if _any_trivial_extension_v2(rack, remaining_board):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="trivial_extension",
+            rack_size=len(rack),
+            tiles_placed=0,
+            solve_status=None,
+        )
+
+    # Final solve verification with a slightly longer timeout.
+    state = BoardState(board_sets=remaining_board, rack=rack)
+    solution = solve(state, timeout_seconds=solve_timeout or 8.0)
+
+    if solution.tiles_placed < len(rack):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason=f"solve_{solution.solve_status}",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
+
+    # Evaluate difficulty; skip fragility for easy/medium (too slow per puzzle).
+    skip_expensive = difficulty in ("easy", "medium")
+    score = DifficultyEvaluator.evaluate(state, solution, skip_expensive=skip_expensive)
+
+    # Minimum quality gates — reject perceptually trivial puzzles before tier check.
+    # Thresholds derived from Phase 6 calibration (batch phase6_batch_v1, 25 puzzles).
+    if score.disruption_score < _MIN_DISRUPTION_V2.get(difficulty, 0):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="disruption_too_low",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
+    if score.solution_fragility < _MIN_FRAGILITY_V2.get(difficulty, 0.0):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="fragility_too_low",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
+
+    # Tier check: reject puzzles whose composite score is more than 1 tier away
+    # from the requested difficulty.  Tolerance = 1 adjacent tier (e.g. an easy
+    # puzzle scoring "medium" is OK, but "expert" is rejected).
+    if (
+        difficulty in _TIER_ORDER
+        and score.classified_tier in _TIER_ORDER
+        and abs(_TIER_ORDER.index(difficulty) - _TIER_ORDER.index(score.classified_tier)) > 1
+    ):
+        return _AttemptOutcome(
+            result=None,
+            rejection_reason="tier_mismatch",
+            rack_size=len(rack),
+            tiles_placed=solution.tiles_placed,
+            solve_status=solution.solve_status,
+        )
+
+    # Uniqueness check for expert/nightmare.
+    is_unique = True
+    if difficulty in ("expert", "nightmare"):
+        is_unique = check_uniqueness(state, solution, timeout_seconds=5.0)
+
+    logger.info(
+        "puzzle_generated",
+        generator_version="v2.0.0",
+        difficulty=difficulty,
+        composite_score=score.composite_score,
+        branching_factor=score.branching_factor,
+        board_size=len(remaining_board),
+        rack_size=len(rack),
+    )
+
+    return _AttemptOutcome(
+        result=PuzzleResult(
+            board_sets=remaining_board,
+            rack=rack,
+            difficulty=difficulty,
+            disruption_score=score.disruption_score,
+            chain_depth=score.chain_depth,
+            is_unique=is_unique,
+            joker_count=0,
+            branching_factor=score.branching_factor,
+            deductive_depth=score.deductive_depth,
+            red_herring_density=score.red_herring_density,
+            working_memory_load=score.working_memory_load,
+            tile_ambiguity=score.tile_ambiguity,
+            solution_fragility=score.solution_fragility,
+            composite_score=score.composite_score,
+            generator_version="v2.0.0",
+        ),
+        rack_size=len(rack),
+        tiles_placed=solution.tiles_placed,
+        solve_status=solution.solve_status,
+        disruption_score=score.disruption_score,
+        chain_depth=score.chain_depth,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
 def generate_puzzle(
     difficulty: Difficulty = "medium",
     seed: int | None = None,
@@ -245,14 +483,46 @@ def generate_puzzle(
     min_chain_depth: int = 0,
     min_disruption: int = 0,
     solve_timeout: float | None = None,
+    generator_version: str = "v2",
 ) -> PuzzleResult:
-    """Generate a random, pre-verified Rummikub puzzle at the given difficulty."""
+    """Generate a random, pre-verified Rummikub puzzle at the given difficulty.
+
+    Args:
+        difficulty:        Tier to generate.
+        seed:              RNG seed for determinism.
+        max_attempts:      Override for the outer retry loop limit.
+        pregen:            Use pre-generation constraints (v1 only).
+        sets_to_remove:    Custom mode: sets to sacrifice (v1 only).
+        min_board_sets:    Custom mode: minimum board sets (v1 only).
+        max_board_sets:    Custom mode: maximum board sets (v1 only).
+        min_chain_depth:   Custom mode: minimum chain depth (v1 only).
+        min_disruption:    Custom mode: minimum disruption (v1 only).
+        solve_timeout:     ILP solver time limit per attempt.
+        generator_version: "v2" (default) uses BoardBuilder+TileRemover+DifficultyEvaluator.
+                           "v1" uses the legacy sacrifice-based approach.
+    """
     if difficulty not in ("easy", "medium", "hard", "expert", "nightmare", "custom"):
         raise ValueError(
             f"Unknown difficulty {difficulty!r}. "
             f"Use 'easy', 'medium', 'hard', 'expert', 'nightmare', or 'custom'."
         )
 
+    effective_seed = seed if seed is not None else random.SystemRandom().randrange(2**31)
+    rng = random.Random(effective_seed)
+
+    if generator_version == "v2":
+        n_attempts = max_attempts or _DEFAULT_MAX_ATTEMPTS_V2.get(difficulty, 100)
+        for _ in range(n_attempts):
+            outcome = _attempt_generate_v2(rng, difficulty, solve_timeout)
+            if outcome.result is not None:
+                outcome.result.seed = effective_seed
+                return outcome.result
+        raise PuzzleGenerationError(
+            f"Could not generate a {difficulty!r} puzzle after {n_attempts} attempts "
+            f"(generator_version='v2')."
+        )
+
+    # v1 legacy path — unchanged behaviour.
     if max_attempts is not None:
         n_attempts = max_attempts
     elif pregen:
@@ -266,7 +536,6 @@ def generate_puzzle(
     if pregen and effective_solve_timeout is None:
         effective_solve_timeout = _PREGEN_SOLVE_TIMEOUT
 
-    rng = random.Random(seed)
     for _ in range(n_attempts):
         outcome = _attempt_generate_with_reason(
             rng,
@@ -280,6 +549,7 @@ def generate_puzzle(
             solve_timeout=effective_solve_timeout,
         )
         if outcome.result is not None:
+            outcome.result.seed = effective_seed
             return outcome.result
 
     raise PuzzleGenerationError(
@@ -364,20 +634,16 @@ def _attempt_generate_with_reason(
     input_board = rack_candidate.remaining_board
     rack = rack_candidate.rack
     rack_size = len(rack)
-    if (
-        pregen_profile is not None
-        and (
-            rack_candidate.complexity.rack_tiles_placeable < rack_size
-            or rack_candidate.complexity.total_rack_tile_coverage
-            < pregen_profile.min_total_rack_tile_coverage
-            or rack_candidate.complexity.multi_option_rack_tiles
-            < pregen_profile.min_multi_option_rack_tiles
-            or rack_candidate.complexity.min_rack_tile_coverage < 1
-            or
-            rack_candidate.complexity.candidate_set_count > pregen_profile.max_candidate_sets
-            or rack_candidate.complexity.estimated_ilp_columns > pregen_profile.max_ilp_columns
-            or rack_candidate.complexity.estimated_ilp_rows > pregen_profile.max_ilp_rows
-        )
+    if pregen_profile is not None and (
+        rack_candidate.complexity.rack_tiles_placeable < rack_size
+        or rack_candidate.complexity.total_rack_tile_coverage
+        < pregen_profile.min_total_rack_tile_coverage
+        or rack_candidate.complexity.multi_option_rack_tiles
+        < pregen_profile.min_multi_option_rack_tiles
+        or rack_candidate.complexity.min_rack_tile_coverage < 1
+        or rack_candidate.complexity.candidate_set_count > pregen_profile.max_candidate_sets
+        or rack_candidate.complexity.estimated_ilp_columns > pregen_profile.max_ilp_columns
+        or rack_candidate.complexity.estimated_ilp_rows > pregen_profile.max_ilp_rows
     ):
         if rack_candidate.complexity.rack_tiles_placeable < rack_size:
             return _AttemptOutcome(
@@ -490,32 +756,6 @@ def _attempt_generate_with_reason(
     )
 
 
-def _make_full_pool() -> BoardState:
-    """104 non-joker tiles (4 colors × 13 numbers × 2 copies), no jokers."""
-    rack = [
-        Tile(color, n, copy_id)
-        for color in Color
-        for n in range(1, 14)
-        for copy_id in (0, 1)
-    ]
-    return BoardState(board_sets=[], rack=rack)
-
-
-def _make_pool(n_jokers: int = 0) -> BoardState:
-    """104 non-joker tiles plus n_jokers joker tiles."""
-    if not (0 <= n_jokers <= 2):
-        raise ValueError(f"n_jokers must be 0, 1, or 2; got {n_jokers}")
-    rack: list[Tile] = [
-        Tile(color, n, copy_id)
-        for color in Color
-        for n in range(1, 14)
-        for copy_id in (0, 1)
-    ]
-    for j in range(n_jokers):
-        rack.append(Tile.joker(copy_id=j))
-    return BoardState(board_sets=[], rack=rack)
-
-
 def _inject_jokers_into_board(
     board_sets: list[TileSet],
     n_jokers: int,
@@ -568,23 +808,6 @@ def _pick_compatible_sets(all_sets: list[TileSet], n: int) -> list[TileSet]:
                 avail[k] -= v
 
     return selected
-
-
-def _assign_copy_ids(board_sets: list[TileSet]) -> list[TileSet]:
-    """Assign copy_ids 0/1 to distinguish duplicate (color, number) tiles."""
-    seen: Counter[tuple[Color | None, int | None]] = Counter()
-    result: list[TileSet] = []
-    for ts in board_sets:
-        new_tiles: list[Tile] = []
-        for t in ts.tiles:
-            if t.is_joker:
-                new_tiles.append(t)
-            else:
-                copy_id = seen[(t.color, t.number)]
-                new_tiles.append(Tile(color=t.color, number=t.number, copy_id=copy_id))
-                seen[(t.color, t.number)] += 1
-        result.append(TileSet(type=ts.type, tiles=new_tiles))
-    return result
 
 
 def _extract_rack(
@@ -747,20 +970,13 @@ def _estimate_complexity(
         slot_constraint_count += non_joker_slot_count + (1 if joker_slot_count > 0 else 0)
         seen_keys: set[tuple[bool, Color | None, int | None]] = set()
         for tile in candidate_set.tiles:
-            slot_key = (
-                (True, None, None)
-                if tile.is_joker
-                else (False, tile.color, tile.number)
-            )
+            slot_key = (True, None, None) if tile.is_joker else (False, tile.color, tile.number)
             if slot_key in seen_keys:
                 continue
             x_var_count += slot_to_match_count[slot_key]
             seen_keys.add(slot_key)
 
-        candidate_keys = {
-            (tile.is_joker, tile.color, tile.number)
-            for tile in candidate_set.tiles
-        }
+        candidate_keys = {(tile.is_joker, tile.color, tile.number) for tile in candidate_set.tiles}
         for rack_index, rack_tile in enumerate(state.rack):
             rack_key = (rack_tile.is_joker, rack_tile.color, rack_tile.number)
             if rack_key in candidate_keys:
@@ -790,9 +1006,34 @@ def _estimate_complexity(
 
 
 def _any_trivial_extension(rack: list[Tile], board_sets: list[TileSet]) -> bool:
-    """Return True if any rack tile can be directly appended to any board set."""
+    """Return True if any rack tile can be directly appended to any board set.
+
+    Used by the v1 path where all board sets are already complete (≥3 tiles).
+    See _any_trivial_extension_v2 for the v2-compatible variant.
+    """
     for tile in rack:
         for ts in board_sets:
+            if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
+                return True
+    return False
+
+
+def _any_trivial_extension_v2(rack: list[Tile], board_sets: list[TileSet]) -> bool:
+    """Return True if any rack tile trivially extends a COMPLETE board set.
+
+    v2 boards can contain orphaned partial sets (1–2 tiles) created by
+    TileRemover's sequential removal.  Fitting a tile into a 2-tile stub is
+    NOT automatically trivial — when multiple orphans are present, finding
+    which rack tile belongs to which stub is a combinatorial puzzle challenge.
+
+    We only reject if a rack tile can be appended to a COMPLETE set (≥3 tiles)
+    to produce another valid set.  That is the visually unambiguous "extend a
+    run by one" move that makes the puzzle too easy.
+    """
+    for tile in rack:
+        for ts in board_sets:
+            if len(ts.tiles) < 3:
+                continue  # partial sets are puzzle challenges, not trivial slots
             if is_valid_set(TileSet(type=ts.type, tiles=ts.tiles + [tile])):
                 return True
     return False

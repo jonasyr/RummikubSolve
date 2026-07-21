@@ -49,7 +49,9 @@ export default memo(function SetOverlay({ set, cellPx }: Props) {
       )}
       {isInvalid && validation.reason && (
         <span className="absolute -bottom-4 left-1 text-[9px] font-medium text-red-500 dark:text-red-400 whitespace-nowrap">
-          {t(validation.reason as Parameters<typeof t>[0])}
+          {t(
+            validation.reason.replace(/^play\./, "") as Parameters<typeof t>[0],
+          )}
         </span>
       )}
     </div>

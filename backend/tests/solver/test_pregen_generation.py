@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from solver.generator import pregenerate, puzzle_generator
 from solver.generator.pregenerate import _WorkerResult
 from solver.models.board_state import Solution

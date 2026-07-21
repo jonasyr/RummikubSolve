@@ -1,0 +1,30 @@
+{
+  "batch_name": "phase6_batch_v1",
+  "entries": [
+    { "difficulty": "easy", "seed": 1001 },
+    { "difficulty": "easy", "seed": 1002 },
+    { "difficulty": "easy", "seed": 1003 },
+    { "difficulty": "easy", "seed": 1004 },
+    { "difficulty": "easy", "seed": 1005 },
+    { "difficulty": "medium", "seed": 2001 },
+    { "difficulty": "medium", "seed": 2002 },
+    { "difficulty": "medium", "seed": 2003 },
+    { "difficulty": "medium", "seed": 2004 },
+    { "difficulty": "medium", "seed": 2005 },
+    { "difficulty": "hard", "seed": 3001 },
+    { "difficulty": "hard", "seed": 3002 },
+    { "difficulty": "hard", "seed": 3003 },
+    { "difficulty": "hard", "seed": 3004 },
+    { "difficulty": "hard", "seed": 3005 },
+    { "difficulty": "expert", "seed": 4001 },
+    { "difficulty": "expert", "seed": 4002 },
+    { "difficulty": "expert", "seed": 4003 },
+    { "difficulty": "expert", "seed": 4004 },
+    { "difficulty": "expert", "seed": 4005 },
+    { "difficulty": "nightmare", "seed": 5001 },
+    { "difficulty": "nightmare", "seed": 5002 },
+    { "difficulty": "nightmare", "seed": 5003 },
+    { "difficulty": "nightmare", "seed": 5004 },
+    { "difficulty": "nightmare", "seed": 5005 }
+  ]
+}

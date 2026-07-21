@@ -66,3 +66,15 @@ data/
 # Misc
 *.log
 Thumbs.db
+
+# Claude Code auto-memory
+.claude/auto-memory/dirty-files*
+
+# Serena project state
+.serena/
+
+# Dev notes / temp files
+backend/.tmp
+
+# Plan docs (local only)
+docs/

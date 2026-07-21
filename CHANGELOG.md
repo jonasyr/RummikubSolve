@@ -5,6 +5,226 @@ Format: **Phase → What was done → Why it matters**
 
 ---
 
+## [Unreleased] — 2026-04-22 — Rebuild Plan: Phase A (Infrastructure) + Phase B (Gates & Heuristic Solver)
+
+Implements §7 Phase A and Phase B of `Puzzle Generation Rebuild Plan.md`.
+All 8 issues (#27–#33, #67) closed; 8 PRs merged (#64–#72).
+
+### Phase A — Infrastructure scaffolding (issues #27–#29, #67; PRs #64–#68)
+
+- `solver/generator/gates/` package created with skeleton files for `structural.py`, `ilp.py`, `heuristic_solver.py`
+- `solver/generator/templates/` package created with skeleton files for `base.py`, `__init__.py`, and templates T1–T5
+- `solver/generator/generator_core.py` and `legacy_sacrifice.py` stubs created
+- `PuzzleStore` schema extended: `template_id TEXT DEFAULT 'legacy'` and `template_version TEXT DEFAULT '0'` columns added via `_MIGRATION_COLUMNS` idiom; backwards-compatible with existing pool rows
+- `PuzzleResponse` and `PuzzleRequest` extended with `template_id` / `template_version` fields (additive; no breaking change)
+- `tests/api/test_puzzle_endpoint.py` split into fast (mocked ILP, ~2s) and slow (real solver, ~500s) suites via `@pytest.mark.slow`; removed ~1200s redundant puzzle generation in CI
+
+### Phase B — Structural gates and heuristic solver (issues #30–#33; PRs #69–#72)
+
+- `gates/structural.py` — three pre-ILP gates: `check_no_trivial_extension` (strict, any board set size), `check_no_single_home`, `check_joker_structural`; plus `run_pre_ilp_gates` / `run_post_ilp_gates` combiners
+- `gates/__init__.py` — re-exports all gate functions
+- `gates/heuristic_solver.py` — `HeuristicSolver.solves()` 4-rule priority loop with cycle detection and greedy fallback; see deviation notes in `Puzzle Generation Rebuild Plan.md §Implementation Notes`
+- `tests/solver/gates/test_structural_integration.py` — 27 tests covering all gate combinations + Phase 7 easy/medium regression
+- `tests/solver/gates/test_heuristic_solver.py` — 65 fast tests + slow Phase 7 regression for all 25 calibration puzzles; 6 parametrised hard-fixture tests
+- `tests/solver/gates/conftest.py` — session-scoped `phase7_easy_medium` (10 puzzles) and `phase7_hard_expert_nightmare` (15 puzzles) fixtures shared between both test modules
+- `tests/fixtures/golden_puzzles/hard_001–006.json` — 6 hand-crafted `PuzzleResponse`-shaped fixtures that `HeuristicSolver.solves()` must return `False` for
+- `tests/fixtures/golden_puzzles/README.md` — fixture format documentation
+
+---
+
+## [Unreleased] — 2026-04-16 — Phase 7: First Clean Calibration — All Puzzles Still Trivially Easy
+
+### Result
+25 puzzles across all tiers (phase7_batch_v1) solved in under 1 minute, zero undos, all labeled "trivial" or "straightforward". The difficulty system remains non-functional. See `PUZZLE_DIFFICULTY_PROBLEM.md` for full root-cause analysis and proposed directions.
+
+| Tier      | Score (avg) | Solve time (avg) | Target      |
+|-----------|-------------|------------------|-------------|
+| easy      | 39.0        | ~4s              | 30s – 2min  |
+| medium    | 58.7        | ~7s              | 1min – 3min |
+| hard      | 59.8        | ~13s             | 2min – 5min |
+| expert    | 71.0        | ~18s             | 5min – 15min|
+| nightmare | 80.9        | ~28s             | 10min – 30min|
+
+### Added
+- `PUZZLE_DIFFICULTY_PROBLEM.md` — detailed post-mortem: root causes, history of attempts, hypotheses for a real fix, full calibration data
+- `_any_trivial_extension_v2()` — v2-specific trivial extension gate; rejects rack tiles that extend complete (≥3 tile) board sets only (partial stubs excluded to avoid 100% rejection rate)
+- `_solve_timed()` daemon-thread wrapper in `tile_remover.py` — hard Python-level deadline for HiGHS calls in AnyIO worker threads on Windows where `time_limit` is not respected
+- `batch_run_id` UUID per calibration session; emitted in `puzzle_solved`, `puzzle_rated`, `puzzle_abandoned` telemetry events
+- "New Run" button and post-completion overlay in calibration UI
+- `puzzle_id` fast-path in puzzle API — pool lookup by ID; live-generated puzzles also persisted to pool
+- `gen_calibration_batch.py` — writes output to `solver/generator/calibration_batches/` by default (no manual copying)
+- `calibrate.py --run-id` filter; per-run breakdown in default batch report
+- `phase7_batch_v1.json` calibration batch (25 puzzles, seeds 10000–10004 per tier)
+- `simplex_iteration_limit = 50_000` in HiGHS solver as platform-independent iteration cap
+
+### Changed
+- `BATCH_NAME` in calibration page updated to `phase7_batch_v1`
+- `numpy` added to `pyproject.toml` (for `--fit-weights`)
+- `_MIN_DISRUPTION_V2` / `_MIN_FRAGILITY_V2` quality gates enabled in `_attempt_generate_v2()`
+- Tier mismatch check re-enabled (was commented out since Phase 4)
+
+---
+
+## [Unreleased] — 2026-04-16 — Phase 6: Calibration Results Remediation
+
+### Backend — Difficulty scoring (P0)
+- `difficulty_weights.json`: normalization ceilings raised to match observed metric ranges; previous values (branching=8, deductive=10, working_memory=10, tile_ambiguity=15) were far below actual outputs (6–41, 9–16, 4–14, 18–34), causing all tiers to clamp to 1.0 and score 59–97 regardless of difficulty
+- `difficulty_evaluator.py`: `TIER_THRESHOLDS` recalibrated from observed distributions after ceiling fix: easy `(0,52)`, medium `(38,68)`, hard `(55,85)`, expert `(68,92)`, nightmare `(75,100)`
+- `difficulty_evaluator.py`: `red_herring_density` redesigned — old definition (non-solution sets / all sets) was always ~0.95; new definition counts only candidate placements that **conflict** with the solution by competing for the same board tiles; easy puzzles now score ~0.0, harder tiers score higher
+- `puzzle_generator.py`: tier-matching check re-enabled (was commented out since Phase 4); tolerates ±1 adjacent tier, rejects anything further
+- `puzzle_generator.py`: per-tier minimum quality gates added (`_MIN_DISRUPTION_V2`, `_MIN_FRAGILITY_V2`); rejects perceptually trivial puzzles that pass the solver but have too little rearrangement or fragility
+
+### Backend — Data quality (P1)
+- `telemetry_store.py`: `puzzle_rated` events now upsert — re-rating the same attempt deletes the previous row before inserting; duplicate ratings no longer accumulate
+- `api/main.py`: live-generated puzzles (easy/medium/hard non-pool path) are now persisted via `PuzzleStore.store()` and return a non-empty `puzzle_id`; telemetry events can now be linked to the puzzle
+- `pyproject.toml`: `numpy>=2.0.0` added as a runtime dependency
+
+### Frontend — Telemetry (P1)
+- `play.ts`: `puzzle_solved` event now includes `tiles_placed` (= `puzzle.tile_count`) and `tiles_remaining` (= 0)
+
+### Backend — Calibration tooling (P2)
+- `calibrate.py`: added `--stats` mode — queries the puzzle pool DB and prints per-tier composite score distributions (min/avg/max)
+- `calibrate.py`: added `--fit-weights` mode — fits a log-linear regression (`numpy.linalg.lstsq`) of solve time on normalised metrics across a telemetry batch; clips negative coefficients to 0 and normalises to sum=1; prints suggested `difficulty_weights.json` updates to stdout only, does not auto-write; warns if fewer than 20 solved sessions per tier
+
+---
+
+## [Unreleased] — 2026-04-14 — Phase 0–6 calibration foundation
+
+### Backend — Generator and Persistence
+- `difficulty_weights.json` added and `difficulty_evaluator.py` now loads score weights/ceilings from JSON instead of hardcoding them.
+- `puzzle_store.py` now round-trips the full v2 metric set: `deductive_depth`, `red_herring_density`, `working_memory_load`, `tile_ambiguity`, `solution_fragility`, plus existing `composite_score`, `branching_factor`, `generator_version`.
+- `PuzzleResult` now carries `seed`; live-generated puzzles get a deterministic effective seed even when the caller omitted one.
+- `PuzzleStore` now preserves `seed` for both direct stores and pregenerated pool rows; pool-drawn puzzles surface that seed back to the API.
+- `tile_remover.py` now skips trial removals that trigger solver post-verification `ValueError`s instead of aborting generation.
+- `export_telemetry.py` added for CSV export of telemetry data.
+- `calibrate.py` added as a reporting-only calibration CLI for fixed-seed batches.
+- `calibration_batches/phase6_batch_v1.json` added as the first committed 25-puzzle fixed-seed developer batch.
+
+### Backend — API and Telemetry
+- `PuzzleResponse` now includes `seed` and the full v2 metric set.
+- `POST /api/telemetry` expanded to support richer calibration telemetry:
+  - `attempt_id`
+  - `batch_name`
+  - `batch_index`
+  - `puzzle_abandoned`
+  - `puzzle_rated`
+  - manual rating fields (`self_rating`, `self_label`, `stuck_moments`, `notes`)
+- `telemetry_events` schema extended to persist calibration fields and richer attempt/session metadata.
+- `GET /api/calibration-batch/{batch_name}` added to serve fixed-seed developer batch manifests.
+
+### Frontend — Telemetry and Calibration UI
+- `telemetry.ts` now carries `seed`, `attempt_id`, and calibration batch metadata through emitted events.
+- `play.ts` now generates a new `attemptId` on every puzzle load and propagates calibration batch context through automatic telemetry.
+- Normal `/play` clears calibration context on mount so calibration metadata does not leak into standard sessions.
+- New developer calibration route: `/[locale]/play/calibration`
+  - fixed batch loading from backend
+  - progress tracking in localStorage
+  - manual rating UI
+  - abandon reporting
+  - visible seed/difficulty/metric badges for each calibration puzzle
+- Calibration route is gated by a simple developer password prompt (`123`) stored in sessionStorage.
+- Normal play now includes a link into the calibration route.
+
+### Frontend — i18n and UX fixes
+- Added EN/DE calibration strings.
+- Fixed `SetOverlay` translation lookup so already-prefixed validation keys (`play.validation.*`) no longer resolve as `play.play.*`.
+
+### Tests and Verification
+- Added/updated backend coverage for:
+  - telemetry storage
+  - telemetry endpoint validation
+  - calibration batch endpoint
+  - telemetry CSV export
+  - puzzle store seed round-trip
+- Verified:
+  - backend focused suite: `38 passed`
+  - frontend play-store tests: `50 passed`
+  - frontend `tsc --noEmit`: passed
+
+---
+
+## [0.43.0] — 2026-04-13 — Phase 4: Generator Integration (v2 pipeline)
+
+### Backend — Generator (`backend/solver/generator/puzzle_generator.py`)
+- `_attempt_generate_v2()`: new generation function wiring BoardBuilder → TileRemover → DifficultyEvaluator; replaces sacrifice-based approach for all non-custom difficulties
+- `generate_puzzle()`: added `generator_version="v2"` parameter; v2 is the default; v1 still accessible via `generator_version="v1"` for backward compatibility
+- `PuzzleResult`: extended with `branching_factor`, `deductive_depth`, `red_herring_density`, `working_memory_load`, `tile_ambiguity`, `solution_fragility`, `composite_score`, `generator_version` (all default to 0.0 / "v1" for backward compatibility)
+- `_DEFAULT_MAX_ATTEMPTS_V2`: per-difficulty attempt limits for v2
+
+### Backend — API (`backend/api/models.py`, `backend/api/main.py`)
+- `PuzzleResponse`: added `composite_score`, `branching_factor`, `generator_version` (additive, optional fields with defaults — backward-compatible)
+- `_result_to_response()`: exposes new fields in API response
+
+### Backend — Pregenerate (`backend/solver/generator/pregenerate.py`)
+- Worker updated to call `_attempt_generate_v2()` directly
+
+### Tests
+- `test_puzzle_generator.py`: 5 new Phase 4 tests — v2 returns puzzle result, tier match, new fields populated, API serialization, v1 fallback
+- **Total: ~220 passing**
+
+---
+
+## [0.42.0] — 2026-04-13 — Phase 3: DifficultyEvaluator
+
+### Backend — Generator (`backend/solver/generator/difficulty_evaluator.py`)
+- New module: 8-metric difficulty scoring system replacing single disruption/chain-depth filtering
+- `DifficultyScore` dataclass: 10 fields covering all difficulty dimensions
+- `compute_branching_factor()`: average valid placements per rack tile
+- `compute_red_herrings()`: fraction of placements not in the optimal solution
+- `compute_working_memory_load()`: count of board sets disrupted by the solution
+- `compute_tile_ambiguity()`: average candidate sets per tile (board + rack)
+- `compute_solution_fragility()`: sensitivity to single-tile removal (expensive; skipped for easy/medium)
+- `compute_deductive_depth()`: chain_depth × log₂(branching_factor + 1)
+- `compute_composite_score()`: weighted combination of all 8 metrics → 0–100 scale
+- `TIER_THRESHOLDS`: easy(0–20), medium(15–35), hard(30–55), expert(50–75), nightmare(70–100)
+- `classify_tier()`: maps composite score to difficulty tier (overlapping bands)
+- `DifficultyEvaluator.evaluate()`: facade with `skip_expensive=False` flag; caches `enumerate_valid_sets()` result to avoid triple enumeration
+
+### Tests (`backend/tests/solver/test_difficulty_evaluator.py`)
+- 14 tests using real solver (no mocks): bounds checks, edge cases (empty rack, trivial puzzle), tier classification, performance guard (<500ms with skip_expensive=True)
+
+### Versions
+- `backend/pyproject.toml` bumped to **0.42.0**
+
+---
+
+## [0.41.0] — 2026-04-13 — Phase 2: TileRemover (Strategic Tile Removal)
+
+### Backend — Generator (`backend/solver/generator/tile_remover.py`)
+- New module: strategic tile removal replacing complete-set sacrifice approach
+- `RemovalCandidate` dataclass: pre-scored removal option with cascade estimate, orphan count, alternative placements
+- `RemovalStep` dataclass: committed removal record with pre-removal board snapshot for replay
+- `estimate_cascade_depth()`: heuristic scoring (+2.0/+1.0/+0.5 per orphan based on absorber count)
+- `_score_all_candidates()`: scores every board tile as a removal candidate in O(n·templates)
+- `_apply_removal()`: index-based removal preserving Tile object identity (required by solver's id()-based tracking)
+- `TileRemover.remove()`: top-30% weighted random selection with per-step solvability verification; retries up to 5 candidates per step; guards with 2s per-step and 30s total timeouts
+
+### Tests (`backend/tests/solver/test_tile_remover.py`)
+- 23 tests: pure-logic helpers (cascade depth, apply removal, scoring) + real-solver integration tests
+
+### Versions
+- `backend/pyproject.toml` bumped to **0.41.0**
+
+---
+
+## [0.40.0] — 2026-04-13 — Phase 1: BoardBuilder (High-Overlap Board Construction)
+
+### Backend — Generator
+- `backend/solver/generator/tile_pool.py` (new): `make_tile_pool()` and `assign_copy_ids()` extracted from `puzzle_generator.py`; consolidated pool creation with joker support
+- `backend/solver/generator/board_builder.py` (new): overlap-graph-guided board construction replacing greedy `_pick_compatible_sets()`
+  - `build_overlap_graph()`: adjacency map of tile co-occurrence across templates
+  - `score_set_overlap()`: average connectivity score per set
+  - `select_high_overlap_sets()`: weighted random selection with `overlap_bias` parameter (0=random, 1=greedy)
+  - `BoardBuilder.build()`: full pipeline — pool → enumerate → shuffle → graph → select → assign_copy_ids
+
+### Tests (`backend/tests/solver/test_board_builder.py`)
+- 21 tests: board validity, no duplicate tiles, copy_id correctness, size constraints, seed determinism, overlap graph symmetry, overlap bias effectiveness (<100ms performance guard)
+
+### Versions
+- `backend/pyproject.toml` bumped to **0.40.0**
+
+---
+
 ## [0.39.0] — 2026-04-09 — Play Mode Phase 5.4/6.1/6.3–6.6 + Docker fixes
 
 ### Frontend — Store (`frontend/src/store/play.ts`)

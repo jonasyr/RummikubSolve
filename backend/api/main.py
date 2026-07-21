@@ -1,6 +1,10 @@
 """FastAPI application entry point.
 
-Phase 2 scope: health check + POST /api/solve.
+Endpoints:
+    GET  /health          — liveness probe
+    POST /api/solve       — optimal move solver
+    POST /api/puzzle      — puzzle generation
+    POST /api/telemetry   — client telemetry
 
 Run locally:
     uvicorn api.main:app --reload --port 8000
@@ -16,6 +20,9 @@ from __future__ import annotations
 import logging
 import os
 from collections import Counter
+from functools import lru_cache
+from json import loads
+from pathlib import Path
 from typing import Literal, cast
 
 import sentry_sdk
@@ -110,15 +117,25 @@ async def health() -> dict[str, str]:
 
 from solver.config.rules import RulesConfig  # noqa: E402
 from solver.engine.solver import solve as _run_solver  # noqa: E402
+from solver.generator.generator_core import (  # noqa: E402
+    generate_puzzle as generate_template_puzzle,
+)
 from solver.generator.puzzle_generator import (  # noqa: E402
     PuzzleGenerationError,
     PuzzleResult,
     generate_puzzle,
 )
+from solver.generator.puzzle_result import (  # noqa: E402
+    PuzzleGenerationError as TemplatePuzzleGenerationError,
+)
+from solver.generator.puzzle_result import (  # noqa: E402
+    PuzzleResult as TemplatePuzzleResult,
+)
 from solver.generator.puzzle_store import PuzzleStore  # noqa: E402
 from solver.generator.set_changes import (  # noqa: E402
     build_set_changes as _build_set_changes_data,
 )
+from solver.generator.telemetry_store import TelemetryStore  # noqa: E402
 from solver.models.board_state import BoardState  # noqa: E402
 from solver.models.tile import Color, Tile  # noqa: E402
 from solver.models.tileset import SetType, TileSet  # noqa: E402
@@ -126,6 +143,7 @@ from solver.models.tileset import SetType, TileSet  # noqa: E402
 from .models import (  # noqa: E402  (import after app init is intentional)
     BoardSetInput,
     BoardSetOutput,
+    CalibrationBatchResponse,
     MoveOutput,
     PuzzleRequest,
     PuzzleResponse,
@@ -133,10 +151,25 @@ from .models import (  # noqa: E402  (import after app init is intentional)
     SetChangeResultSet,
     SolveRequest,
     SolveResponse,
+    TelemetryRequest,
+    TelemetryResponse,
     TileInput,
     TileOutput,
     TileWithOrigin,
 )
+
+_CALIBRATION_BATCH_DIR = (
+    Path(__file__).resolve().parents[1] / "solver" / "generator" / "calibration_batches"
+)
+
+
+@lru_cache(maxsize=8)
+def _load_calibration_batch(batch_name: str) -> CalibrationBatchResponse:
+    path = _CALIBRATION_BATCH_DIR / f"{batch_name}.json"
+    if not path.exists():
+        raise FileNotFoundError(batch_name)
+    data = loads(path.read_text(encoding="utf-8"))
+    return CalibrationBatchResponse(**data)
 
 
 def _assign_copy_ids(tile_inputs: list[TileInput]) -> list[Tile]:
@@ -368,12 +401,83 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             ],
             rack=[_tile_to_input(tile) for tile in result.rack],
             difficulty=result.difficulty,
+            seed=result.seed,
             tile_count=len(result.rack),
             disruption_score=result.disruption_score,
             chain_depth=result.chain_depth,
             is_unique=result.is_unique,
             puzzle_id=puzzle_id,
+            composite_score=result.composite_score,
+            branching_factor=result.branching_factor,
+            deductive_depth=result.deductive_depth,
+            red_herring_density=result.red_herring_density,
+            working_memory_load=result.working_memory_load,
+            tile_ambiguity=result.tile_ambiguity,
+            solution_fragility=result.solution_fragility,
+            generator_version=result.generator_version,
+            template_id=getattr(result, "template_id", "legacy"),
+            template_version=getattr(result, "template_version", "0"),
         )
+
+    def _template_result_to_response(
+        result: TemplatePuzzleResult,
+        puzzle_id: str = "",
+    ) -> PuzzleResponse:
+        return PuzzleResponse(
+            board_sets=[
+                BoardSetInput(
+                    type=ts.type.value,
+                    tiles=[_tile_to_input(tile) for tile in ts.tiles],
+                )
+                for ts in result.board_sets
+            ],
+            rack=[_tile_to_input(tile) for tile in result.rack],
+            difficulty=result.difficulty,
+            seed=result.seed,
+            tile_count=len(result.rack),
+            disruption_score=result.disruption_score,
+            chain_depth=result.chain_depth,
+            is_unique=result.is_unique,
+            puzzle_id=puzzle_id,
+            composite_score=0.0,
+            branching_factor=0.0,
+            deductive_depth=0.0,
+            red_herring_density=0.0,
+            working_memory_load=0.0,
+            tile_ambiguity=0.0,
+            solution_fragility=0.0,
+            generator_version="template",
+            template_id=result.template_id,
+            template_version=result.template_version,
+        )
+
+    if request.template_id == "T1_joker_displacement_v1":
+        try:
+            template_result = generate_template_puzzle(
+                difficulty="expert",
+                seed=request.seed,
+                template_id=request.template_id,
+                max_attempts=10,
+            )
+        except TemplatePuzzleGenerationError as exc:
+            logger.warning("template_puzzle_generation_failed", error=str(exc))
+            raise HTTPException(
+                status_code=503,
+                detail="Could not generate a template puzzle — please try again.",
+            ) from exc
+        return _template_result_to_response(template_result)
+
+    # Phase 7: if a specific puzzle_id was requested (pregenerated calibration batch),
+    # load directly from pool — no generation needed, instant response.
+    if request.puzzle_id:
+        store = PuzzleStore()
+        drawn = store.draw_by_id(request.puzzle_id)
+        store.close()
+        if drawn is not None:
+            result, puzzle_id = drawn
+            logger.info("puzzle_pool_by_id", puzzle_id=puzzle_id)
+            return _result_to_response(result, puzzle_id)
+        raise HTTPException(status_code=404, detail=f"Puzzle {request.puzzle_id!r} not found.")
 
     # Phase 5: for expert/nightmare try the pre-generated pool first.
     if request.difficulty in ("expert", "nightmare"):
@@ -400,6 +504,9 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             max_board_sets=request.max_board_sets,
             min_chain_depth=request.min_chain_depth,
             min_disruption=request.min_disruption,
+            # Phase 5: use v2 pipeline for standard tiers (§9.6 default switch).
+            # "custom" stays on v1 — its fine-grained params are v1-only.
+            generator_version="v1" if request.difficulty == "custom" else "v2",
         )
     except PuzzleGenerationError as exc:
         logger.warning("puzzle_generation_failed", error=str(exc))
@@ -408,4 +515,43 @@ def puzzle_endpoint(request: PuzzleRequest) -> PuzzleResponse:
             detail="Could not generate a puzzle — please try again.",
         ) from exc
 
-    return _result_to_response(result)
+    # Persist the live-generated puzzle so telemetry events can be linked by puzzle_id.
+    store = PuzzleStore()
+    puzzle_id = store.store(result)
+    store.close()
+    return _result_to_response(result, puzzle_id)
+
+
+@app.post("/api/telemetry", response_model=TelemetryResponse, tags=["meta"])
+def telemetry_endpoint(request: TelemetryRequest) -> TelemetryResponse:
+    """Persist one play-mode telemetry event for later difficulty calibration."""
+    store = TelemetryStore()
+    try:
+        event_id = store.store(request.model_dump())
+    finally:
+        store.close()
+
+    logger.info(
+        "telemetry_recorded",
+        event_id=event_id,
+        event_type=request.event_type,
+        puzzle_id=request.puzzle_id,
+        attempt_id=request.attempt_id,
+        difficulty=request.difficulty,
+        seed=request.seed,
+        batch_name=request.batch_name,
+        batch_index=request.batch_index,
+        generator_version=request.generator_version,
+    )
+    return TelemetryResponse(status="ok")
+
+
+@app.get(
+    "/api/calibration-batch/{batch_name}", response_model=CalibrationBatchResponse, tags=["meta"]
+)
+def calibration_batch_endpoint(batch_name: str) -> CalibrationBatchResponse:
+    """Return a fixed-seed developer calibration batch manifest."""
+    try:
+        return _load_calibration_batch(batch_name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Unknown calibration batch.") from exc

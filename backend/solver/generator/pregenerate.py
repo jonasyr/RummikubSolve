@@ -36,7 +36,7 @@ from pathlib import Path
 from .puzzle_generator import (
     PuzzleGenerationError,
     PuzzleResult,
-    _attempt_generate_with_reason,
+    _attempt_generate_v2,
 )
 from .puzzle_store import PuzzleStore
 
@@ -61,13 +61,16 @@ class _WorkerResult:
 
 
 def _worker_generate_one(args: tuple[str, int]) -> _WorkerResult:
-    """Generate one pregen attempt and classify rejections for progress reporting."""
+    """Generate one pregen attempt using the v2 pipeline.
+
+    Falls back to _attempt_generate_with_reason (v1) only for custom mode,
+    which has no v2 mapping.  All standard tiers use _attempt_generate_v2.
+    """
     difficulty, seed = args
     try:
-        outcome = _attempt_generate_with_reason(
+        outcome = _attempt_generate_v2(
             random.Random(seed),
             difficulty=difficulty,  # type: ignore[arg-type]
-            pregen=True,
         )
         return _WorkerResult(
             result=outcome.result,

@@ -8,6 +8,7 @@
 import { create } from "zustand";
 
 import { fetchPuzzle } from "../lib/api";
+import { recordTelemetryEvent, toTelemetryTile } from "../lib/telemetry";
 import { puzzleToGrid, detectSets, checkSolved, validateTileConservation } from "../lib/grid-utils";
 import type {
   CellKey,
@@ -62,6 +63,16 @@ interface PlayState {
   error: string | null;
   solveStartTime: number | null;
   solveEndTime: number | null;
+  lastMeaningfulActionAt: number | null;
+  undoCount: number;
+  redoCount: number;
+  commitCount: number;
+  revertCount: number;
+  moveCount: number;
+  stuckMoments: number;
+  telemetrySolvedSent: boolean;
+  attemptId: string | null;
+  calibrationContext: { batchName: string; batchRunId: string; batchIndex: number } | null;
 
   // ── Actions ──────────────────────────────────────────────────────────────
   loadPuzzle: (req: PuzzleRequest, signal?: AbortSignal) => Promise<void>;
@@ -73,6 +84,7 @@ interface PlayState {
   commit: () => CommitResult;
   revert: () => void;
   setInteractionMode: (mode: "tap" | "drag") => void;
+  setCalibrationContext: (context: { batchName: string; batchRunId: string; batchIndex: number } | null) => void;
   toggleValidation: () => void;
   reset: () => void;
 }
@@ -101,6 +113,16 @@ const initialState = {
   error: null as string | null,
   solveStartTime: null as number | null,
   solveEndTime: null as number | null,
+  lastMeaningfulActionAt: null as number | null,
+  undoCount: 0,
+  redoCount: 0,
+  commitCount: 0,
+  revertCount: 0,
+  moveCount: 0,
+  stuckMoments: 0,
+  telemetrySolvedSent: false,
+  attemptId: null as string | null,
+  calibrationContext: null as { batchName: string; batchRunId: string; batchIndex: number } | null,
 };
 
 // ---------------------------------------------------------------------------
@@ -138,6 +160,7 @@ function placeTile(
   // Guard: target cell must be empty (guaranteed by tapCell logic, but defensive)
   if (state.grid.has(targetKey)) return {};
 
+  const now = Date.now();
   const snapshot = takeSnapshot(state);
   const newGrid = new Map(state.grid);
   let newRack = [...state.rack];
@@ -168,9 +191,49 @@ function placeTile(
     past: [...state.past, snapshot].slice(-UNDO_MAX),
     future: [],                              // New action always clears redo stack
     gridRows: Math.max(state.gridRows, computeGridRows(newGrid)), // only grow, never shrink
-    solveStartTime: state.solveStartTime ?? Date.now(), // Start timer on first placement
-    solveEndTime: solved ? Date.now() : null,
+    moveCount: state.moveCount + 1,
+    stuckMoments:
+      state.stuckMoments +
+      (state.lastMeaningfulActionAt !== null && now - state.lastMeaningfulActionAt > 30_000 ? 1 : 0),
+    solveStartTime: state.solveStartTime ?? now, // Start timer on first placement
+    solveEndTime: solved ? now : null,
+    lastMeaningfulActionAt: now,
   };
+}
+
+function maybeRecordSolved(state: PlayState): void {
+  if (
+    !state.puzzle ||
+    !state.isSolved ||
+    state.telemetrySolvedSent ||
+    state.solveStartTime === null ||
+    state.solveEndTime === null
+  ) {
+    return;
+  }
+
+  void recordTelemetryEvent("puzzle_solved", state.puzzle, {
+    attempt_id: state.attemptId ?? "",
+    batch_name: state.calibrationContext?.batchName,
+    batch_run_id: state.calibrationContext?.batchRunId,
+    batch_index: state.calibrationContext?.batchIndex,
+    elapsed_ms: Math.max(0, state.solveEndTime - state.solveStartTime),
+    move_count: state.moveCount,
+    undo_count: state.undoCount,
+    redo_count: state.redoCount,
+    commit_count: state.commitCount,
+    revert_count: state.revertCount,
+    tiles_placed: state.puzzle.tile_count,
+    tiles_remaining: 0,
+    stuck_moments: state.stuckMoments,
+  });
+}
+
+function makeAttemptId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,6 +266,21 @@ export const usePlayStore = create<PlayState>((set, get) => ({
         isPuzzleLoading: false,
         solveStartTime: null,
         solveEndTime: null,
+        lastMeaningfulActionAt: null,
+        undoCount: 0,
+        redoCount: 0,
+        commitCount: 0,
+        revertCount: 0,
+        moveCount: 0,
+        stuckMoments: 0,
+        telemetrySolvedSent: false,
+        attemptId: makeAttemptId(),
+      });
+      const nextState = get();
+      void recordTelemetryEvent("puzzle_loaded", puzzle, {
+        attempt_id: nextState.attemptId ?? "",
+        batch_name: nextState.calibrationContext?.batchName,
+        batch_index: nextState.calibrationContext?.batchIndex,
       });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -229,7 +307,7 @@ export const usePlayStore = create<PlayState>((set, get) => ({
     }),
 
   tapCell: (row, col) =>
-    set((state) => {
+    (set((state) => {
       const key = cellKey(row, col);
       const existing = state.grid.get(key);
 
@@ -256,8 +334,44 @@ export const usePlayStore = create<PlayState>((set, get) => ({
       }
 
       // ── Selection active, tapped an empty cell → PLACE the tile ──
-      return placeTile(state, row, col);
-    }),
+      const next = placeTile(state, row, col);
+      if (state.puzzle && Object.keys(next).length > 0) {
+        if (state.selectedTile.source === "rack") {
+          const tile = state.rack[state.selectedTile.index];
+          if (tile) {
+            void recordTelemetryEvent("tile_placed", state.puzzle, {
+              attempt_id: state.attemptId ?? "",
+              batch_name: state.calibrationContext?.batchName,
+              batch_index: state.calibrationContext?.batchIndex,
+              tile: toTelemetryTile(tile),
+              to_row: row,
+              to_col: col,
+            });
+          }
+        } else {
+          const sourceTile = state.grid.get(cellKey(state.selectedTile.row, state.selectedTile.col));
+          if (sourceTile) {
+            void recordTelemetryEvent("tile_moved", state.puzzle, {
+              attempt_id: state.attemptId ?? "",
+              batch_name: state.calibrationContext?.batchName,
+              batch_index: state.calibrationContext?.batchIndex,
+              tile: toTelemetryTile(sourceTile.tile),
+              from_row: state.selectedTile.row,
+              from_col: state.selectedTile.col,
+              to_row: row,
+              to_col: col,
+            });
+          }
+        }
+      }
+      return next;
+    }), (() => {
+      const state = get();
+      if (state.isSolved && !state.telemetrySolvedSent) {
+        set({ telemetrySolvedSent: true });
+        maybeRecordSolved(state);
+      }
+    })()),
 
   returnToRack: () =>
     set((state) => {
@@ -276,6 +390,15 @@ export const usePlayStore = create<PlayState>((set, get) => ({
       newGrid.delete(key);
       const newRack = [...state.rack, placed.tile];
       const detected = detectSets(newGrid, state.gridRows, state.gridCols);
+      const now = Date.now();
+
+      void (state.puzzle &&
+        recordTelemetryEvent("tile_returned_to_rack", state.puzzle, {
+          attempt_id: state.attemptId ?? "",
+          batch_name: state.calibrationContext?.batchName,
+          batch_index: state.calibrationContext?.batchIndex,
+          tile: toTelemetryTile(placed.tile),
+        }));
 
       return {
         grid: newGrid,
@@ -285,15 +408,26 @@ export const usePlayStore = create<PlayState>((set, get) => ({
         isSolved: false,            // Rack non-empty → cannot be solved
         past: [...state.past, snapshot].slice(-UNDO_MAX),
         future: [],                 // New action clears redo stack
+        moveCount: state.moveCount + 1,
+        stuckMoments:
+          state.stuckMoments +
+          (state.lastMeaningfulActionAt !== null && now - state.lastMeaningfulActionAt > 30_000 ? 1 : 0),
+        lastMeaningfulActionAt: now,
       };
     }),
 
   undo: () =>
-    set((state) => {
+    (set((state) => {
       if (state.past.length === 0) return {};
+      void (state.puzzle && recordTelemetryEvent("undo_pressed", state.puzzle, {
+        attempt_id: state.attemptId ?? "",
+        batch_name: state.calibrationContext?.batchName,
+        batch_index: state.calibrationContext?.batchIndex,
+      }));
       const snapshot = state.past[state.past.length - 1];
       const futureSS = takeSnapshot(state);
       const detected = detectSets(snapshot.cells, state.gridRows, state.gridCols);
+      const now = Date.now();
       return {
         grid: snapshot.cells,
         rack: snapshot.rack,
@@ -301,16 +435,28 @@ export const usePlayStore = create<PlayState>((set, get) => ({
         isSolved: checkSolved(snapshot.cells, snapshot.rack, detected),
         past: state.past.slice(0, -1),
         future: [...state.future, futureSS],
+        undoCount: state.undoCount + 1,
+        stuckMoments:
+          state.stuckMoments +
+          (state.lastMeaningfulActionAt !== null && now - state.lastMeaningfulActionAt > 30_000 ? 1 : 0),
+        lastMeaningfulActionAt: now,
         selectedTile: null,         // Always clear selection on undo
       };
-    }),
+    }), (() => {
+      const state = get();
+      if (state.isSolved && !state.telemetrySolvedSent) {
+        set({ telemetrySolvedSent: true });
+        maybeRecordSolved(state);
+      }
+    })()),
 
   redo: () =>
-    set((state) => {
+    (set((state) => {
       if (state.future.length === 0) return {};
       const snapshot = state.future[state.future.length - 1];
       const pastSS = takeSnapshot(state);
       const detected = detectSets(snapshot.cells, state.gridRows, state.gridCols);
+      const now = Date.now();
       return {
         grid: snapshot.cells,
         rack: snapshot.rack,
@@ -318,9 +464,20 @@ export const usePlayStore = create<PlayState>((set, get) => ({
         isSolved: checkSolved(snapshot.cells, snapshot.rack, detected),
         past: [...state.past, pastSS],
         future: state.future.slice(0, -1),
+        redoCount: state.redoCount + 1,
+        stuckMoments:
+          state.stuckMoments +
+          (state.lastMeaningfulActionAt !== null && now - state.lastMeaningfulActionAt > 30_000 ? 1 : 0),
+        lastMeaningfulActionAt: now,
         selectedTile: null,         // Always clear selection on redo
       };
-    }),
+    }), (() => {
+      const state = get();
+      if (state.isSolved && !state.telemetrySolvedSent) {
+        set({ telemetrySolvedSent: true });
+        maybeRecordSolved(state);
+      }
+    })()),
 
   commit: () => {
     const state = get();
@@ -351,8 +508,19 @@ export const usePlayStore = create<PlayState>((set, get) => ({
       committedSnapshot: takeSnapshot(state),
       past: [],
       future: [],
+      commitCount: state.commitCount + 1,
+      stuckMoments:
+        state.stuckMoments +
+        (state.lastMeaningfulActionAt !== null && Date.now() - state.lastMeaningfulActionAt > 30_000 ? 1 : 0),
+      lastMeaningfulActionAt: Date.now(),
       selectedTile: null,
     });
+
+    const nextState = get();
+    if (nextState.isSolved && !nextState.telemetrySolvedSent) {
+      set({ telemetrySolvedSent: true });
+      maybeRecordSolved(nextState);
+    }
 
     return { ok: true as const };
   },
@@ -361,6 +529,7 @@ export const usePlayStore = create<PlayState>((set, get) => ({
     set((state) => {
       const snap = state.committedSnapshot;
       const detected = detectSets(snap.cells, state.gridRows, state.gridCols);
+      const now = Date.now();
       return {
         grid: new Map(snap.cells),
         rack: [...snap.rack],
@@ -368,6 +537,11 @@ export const usePlayStore = create<PlayState>((set, get) => ({
         isSolved: checkSolved(snap.cells, snap.rack, detected),
         past: [],
         future: [],
+        revertCount: state.revertCount + 1,
+        stuckMoments:
+          state.stuckMoments +
+          (state.lastMeaningfulActionAt !== null && now - state.lastMeaningfulActionAt > 30_000 ? 1 : 0),
+        lastMeaningfulActionAt: now,
         selectedTile: null,
         gridRows: computeGridRows(snap.cells), // recompute from snapshot (may shrink)
       };
@@ -381,6 +555,7 @@ export const usePlayStore = create<PlayState>((set, get) => ({
     }
     set({ interactionMode: mode });
   },
+  setCalibrationContext: (context) => set({ calibrationContext: context }),
   toggleValidation: () => set((s) => ({ showValidation: !s.showValidation })),
   reset: () => set(initialState),
 }));

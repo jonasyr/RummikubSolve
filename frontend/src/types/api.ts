@@ -69,6 +69,8 @@ export type Difficulty = "easy" | "medium" | "hard" | "expert" | "nightmare" | "
 export interface PuzzleRequest {
   difficulty?: Difficulty;
   seed?: number;
+  /** Phase 7: load a specific pregenerated puzzle by pool ID (calibration batches). */
+  puzzle_id?: string;
   /** Phase 5: IDs of puzzles already seen; prevents duplicates when drawing from pool. */
   seen_ids?: string[];
   // Phase 7a: Custom mode parameters — ignored for all non-custom difficulties.
@@ -82,18 +84,107 @@ export interface PuzzleRequest {
   min_chain_depth?: number;
   /** Custom: minimum disruption score required. Range 0–60, default 0. */
   min_disruption?: number;
+  template_id?: string;
 }
 
 export interface PuzzleResponse {
   board_sets: BoardSetInput[];
   rack: TileInput[];
   difficulty: Difficulty;
+  seed?: number;
   tile_count: number;
   disruption_score: number; // was missing from TS mirror (backend returns it since v0.22.0)
   chain_depth: number;      // Phase 3: longest rearrangement chain depth
   is_unique: boolean;       // Phase 3: solution uniqueness verified for Expert/Nightmare
   /** Phase 5: UUID for pool-drawn puzzles; empty string for live-generated. */
   puzzle_id: string;
+  composite_score: number;
+  branching_factor: number;
+  deductive_depth: number;
+  red_herring_density: number;
+  working_memory_load: number;
+  tile_ambiguity: number;
+  solution_fragility: number;
+  generator_version: string;
+  template_id: string;
+  template_version: string;
+}
+
+export interface CalibrationBatchEntry {
+  difficulty: Exclude<Difficulty, "custom">;
+  seed?: number;
+  /** Phase 7: pregenerated puzzles reference pool ID for instant load. */
+  puzzle_id?: string;
+}
+
+export interface CalibrationBatchResponse {
+  batch_name: string;
+  entries: CalibrationBatchEntry[];
+}
+
+export type TelemetryEventType =
+  | "puzzle_loaded"
+  | "tile_placed"
+  | "tile_moved"
+  | "tile_returned_to_rack"
+  | "undo_pressed"
+  | "puzzle_solved"
+  | "puzzle_abandoned"
+  | "puzzle_rated";
+
+export type TelemetrySelfLabel =
+  | "trivial"
+  | "straightforward"
+  | "challenging"
+  | "brutal";
+
+export interface TelemetryTilePayload {
+  color?: TileColor;
+  number?: number;
+  joker?: boolean;
+}
+
+export interface TelemetryEventRequest {
+  event_type: TelemetryEventType;
+  event_at: string;
+  puzzle_id: string;
+  attempt_id: string;
+  difficulty: Difficulty | string;
+  seed?: number;
+  batch_name?: string;
+  batch_run_id?: string;
+  batch_index?: number;
+  generator_version: string;
+  composite_score: number;
+  branching_factor: number;
+  deductive_depth: number;
+  red_herring_density: number;
+  working_memory_load: number;
+  tile_ambiguity: number;
+  solution_fragility: number;
+  disruption_score: number;
+  chain_depth: number;
+  tile?: TelemetryTilePayload;
+  from_row?: number;
+  from_col?: number;
+  to_row?: number;
+  to_col?: number;
+  elapsed_ms?: number;
+  move_count?: number;
+  undo_count?: number;
+  redo_count?: number;
+  commit_count?: number;
+  revert_count?: number;
+  tiles_placed?: number;
+  tiles_remaining?: number;
+  self_rating?: number;
+  self_label?: TelemetrySelfLabel;
+  stuck_moments?: number;
+  notes?: string;
+}
+
+export interface TelemetryResponse {
+  status: "ok";
 }
 
 export type SolveStatus = "solved" | "no_solution";

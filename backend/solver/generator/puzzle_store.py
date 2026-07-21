@@ -10,6 +10,7 @@ Override via PUZZLE_DB_PATH environment variable.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sqlite3
@@ -25,20 +26,45 @@ DEFAULT_DB_PATH = Path(os.getenv("PUZZLE_DB_PATH", "data/puzzles.db"))
 
 _CREATE_TABLE = """
     CREATE TABLE IF NOT EXISTS puzzles (
-        id          TEXT PRIMARY KEY,
-        difficulty  TEXT NOT NULL,
-        board_json  TEXT NOT NULL,
-        rack_json   TEXT NOT NULL,
-        chain_depth INTEGER NOT NULL,
-        disruption  INTEGER NOT NULL,
-        rack_size   INTEGER NOT NULL,
-        board_size  INTEGER NOT NULL,
-        is_unique   INTEGER NOT NULL DEFAULT 0,
-        joker_count INTEGER NOT NULL DEFAULT 0,
-        seed        INTEGER,
-        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        id               TEXT PRIMARY KEY,
+        difficulty       TEXT NOT NULL,
+        board_json       TEXT NOT NULL,
+        rack_json        TEXT NOT NULL,
+        chain_depth      INTEGER NOT NULL,
+        disruption       INTEGER NOT NULL,
+        rack_size        INTEGER NOT NULL,
+        board_size       INTEGER NOT NULL,
+        is_unique        INTEGER NOT NULL DEFAULT 0,
+        joker_count      INTEGER NOT NULL DEFAULT 0,
+        seed             INTEGER,
+        created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+        generator_version TEXT NOT NULL DEFAULT 'v1',
+        template_id      TEXT NOT NULL DEFAULT 'legacy',
+        template_version TEXT NOT NULL DEFAULT '0',
+        composite_score  REAL NOT NULL DEFAULT 0.0,
+        branching_factor REAL NOT NULL DEFAULT 0.0,
+        deductive_depth REAL NOT NULL DEFAULT 0.0,
+        red_herring_density REAL NOT NULL DEFAULT 0.0,
+        working_memory_load REAL NOT NULL DEFAULT 0.0,
+        tile_ambiguity REAL NOT NULL DEFAULT 0.0,
+        solution_fragility REAL NOT NULL DEFAULT 0.0
     )
 """
+
+# Columns added in Phase 0/4 that may not exist in older DBs.
+# Using try/except because SQLite < 3.35 does not support ADD COLUMN IF NOT EXISTS.
+_MIGRATION_COLUMNS: list[tuple[str, str]] = [
+    ("generator_version", "TEXT NOT NULL DEFAULT 'v1'"),
+    ("template_id", "TEXT NOT NULL DEFAULT 'legacy'"),
+    ("template_version", "TEXT NOT NULL DEFAULT '0'"),
+    ("composite_score", "REAL NOT NULL DEFAULT 0.0"),
+    ("branching_factor", "REAL NOT NULL DEFAULT 0.0"),
+    ("deductive_depth", "REAL NOT NULL DEFAULT 0.0"),
+    ("red_herring_density", "REAL NOT NULL DEFAULT 0.0"),
+    ("working_memory_load", "REAL NOT NULL DEFAULT 0.0"),
+    ("tile_ambiguity", "REAL NOT NULL DEFAULT 0.0"),
+    ("solution_fragility", "REAL NOT NULL DEFAULT 0.0"),
+]
 
 _CREATE_INDEX = """
     CREATE INDEX IF NOT EXISTS idx_difficulty
@@ -69,17 +95,33 @@ class PuzzleStore:
     def _create_tables(self) -> None:
         self.conn.execute(_CREATE_TABLE)
         self.conn.execute(_CREATE_INDEX)
+        # Phase 0 migration: add columns to existing DBs that pre-date v0.40.
+        # contextlib.suppress handles "duplicate column" OperationalError on
+        # SQLite versions that lack ADD COLUMN IF NOT EXISTS (< 3.35).
+        for col_name, col_def in _MIGRATION_COLUMNS:
+            with contextlib.suppress(sqlite3.OperationalError):
+                self.conn.execute(f"ALTER TABLE puzzles ADD COLUMN {col_name} {col_def}")
         self.conn.commit()
 
-    def store(self, result: PuzzleResult, seed: int | None = None) -> str:
+    def store(
+        self,
+        result: PuzzleResult,
+        seed: int | None = None,
+        template_id: str = "legacy",
+        template_version: str = "0",
+    ) -> str:
         """Persist a puzzle and return its UUID."""
         puzzle_id = str(uuid.uuid4())
+        effective_seed = seed if seed is not None else result.seed
         self.conn.execute(
             """INSERT INTO puzzles
                (id, difficulty, board_json, rack_json, chain_depth,
                 disruption, rack_size, board_size, is_unique,
-                joker_count, seed)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                joker_count, seed, generator_version, template_id,
+                template_version, composite_score, branching_factor,
+                deductive_depth, red_herring_density, working_memory_load,
+                tile_ambiguity, solution_fragility)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 puzzle_id,
                 result.difficulty,
@@ -91,7 +133,17 @@ class PuzzleStore:
                 len(result.board_sets),
                 int(result.is_unique),
                 result.joker_count,
-                seed,
+                effective_seed,
+                result.generator_version,
+                template_id,
+                template_version,
+                result.composite_score,
+                result.branching_factor,
+                result.deductive_depth,
+                result.red_herring_density,
+                result.working_memory_load,
+                result.tile_ambiguity,
+                result.solution_fragility,
             ),
         )
         self.conn.commit()
@@ -121,6 +173,16 @@ class PuzzleStore:
                 return _deserialize_row(row), row["id"]
         return None
 
+    def draw_by_id(self, puzzle_id: str) -> tuple[PuzzleResult, str] | None:
+        """Return a specific puzzle by its UUID, or None if not found."""
+        row = self.conn.execute(
+            "SELECT * FROM puzzles WHERE id = ?",
+            (puzzle_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return _deserialize_row(row), row["id"]
+
     def count(self, difficulty: str | None = None) -> int:
         """Return the number of stored puzzles, optionally filtered by difficulty."""
         if difficulty is not None:
@@ -131,6 +193,18 @@ class PuzzleStore:
         else:
             row = self.conn.execute("SELECT COUNT(*) FROM puzzles").fetchone()
         return int(row[0])
+
+    def list_by_template(
+        self, template_id: str, limit: int | None = None
+    ) -> list[str]:
+        """Return puzzle IDs generated by the given template."""
+        query = "SELECT id FROM puzzles WHERE template_id = ? ORDER BY created_at DESC"
+        params: tuple[str | int, ...] = (template_id,)
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (template_id, limit)
+        rows = self.conn.execute(query, params).fetchall()
+        return [row["id"] for row in rows]
 
     def close(self) -> None:
         """Close the underlying SQLite connection."""
@@ -179,6 +253,12 @@ def _dict_to_tile(d: dict[str, Any]) -> Tile:
 
 def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
     board_data: list[Any] = json.loads(row["board_json"])
+    row_keys = set(row.keys())
+    # Read template columns defensively; will be surfaced on PuzzleResult in a later issue.
+    _template_id = row["template_id"] if "template_id" in row_keys else "legacy"  # noqa: F841
+    _template_version = (  # noqa: F841
+        row["template_version"] if "template_version" in row_keys else "0"
+    )
     board_sets = [
         TileSet(
             type=SetType(bs["type"]),
@@ -192,7 +272,25 @@ def _deserialize_row(row: sqlite3.Row) -> PuzzleResult:
         rack=rack,
         difficulty=row["difficulty"],
         disruption_score=row["disruption"],
+        seed=int(row["seed"]) if "seed" in row_keys and row["seed"] is not None else None,
         chain_depth=row["chain_depth"],
         is_unique=bool(row["is_unique"]),
         joker_count=row["joker_count"],
+        # sqlite3.Row.__contains__ tests VALUES, not column names; use row_keys.
+        generator_version=row["generator_version"] if "generator_version" in row_keys else "v1",
+        composite_score=float(row["composite_score"]) if "composite_score" in row_keys else 0.0,
+        branching_factor=(
+            float(row["branching_factor"]) if "branching_factor" in row_keys else 0.0
+        ),
+        deductive_depth=(float(row["deductive_depth"]) if "deductive_depth" in row_keys else 0.0),
+        red_herring_density=(
+            float(row["red_herring_density"]) if "red_herring_density" in row_keys else 0.0
+        ),
+        working_memory_load=(
+            float(row["working_memory_load"]) if "working_memory_load" in row_keys else 0.0
+        ),
+        tile_ambiguity=(float(row["tile_ambiguity"]) if "tile_ambiguity" in row_keys else 0.0),
+        solution_fragility=(
+            float(row["solution_fragility"]) if "solution_fragility" in row_keys else 0.0
+        ),
     )

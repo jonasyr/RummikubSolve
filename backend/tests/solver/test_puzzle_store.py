@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -87,14 +88,18 @@ class TestStoreAndCount:
     def test_store_with_seed(self, tmp_path: Path, _medium_result: PuzzleResult) -> None:
         store = PuzzleStore(tmp_path / "p.db")
         puzzle_id = store.store(_medium_result, seed=999)
+        row = store.conn.execute("SELECT seed FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
         store.close()
         assert isinstance(puzzle_id, str)
+        assert row["seed"] == 999
 
     def test_store_without_seed(self, tmp_path: Path, _medium_result: PuzzleResult) -> None:
         store = PuzzleStore(tmp_path / "p.db")
         puzzle_id = store.store(_medium_result, seed=None)
+        row = store.conn.execute("SELECT seed FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
         store.close()
         assert isinstance(puzzle_id, str)
+        assert row["seed"] == 42
 
 
 # ---------------------------------------------------------------------------
@@ -200,3 +205,171 @@ class TestRoundtrip:
     def test_roundtrip_joker_count(self) -> None:
         assert self.result.joker_count == 0  # current puzzles are always joker-free
         assert self.result.joker_count == self.original.joker_count
+
+
+# ---------------------------------------------------------------------------
+# TestV2RoundTrip — Phase 5: verify all v2 fields survive store → draw
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def _v2_easy_result() -> PuzzleResult:
+    """One v2 easy puzzle, generated once per module."""
+    return generate_puzzle(difficulty="easy", seed=99, generator_version="v2")
+
+
+class TestV2RoundTrip:
+    """All v2 PuzzleResult fields survive a store → draw round-trip."""
+
+    @pytest.fixture(autouse=True)
+    def _store_and_draw(
+        self, tmp_path: Path, _v2_easy_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "v2.db")
+        store.store(_v2_easy_result)
+        drawn = store.draw("easy")
+        store.close()
+        assert drawn is not None
+        self.original = _v2_easy_result
+        self.result, _ = drawn
+
+    def test_roundtrip_generator_version(self) -> None:
+        assert self.result.generator_version == "v2.0.0"
+        assert self.result.generator_version == self.original.generator_version
+
+    def test_roundtrip_composite_score(self) -> None:
+        assert self.result.composite_score == pytest.approx(
+            self.original.composite_score, abs=1e-6
+        )
+        assert self.result.composite_score >= 0.0
+
+    def test_roundtrip_branching_factor(self) -> None:
+        assert self.result.branching_factor == pytest.approx(
+            self.original.branching_factor, abs=1e-6
+        )
+        assert self.result.branching_factor >= 0.0
+
+    def test_roundtrip_deductive_depth(self) -> None:
+        assert self.result.deductive_depth == pytest.approx(
+            self.original.deductive_depth, abs=1e-6
+        )
+
+    def test_roundtrip_red_herring_density(self) -> None:
+        assert self.result.red_herring_density == pytest.approx(
+            self.original.red_herring_density, abs=1e-6
+        )
+
+    def test_roundtrip_working_memory_load(self) -> None:
+        assert self.result.working_memory_load == pytest.approx(
+            self.original.working_memory_load, abs=1e-6
+        )
+
+    def test_roundtrip_tile_ambiguity(self) -> None:
+        assert self.result.tile_ambiguity == pytest.approx(
+            self.original.tile_ambiguity, abs=1e-6
+        )
+
+    def test_roundtrip_solution_fragility(self) -> None:
+        assert self.result.solution_fragility == pytest.approx(
+            self.original.solution_fragility, abs=1e-6
+        )
+
+    def test_roundtrip_seed(self) -> None:
+        assert self.result.seed == self.original.seed
+
+
+# ---------------------------------------------------------------------------
+# TestTemplateMetadata — Issue #28
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _minimal_result() -> PuzzleResult:
+    """Minimal PuzzleResult with no board/rack tiles — sufficient for schema tests."""
+    return PuzzleResult(board_sets=[], rack=[], difficulty="easy", disruption_score=0)
+
+
+class TestTemplateMetadata:
+    def test_default_template_id_is_legacy(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "p.db")
+        puzzle_id = store.store(_minimal_result)
+        row = store.conn.execute(
+            "SELECT template_id, template_version FROM puzzles WHERE id = ?", (puzzle_id,)
+        ).fetchone()
+        store.close()
+        assert row["template_id"] == "legacy"
+        assert row["template_version"] == "0"
+
+    def test_template_id_round_trip(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "p.db")
+        puzzle_id = store.store(
+            _minimal_result,
+            template_id="T1_joker_displacement_v1",
+            template_version="1",
+        )
+        row = store.conn.execute(
+            "SELECT template_id, template_version FROM puzzles WHERE id = ?", (puzzle_id,)
+        ).fetchone()
+        store.close()
+        assert row["template_id"] == "T1_joker_displacement_v1"
+        assert row["template_version"] == "1"
+
+    def test_list_by_template_returns_matching_ids(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        store = PuzzleStore(tmp_path / "p.db")
+        id_t1 = store.store(_minimal_result, template_id="T1")
+        store.store(_minimal_result, template_id="T2")
+        results = store.list_by_template("T1")
+        store.close()
+        assert results == [id_t1]
+
+    def test_existing_db_gets_columns_via_migration(
+        self, tmp_path: Path, _minimal_result: PuzzleResult
+    ) -> None:
+        db_path = tmp_path / "old.db"
+        # Create a DB with the old schema (no template columns).
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("""
+            CREATE TABLE puzzles (
+                id TEXT PRIMARY KEY, difficulty TEXT NOT NULL,
+                board_json TEXT NOT NULL, rack_json TEXT NOT NULL,
+                chain_depth INTEGER NOT NULL, disruption INTEGER NOT NULL,
+                rack_size INTEGER NOT NULL, board_size INTEGER NOT NULL,
+                is_unique INTEGER NOT NULL DEFAULT 0,
+                joker_count INTEGER NOT NULL DEFAULT 0,
+                seed INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                generator_version TEXT NOT NULL DEFAULT 'v1',
+                composite_score REAL NOT NULL DEFAULT 0.0,
+                branching_factor REAL NOT NULL DEFAULT 0.0,
+                deductive_depth REAL NOT NULL DEFAULT 0.0,
+                red_herring_density REAL NOT NULL DEFAULT 0.0,
+                working_memory_load REAL NOT NULL DEFAULT 0.0,
+                tile_ambiguity REAL NOT NULL DEFAULT 0.0,
+                solution_fragility REAL NOT NULL DEFAULT 0.0
+            )
+        """)
+        conn.execute(
+            """INSERT INTO puzzles
+               (id, difficulty, board_json, rack_json, chain_depth, disruption,
+                rack_size, board_size, is_unique, joker_count)
+               VALUES ('old-id', 'easy', '[]', '[]', 0, 0, 0, 0, 0, 0)"""
+        )
+        conn.commit()
+        conn.close()
+
+        # Reopen via PuzzleStore — migration should add the new columns.
+        store = PuzzleStore(db_path)
+        drawn = store.draw_by_id("old-id")
+        row = store.conn.execute(
+            "SELECT template_id, template_version FROM puzzles WHERE id = 'old-id'"
+        ).fetchone()
+        store.close()
+        assert drawn is not None
+        assert row["template_id"] == "legacy"
+        assert row["template_version"] == "0"

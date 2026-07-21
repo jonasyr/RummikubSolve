@@ -9,5 +9,11 @@ export default defineConfig({
     setupFiles: ["./src/__tests__/setup.ts"],
     // Exclude Playwright E2E specs — they live in e2e/ and use a different runner.
     exclude: ["**/node_modules/**", "**/e2e/**"],
+    coverage: {
+      provider: "v8",
+      reporter: ["lcov", "text"],
+      reportsDirectory: "./coverage",
+      exclude: ["**/node_modules/**", "**/e2e/**", "**/*.config.*"],
+    },
   },
 });

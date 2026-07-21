@@ -190,6 +190,23 @@ def test_board_rearrangement_to_accommodate_rack() -> None:
     assert verify_solution(state, sol)
 
 
+def test_solver_handles_orphaned_tiles() -> None:
+    """Solver produces a valid solution even when input board has sub-3-tile "sets"."""
+    state = BoardState(
+        board_sets=[
+            TileSet(type=SetType.RUN, tiles=[Tile(Color.RED, 5, 0)]),
+            TileSet(
+                type=SetType.RUN,
+                tiles=[Tile(Color.RED, 6, 0), Tile(Color.RED, 7, 0)],
+            ),
+        ],
+        rack=[Tile(Color.RED, 4, 0), Tile(Color.RED, 8, 0)],
+    )
+    sol = solve(state)
+    assert sol.tiles_placed == 2
+    assert verify_solution(state, sol)
+
+
 def test_create_group_from_rack_without_touching_board() -> None:
     """Rack tiles form their own group; board set untouched.
 
